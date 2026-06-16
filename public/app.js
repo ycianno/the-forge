@@ -305,6 +305,7 @@ function calculateWeekScoreData(weekData) {
 }
 
 function updateStreakAndHeatmap() {
+  const grade = settings.streakGrade || 75;
   const grid = document.getElementById("heatmapGrid");
   if (grid) {
     grid.innerHTML = "";
@@ -316,11 +317,11 @@ function updateStreakAndHeatmap() {
       let score = data ? calculateWeekScoreData(data) : 0;
       let lvl = 0;
       if (score >= 85) lvl = 3;
-      else if (score >= 75) lvl = 2;
+      else if (score >= grade) lvl = 2;
       else if (score >= 50) lvl = 1;
       else if (score > 0) lvl = 'fail';
-      
-      if (i === 0 && score < 75) lvl = 'current';
+
+      if (i === 0 && score < grade) lvl = 'current';
       
       let cell = document.createElement("div");
       cell.className = `heatmap-cell lvl-${lvl}`;
@@ -347,14 +348,14 @@ function updateStreakAndHeatmap() {
   let currentKey = iso(currentWeekStart);
   let currentScore = database.weeks[currentKey] ? calculateWeekScoreData(database.weeks[currentKey]) : 0;
   
-  if (currentScore >= 75) streak++;
-  
+  if (currentScore >= grade) streak++;
+
   let date = addDays(currentWeekStart, -7);
   while (true) {
     let key = iso(date);
     let data = database.weeks[key];
     let score = data ? calculateWeekScoreData(data) : 0;
-    if (score >= 75) { streak++; date = addDays(date, -7); }
+    if (score >= grade) { streak++; date = addDays(date, -7); }
     else break;
   }
   
@@ -549,6 +550,7 @@ function applyWeekToUI() {
   updateProgress();
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
+  applySectionVisibility();
 
   // Apply mobile smart layout after rendering
   applyMobileSmartLayout();
@@ -757,11 +759,38 @@ function scrollToSection(id) {
 }
 
 // ===== SETTINGS MODAL =====
+// ===== SECTION VISIBILITY =====
+const SECTIONS = [
+  ["scoreboard", "Scoreboard"], ["calendar", "Calendar"], ["daily", "Daily"],
+  ["workout", "Training"], ["diet", "Diet"], ["study", "Study"],
+  ["projects", "Projects"], ["review", "Review"], ["yearly-heatmap", "Yearly Heatmap"]
+];
+function getHiddenSections() { return settings.hiddenSections || []; }
+function applySectionVisibility() {
+  const hidden = getHiddenSections();
+  SECTIONS.forEach(([id]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hidden.includes(id) ? "none" : "";
+  });
+}
+function renderSectionToggles() {
+  const wrap = document.getElementById("sectionToggles");
+  if (!wrap) return;
+  const hidden = getHiddenSections();
+  wrap.innerHTML = SECTIONS.map(([id, name]) =>
+    `<label class="check"><input type="checkbox" data-section="${id}" ${hidden.includes(id) ? "" : "checked"}><span>${name}</span></label>`
+  ).join("");
+}
+
 function openSettings() {
   document.getElementById("cfgWorkoutMin").value = settings.workoutMin || 5;
   document.getElementById("cfgProteinMin").value = settings.proteinMin || 7;
   document.getElementById("cfgProjectTarget").value = settings.projectTarget || 2;
   document.getElementById("cfgStudyTarget").value = settings.studyTarget || 14;
+  const dif = document.getElementById("cfgDifficulty"); if (dif) dif.value = String(settings.gameBase || 100);
+  const sg = document.getElementById("cfgStreakGrade"); if (sg) sg.value = settings.streakGrade || 75;
+  const cs = document.getElementById("cfgCallsign"); if (cs) cs.value = settings.callsign || "";
+  renderSectionToggles();
   renderThemeGrid();
   renderTrophyCase();
   document.getElementById("settingsModal").classList.add("active");
@@ -827,9 +856,16 @@ function bindEvents() {
       settings.proteinMin = Number(document.getElementById("cfgProteinMin").value);
       settings.projectTarget = Number(document.getElementById("cfgProjectTarget").value);
       settings.studyTarget = Number(document.getElementById("cfgStudyTarget").value);
+      const dif = document.getElementById("cfgDifficulty"); if (dif) settings.gameBase = Number(dif.value) || 100;
+      const sg = document.getElementById("cfgStreakGrade"); if (sg) settings.streakGrade = Math.min(100, Math.max(1, Number(sg.value) || 75));
+      const cs = document.getElementById("cfgCallsign"); if (cs && cs.value.trim()) settings.callsign = cs.value.trim();
+      settings.hiddenSections = [...document.querySelectorAll('#sectionToggles input[data-section]')].filter(c => !c.checked).map(c => c.dataset.section);
       await persistSettings();
       document.getElementById("settingsModal").classList.remove("active");
+      applySectionVisibility();
       updateProgress();
+      updateStreakAndHeatmap();
+      if (window.Game) Game.render();
     };
   }
   

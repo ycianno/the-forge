@@ -76,7 +76,8 @@
   // ----- Level curve -------------------------------------------------------
   // XP needed to advance FROM `level` to level+1. Cheap early, ~18% growth.
   function xpForLevel(level) {
-    return Math.round(100 * Math.pow(1.18, level - 1));
+    const base = (typeof settings !== "undefined" && settings && settings.gameBase) ? settings.gameBase : 100;
+    return Math.round(base * Math.pow(1.18, level - 1));
   }
   function levelFromXp(totalXp) {
     let level = 1, acc = 0;

@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
   <main class="shell">
@@ -249,6 +249,7 @@
 
         <div class="settings-tabs">
           <button class="settings-tab active" data-settings-tab="goals">Targets</button>
+          <button class="settings-tab" data-settings-tab="profile">Profile</button>
           <button class="settings-tab" data-settings-tab="appearance">Themes</button>
           <button class="settings-tab" data-settings-tab="data">Data</button>
           <button class="settings-tab" data-settings-tab="archive">Trophy</button>
@@ -273,6 +274,23 @@
             <div class="set-row-text"><span class="set-row-label">Project hours / week</span><span class="set-row-hint">Minimum output-producing work</span></div>
             <input type="number" id="cfgProjectTarget" data-cfg="true" value="2" min="0">
           </div>
+          <div class="set-row">
+            <div class="set-row-text"><span class="set-row-label">Difficulty</span><span class="set-row-hint">How fast you level up</span></div>
+            <select id="cfgDifficulty" style="width:150px;"><option value="70">Relaxed</option><option value="100">Standard</option><option value="140">Hardcore</option></select>
+          </div>
+          <div class="set-row">
+            <div class="set-row-text"><span class="set-row-label">Streak passing grade</span><span class="set-row-hint">% completion to keep your streak</span></div>
+            <input type="number" id="cfgStreakGrade" value="75" min="1" max="100">
+          </div>
+        </div>
+
+        <!-- Profile Tab -->
+        <div class="settings-panel" id="settingsProfile" data-panel="profile" style="display:none;">
+          <p class="settings-intro">Your operator identity and which dashboard sections to show.</p>
+          <label class="label">Callsign</label>
+          <input type="text" id="cfgCallsign" placeholder="Player One" maxlength="28">
+          <label class="label" style="margin-top:18px;">Visible sections</label>
+          <div class="section-toggles" id="sectionToggles"></div>
         </div>
 
         <!-- Appearance Tab -->
@@ -435,8 +453,8 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="game.js?v=5"></script>
+  <script src="game.js?v=6"></script>
   <script src="fx.js?v=2"></script>
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

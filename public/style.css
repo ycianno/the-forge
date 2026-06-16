@@ -1907,3 +1907,8 @@ input[type="file"] { display: none; }
 #metric-projects-hours, #metric-projects-bonus { color: #fbbf24; }
 #bar-review { background: var(--accent-primary); }
 #metric-review { color: var(--accent-primary); }
+
+/* settings: section visibility toggles */
+.section-toggles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; margin-top: 8px; }
+.section-toggles .check { margin: 0; padding: 8px 10px; }
+.section-toggles .check span { font-size: 13px; }
