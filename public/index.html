@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 <body>
   <main class="shell">
@@ -313,7 +313,9 @@
 
         <!-- Trophy Case Tab -->
         <div class="settings-panel" id="settingsArchive" data-panel="archive" style="display:none;">
-          <p class="hint" style="margin-bottom: 16px;">Completed certifications and achieved goals live here forever. 🏆</p>
+          <div class="badge-head"><span class="settings-intro" style="margin:0;">Auto-earned badges</span><span class="badge-count" id="badgeCount">0 / 0</span></div>
+          <div class="badge-wall" id="badgeWall"></div>
+          <p class="hint" style="margin: 18px 0 12px;">Manual achievements — completed certifications and goals.</p>
           <div id="trophyList"></div>
 
           <div class="add-trophy-form" id="addTrophyForm">
@@ -453,8 +455,8 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="game.js?v=6"></script>
-  <script src="fx.js?v=2"></script>
-  <script src="app.js?v=9"></script>
+  <script src="game.js?v=7"></script>
+  <script src="fx.js?v=3"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

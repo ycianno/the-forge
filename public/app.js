@@ -684,7 +684,7 @@ function initSettingsTabs() {
       
       // Render content for specific tabs
       if (target === 'appearance') renderThemeGrid();
-      if (target === 'archive') renderTrophyCase();
+      if (target === 'archive') { renderTrophyCase(); if (window.Game && Game.renderBadgeWall) Game.renderBadgeWall(); }
     });
   });
 }
@@ -793,6 +793,7 @@ function openSettings() {
   renderSectionToggles();
   renderThemeGrid();
   renderTrophyCase();
+  if (window.Game && Game.renderBadgeWall) Game.renderBadgeWall();
   document.getElementById("settingsModal").classList.add("active");
 }
 

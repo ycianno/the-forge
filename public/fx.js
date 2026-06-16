@@ -138,6 +138,18 @@
     setTimeout(() => ov.remove(), 2600);
   }
 
+  // ----- Badge unlock toast ------------------------------------------------
+  function badge(name, rarity, color) {
+    arp([659.25, 880, 1108.73], 70, "triangle", 0.16);
+    vibrate([0, 30, 40, 30]);
+    let t = document.getElementById("fxBadgeToast");
+    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
+    t.style.setProperty("--bc", color || "#a78bfa");
+    t.innerHTML = `<span class="fx-badge-k">BADGE UNLOCKED</span><span class="fx-badge-v">${name}</span><span class="fx-badge-r">${rarity}</span>`;
+    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
   // ----- Check handling ----------------------------------------------------
   function onCheckboxChange(e) {
     const t = e.target;
@@ -183,5 +195,5 @@
   if (document.readyState !== "loading") wireToggle();
   else document.addEventListener("DOMContentLoaded", wireToggle);
 
-  window.FX = { levelUp, xpPop, playCheck, setSfx, sfxOn };
+  window.FX = { levelUp, badge, xpPop, playCheck, setSfx, sfxOn };
 })();

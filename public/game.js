@@ -162,10 +162,20 @@
 
     let lifetimeXp = 0;
     let activeWeeks = 0;
+    let lifetimeStudyHours = 0;
+    let bestWeekPct = 0;
     for (const key in weeks) {
+      const wk = weeks[key];
       const before = lifetimeXp;
-      lifetimeXp += addWeekXp(weeks[key], attrTotals);
+      lifetimeXp += addWeekXp(wk, attrTotals);
       if (lifetimeXp > before) activeWeeks++;
+      if (wk && wk.fields) {
+        for (const k in wk.fields) if (k.indexOf("hours-study-") === 0) lifetimeStudyHours += Number(wk.fields[k] || 0);
+      }
+      if (wk && typeof calculateWeekScoreData === "function") {
+        const pct = calculateWeekScoreData(wk);
+        if (pct > bestWeekPct) bestWeekPct = pct;
+      }
     }
 
     // XP for the currently selected week
@@ -188,7 +198,27 @@
       lifetimeXp, weeklyXp, activeWeeks,
       level: lv.level, xpIntoLevel: lv.xpIntoLevel, xpForNext: lv.xpForNext,
       rank, attrs,
+      lifetimeStudyHours: Math.round(lifetimeStudyHours),
+      bestWeekPct, currentStreak: computeStreak(),
     };
+  }
+
+  function computeStreak() {
+    if (typeof calculateWeekScoreData !== "function" || typeof getStartOfWeek !== "function") return 0;
+    const db = (typeof database !== "undefined") ? database : null;
+    if (!db || !db.weeks) return 0;
+    const grade = (typeof settings !== "undefined" && settings && settings.streakGrade) ? settings.streakGrade : 75;
+    let streak = 0;
+    let d = getStartOfWeek(new Date());
+    const cur = db.weeks[iso(d)] ? calculateWeekScoreData(db.weeks[iso(d)]) : 0;
+    if (cur >= grade) streak++;
+    d = addDays(d, -7);
+    while (true) {
+      const wk = db.weeks[iso(d)];
+      const s = wk ? calculateWeekScoreData(wk) : 0;
+      if (s >= grade) { streak++; d = addDays(d, -7); } else break;
+    }
+    return streak;
   }
 
   // ----- Rendering ---------------------------------------------------------
@@ -274,6 +304,7 @@
       else levelUpToast(p.level);
     }
     lastLevel = p.level;
+    checkBadgeUnlocks(p);
   }
 
   // XP a single checkbox is worth (used by the FX layer for "+N XP" pops)
@@ -339,5 +370,63 @@
     inp.addEventListener("blur", () => commit(true));
   }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat };
+  // ----- Badges & achievements 2.0 ----------------------------------------
+  const RARITY = { common: "#94a3b8", rare: "#38bdf8", epic: "#a78bfa", legendary: "#fbbf24" };
+  function attrLvl(p, key) { const a = p.attrs.find(x => x.key === key); return a ? a.level : 0; }
+  const BADGES = [
+    { id: "first-steps", name: "First Steps", rarity: "common", req: "Reach Level 2", icon: "M5 12h14M13 6l6 6-6 6", test: p => p.level >= 2 },
+    { id: "disciplined", name: "Disciplined", rarity: "common", req: "Discipline Lv 3", icon: "M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z", test: p => attrLvl(p, "Discipline") >= 3 },
+    { id: "bookworm", name: "Bookworm", rarity: "common", req: "Mind Lv 3", icon: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z", test: p => attrLvl(p, "Mind") >= 3 },
+    { id: "flawless-week", name: "Flawless Week", rarity: "rare", req: "Hit a 100% week", icon: "M20 6 9 17l-5-5", test: p => p.bestWeekPct >= 100 },
+    { id: "on-fire", name: "On Fire", rarity: "rare", req: "4-week streak", icon: "M12 2c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 1-3 0 2 3 2 3 0 0-2-1-3 0-5z", test: p => p.currentStreak >= 4 },
+    { id: "iron-body", name: "Iron Body", rarity: "rare", req: "Body Lv 5", icon: "M4 7l3-3 3 3-3 3zM17 14l3 3-3 3-3-3zM7.5 7.5l9 9", test: p => attrLvl(p, "Body") >= 5 },
+    { id: "scholar", name: "Scholar", rarity: "rare", req: "Log 50 study hours", icon: "M22 10 12 5 2 10l10 5 10-5zM6 12v5c0 1 3 2 6 2s6-1 6-2v-5", test: p => p.lifetimeStudyHours >= 50 },
+    { id: "centurion", name: "Centurion", rarity: "epic", req: "Reach Level 10", icon: "M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5z", test: p => p.level >= 10 },
+    { id: "polymath", name: "Polymath", rarity: "epic", req: "All attributes Lv 3+", icon: "M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z", test: p => p.attrs.every(a => a.level >= 3) },
+    { id: "maker", name: "Maker", rarity: "epic", req: "Craft Lv 5", icon: "M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4z", test: p => attrLvl(p, "Craft") >= 5 },
+    { id: "relentless", name: "Relentless", rarity: "legendary", req: "12-week streak", icon: "M12 2c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 1-3 0 2 3 2 3 0 0-2-1-3 0-5z", test: p => p.currentStreak >= 12 },
+    { id: "ascendant", name: "Ascendant", rarity: "legendary", req: "Reach Level 20", icon: "M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5z", test: p => p.level >= 20 },
+  ];
+
+  function checkBadgeUnlocks(p) {
+    if (typeof settings === "undefined" || !settings) return;
+    const first = !settings.badges;            // first-ever run → backfill silently
+    const owned = settings.badges || {};
+    let changed = false;
+    const now = new Date().toISOString();
+    BADGES.forEach(b => {
+      let pass = false;
+      try { pass = b.test(p); } catch (e) {}
+      if (pass && !owned[b.id]) {
+        owned[b.id] = now; changed = true;
+        if (!first && window.FX && FX.badge) FX.badge(b.name, b.rarity, RARITY[b.rarity]);
+      }
+    });
+    if (changed || first) {
+      settings.badges = owned;
+      if (typeof persistSettings === "function") persistSettings();
+      renderBadgeWall();
+    }
+  }
+
+  function renderBadgeWall() {
+    const wall = document.getElementById("badgeWall");
+    if (!wall) return;
+    const owned = (settings && settings.badges) ? settings.badges : {};
+    const countEl = document.getElementById("badgeCount");
+    if (countEl) countEl.textContent = `${BADGES.filter(b => owned[b.id]).length} / ${BADGES.length}`;
+    wall.innerHTML = BADGES.map(b => {
+      const on = !!owned[b.id];
+      const ic = on
+        ? `<svg viewBox="0 0 24 24" class="ic"><path d="${b.icon}"/></svg>`
+        : `<svg viewBox="0 0 24 24" class="ic"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
+      return `<div class="badge-tile ${on ? "unlocked" : "locked"}" title="${escapeHtml(b.name)} — ${escapeHtml(b.req)}" style="${on ? `--bc:${RARITY[b.rarity]}` : ""}">
+        <span class="badge-ic">${ic}</span>
+        <span class="badge-name">${on ? escapeHtml(b.name) : "Locked"}</span>
+        <span class="badge-req">${escapeHtml(on ? b.rarity : b.req)}</span>
+      </div>`;
+    }).join("");
+  }
+
+  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderBadgeWall };
 })();
