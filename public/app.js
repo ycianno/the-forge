@@ -758,6 +758,8 @@ function bindEvents() {
   
   const closeSettingsBtn = document.getElementById("closeSettingsBtn");
   if (closeSettingsBtn) closeSettingsBtn.onclick = () => document.getElementById("settingsModal").classList.remove("active");
+  const closeSettingsTopBtn = document.getElementById("closeSettingsTopBtn");
+  if (closeSettingsTopBtn) closeSettingsTopBtn.onclick = () => document.getElementById("settingsModal").classList.remove("active");
   
   const saveSettingsBtn = document.getElementById("saveSettingsBtn");
   if (saveSettingsBtn) {

@@ -1845,3 +1845,44 @@ input[type="file"] { display: none; }
   background: var(--eyebrow-bg); border: 1px solid var(--eyebrow-border);
 }
 .icon-btn .ic { width: 15px; height: 15px; }
+
+/* ===========================================================================
+ * SETTINGS MODAL REDESIGN
+ * ======================================================================== */
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.modal-head h3 { margin: 0; font-size: 22px; }
+.modal-title-wrap { display: flex; align-items: center; gap: 11px; }
+.modal-ico { color: var(--accent-primary); display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; filter: drop-shadow(0 0 6px var(--score-glow)); }
+.modal-ico .ic { width: 24px; height: 24px; }
+.modal-close {
+  width: 36px; height: 36px; padding: 8px; border-radius: 10px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line); color: var(--muted);
+  flex-shrink: 0;
+}
+.modal-close .ic { width: 18px; height: 18px; margin: 0 auto; }
+.modal-close:hover { transform: none; box-shadow: none; color: var(--text); background: rgba(255,255,255,0.1); }
+
+.settings-intro { font-size: 13px; color: var(--muted); margin: 0 0 6px; line-height: 1.5; }
+
+/* target rows */
+.set-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 15px 0; border-bottom: 1px solid var(--line);
+}
+.set-row:last-child { border-bottom: none; }
+.set-row-text { display: flex; flex-direction: column; gap: 3px; }
+.set-row-label { font-weight: 700; font-size: 14px; color: var(--text); }
+.set-row-hint { font-size: 12px; color: var(--muted); }
+.set-row input {
+  width: 86px; text-align: center;
+  font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 17px;
+  padding: 9px 8px; flex-shrink: 0;
+}
+
+/* data tab */
+.data-actions { display: flex; flex-direction: column; gap: 12px; }
+.data-actions button, .data-actions .file-label { width: 100%; gap: 9px; }
+.data-actions .ic { width: 18px; height: 18px; }
+
+/* settings tabs: a touch more presence */
+.settings-tab { font-size: 13px; letter-spacing: 0.01em; }
