@@ -1792,3 +1792,56 @@ input[type="file"] { display: none; }
   .week-chip { display: none; }
   .callsign-text, .callsign-input { font-size: 20px; }
 }
+
+/* ===========================================================================
+ * DAILY QUESTS (renderDays)
+ * ======================================================================== */
+/* custom check states (applies app-wide for consistency) */
+.check input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 22px; height: 22px; margin-top: 1px;
+  border-radius: 7px;
+  border: 2px solid var(--line-strong);
+  background: rgba(0, 0, 0, 0.3);
+  position: relative; flex: 0 0 auto; cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.check input[type="checkbox"]:hover { border-color: var(--accent-primary); }
+.check input[type="checkbox"]:checked {
+  background: var(--gradient-brand);
+  border-color: transparent;
+  box-shadow: 0 0 12px var(--score-glow);
+}
+.check input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute; left: 6px; top: 2px;
+  width: 6px; height: 11px;
+  border: solid #fff; border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
+
+/* quest rows */
+.check.quest { align-items: center; }
+.check .q-text { flex: 1; font-size: 14px; line-height: 1.4; transition: color 0.2s ease, opacity 0.2s ease; }
+.check .q-xp {
+  flex: 0 0 auto;
+  font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 12px;
+  color: var(--muted); opacity: 0.6;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+.check.quest input:checked ~ .q-text { color: var(--muted-2); text-decoration: line-through; opacity: 0.7; }
+.check.quest input:checked ~ .q-xp { color: var(--gradient-success-text); opacity: 1; }
+
+/* today emphasis */
+.day-card.today {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary), 0 0 26px var(--score-ring-inset);
+}
+.today-tag {
+  display: inline-block; margin-left: 10px; vertical-align: middle;
+  padding: 3px 9px; border-radius: 99px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--accent-primary);
+  background: var(--eyebrow-bg); border: 1px solid var(--eyebrow-border);
+}
+.icon-btn .ic { width: 15px; height: 15px; }

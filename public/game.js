@@ -280,6 +280,7 @@
     const cat = (el && el.dataset) ? el.dataset.cat : null;
     return XP_BY_CAT[cat] || XP_BY_CAT.other;
   }
+  function xpForCat(cat) { return XP_BY_CAT[cat] || XP_BY_CAT.other; }
   function attrColorForCat(cat) {
     const a = ATTRS.find(x => x.key === ATTR_OF_CAT[cat]);
     return a ? a.color : "#38bdf8";
@@ -337,5 +338,5 @@
     inp.addEventListener("blur", () => commit(true));
   }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, attrColorForCat };
+  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat };
 })();

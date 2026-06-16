@@ -444,16 +444,19 @@ function renderDays() {
   orderedEntries.forEach(({ entry: [day, tasks], dayIndex, isToday }) => {
     const date = addDays(selectedWeekStart, dayIndex);
     const card = document.createElement("details");
-    card.className = "day-card";
+    card.className = "day-card" + (isToday ? " today" : "");
     // On mobile: only today open. On desktop: all open.
     card.open = isMobile() ? isToday : true;
-    card.innerHTML = `<summary class="day-summary"><div><div class="day-title">${isToday ? '📍 ' : ''}${day}</div><div class="date-tag">${fmt(date)}${isToday ? ' — Today' : ''}</div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Edit ${day} checklist">✎</button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"><div class="task-group-title">Timeline</div></div></div>`;
+    const pencil = (window.ICONS && window.ICONS.pencil) || "✎";
+    card.innerHTML = `<summary class="day-summary"><div><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="date-tag">${fmt(date)}</div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Edit ${day} checklist">${pencil}</button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
     const group = card.querySelector(".task-group");
     tasks.forEach((task, taskIndex) => {
       const id = taskId(dayIndex, task);
       const legacyId = `day-${dayIndex}-task-${taskIndex}`;
       if (wk.checks[id] === undefined && wk.checks[legacyId] !== undefined) wk.checks[id] = wk.checks[legacyId];
-      group.insertAdjacentHTML("beforeend", `<label class="check"><input id="${id}" type="checkbox" data-cat="${categoryFor(task)}" data-day="${dayIndex}" data-save><span>${escapeHtml(task)}</span></label>`);
+      const cat = categoryFor(task);
+      const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
+      group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><span class="q-xp">+${xp}</span></label>`);
     });
     wrap.appendChild(card);
   });
