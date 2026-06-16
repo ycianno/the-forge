@@ -1,0 +1,14 @@
+{
+  "name": "life-control-center",
+  "version": "1.0.0",
+  "description": "Life Control Center with SQLite backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.19.2"
+  }
+}

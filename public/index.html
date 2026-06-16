@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Everyday Non-Negotiables · Life Control Center</title>
+  <meta name="description" content="A private, self-hosted control center for discipline, training, certification progress, project execution, and weekly review." />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#040406" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="stylesheet" href="style.css?v=4" />
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div class="brand"><span class="orb"></span><span>Life Control Center</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> Weeks</span></div>
+      <nav class="nav" id="mainNav">
+        <!-- Desktop nav links -->
+        <a href="#scoreboard" class="desktop-nav-item">Scoreboard</a>
+        <a href="#calendar" class="desktop-nav-item">Calendar</a>
+        <a href="#daily" class="desktop-nav-item">Daily</a>
+        <a href="#workout" class="desktop-nav-item">Training</a>
+        <a href="#study" class="desktop-nav-item">Study</a>
+        <a href="#projects" class="desktop-nav-item">Projects</a>
+        <button class="ghost desktop-nav-item" id="openReportBtn">📊 Reports</button>
+        <button class="ghost desktop-nav-item" id="expandAllBtn" title="Expand All">⬇️</button>
+        <button class="ghost desktop-nav-item" id="collapseAllBtn" title="Collapse All">⬆️</button>
+        <button class="ghost desktop-nav-item" id="openSettingsBtn">⚙️ Settings</button>
+        <a href="/api/logout" class="danger desktop-nav-item" style="margin-left: 8px;">Logout</a>
+
+        <!-- Mobile bottom tab bar -->
+        <button class="tab-btn active" data-target="daily" id="tabDaily">
+          <span class="tab-icon">📋</span>
+          <span class="tab-label">Today</span>
+        </button>
+        <button class="tab-btn" data-target="scoreboard" id="tabScore">
+          <span class="tab-icon">📊</span>
+          <span class="tab-label">Score</span>
+        </button>
+        <button class="tab-btn" data-target="workout" id="tabTrain">
+          <span class="tab-icon">💪</span>
+          <span class="tab-label">Train</span>
+        </button>
+        <button class="tab-btn" data-target="study" id="tabStudy">
+          <span class="tab-icon">📚</span>
+          <span class="tab-label">Study</span>
+        </button>
+        <button class="tab-btn" data-target="more" id="tabMore">
+          <span class="tab-icon">☰</span>
+          <span class="tab-label">More</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Mobile Context Bar -->
+    <div class="mobile-context" id="mobileContext">
+      <div class="context-week">
+        <span class="context-label">This Week</span>
+        <strong id="mobileWeekRange">—</strong>
+      </div>
+      <div class="context-today">
+        <span class="context-label">Today</span>
+        <strong id="mobileTodayName">—</strong>
+      </div>
+      <div class="context-score">
+        <div class="mini-ring" id="mobileScoreRing">
+          <span id="mobileScoreValue">0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- More Drawer (mobile) -->
+    <div class="more-drawer" id="moreDrawer">
+      <div class="more-grid">
+        <button class="more-item" id="moreReportsBtn"><span class="more-icon">📊</span>Reports</button>
+        <button class="more-item" id="moreSettingsBtn"><span class="more-icon">⚙️</span>Settings</button>
+        <button class="more-item" id="moreProjectsBtn"><span class="more-icon">🚀</span>Projects</button>
+        <button class="more-item" id="moreDietBtn"><span class="more-icon">🥗</span>Diet</button>
+        <button class="more-item" id="moreReviewBtn"><span class="more-icon">📝</span>Review</button>
+        <button class="more-item" id="moreCalendarBtn"><span class="more-icon">📅</span>Calendar</button>
+        <button class="more-item" id="moreExpandBtn"><span class="more-icon">⬇️</span>Expand All</button>
+        <button class="more-item" id="moreCollapseBtn"><span class="more-icon">⬆️</span>Collapse All</button>
+        <a href="/api/logout" class="more-item"><span class="more-icon">🚪</span>Logout</a>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="hero-main glass">
+        <span class="eyebrow">Autonomous Weekly System</span>
+        <h1>Everyday<br>Non-Negotiables</h1>
+        <p class="subtitle">A true-black control center for discipline, training, certification progress, project execution, and weekly review. The week is auto-selected and each week keeps its own saved data.</p>
+        <div class="hero-grid">
+          <div class="mini"><span class="label">Active Week</span><strong id="weekRangeText">—</strong></div>
+          <div class="mini"><span class="label">Today</span><strong id="todayText">—</strong></div>
+          <div class="mini"><span class="label">Current Mission</span><input id="mission" data-save type="text" placeholder="Example: Hit 14 study hours + 5 workouts"></div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="currentWeekBtn">Jump to Current Week</button>
+          <button id="prevWeekBtn">Previous Week</button>
+          <button id="nextWeekBtn">Next Week</button>
+          <button id="copyBtn">Copy Weekly Summary</button>
+        </div>
+      </div>
+      <aside class="panel glass">
+        <div class="score-wrap">
+          <div class="score-ring" id="scoreRing"><div class="score-value" id="scoreValue">0%</div></div>
+          <div class="score-label">Weekly Completion</div>
+          <div class="status-line" id="statusLine">Minimum structure not calculated yet.</div>
+        </div>
+        <div class="actions">
+          <button id="exportBtn">Export Backup</button>
+          <label class="file-label" for="importFile">Import Backup</label>
+          <input id="importFile" type="file" accept="application/json,.json" />
+          <button class="danger" id="resetBtn">Reset This Week</button>
+        </div>
+      </aside>
+    </section>
+
+    <div id="yearly-heatmap" class="heatmap-bare section">
+      <div class="heatmap-bare-header">
+        <h2>Yearly Heatmap</h2>
+        <span class="hint" style="margin-left: 8px;">Annual overview of execution (75% passing grade to maintain streak).</span>
+      </div>
+      <div class="heatmap-scroll">
+        <div class="heatmap-grid" id="heatmapGrid"></div>
+      </div>
+    </div>
+
+    <details id="scoreboard" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Weekly Scoreboard</h2><p class="hint">Commitments are separated from bonus targets so the system stays honest.</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-metrics-btn" type="button" title="Edit Metrics">✎</button><span class="chev">⌄</span></div></summary>
+      <div class="content"><div class="grid grid-4" id="scoreboardGrid"></div></div>
+    </details>
+
+    <details id="calendar" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Internal Week Calendar</h2><p class="hint">This dashboard automatically tracks the selected week. Use this as the command map.</p></div><span class="chev">⌄</span></summary>
+      <div class="content"><div class="calendar" id="calendarGrid"></div></div>
+    </details>
+
+    <details id="daily" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Daily Discipline Timeline</h2><p class="hint">Daily basics protect the structure: hygiene, movement, protein, study, reading, sleep.</p></div><span class="chev">⌄</span></summary>
+      <div class="content"><div class="grid grid-2" id="daysGrid"></div></div>
+    </details>
+
+    <details id="workout" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Workout Progress</h2><p class="hint">Notes preserve progression across the plan.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillWorkout">5 sessions minimum</span><button class="icon-btn edit-workouts-btn" type="button" title="Edit Workouts">✎</button><span class="chev">⌄</span></div></summary>
+      <div class="content"><table><thead><tr><th>Day</th><th>Plan</th><th>Done</th><th>Notes / Weight / Reps</th></tr></thead><tbody id="workoutRows"></tbody></table></div>
+    </details>
+
+    <details id="diet" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Protein & Diet Control</h2><p class="hint">Track the minimum nutrition behaviors that support muscle growth.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillDiet">7 protein days</span><span class="chev">⌄</span></div></summary>
+      <div class="content grid grid-3">
+        <label class="check"><input id="diet-protein-backup" type="checkbox" data-cat="protein" data-save><span>Protein backup ready for the week</span></label>
+        <label class="check"><input id="diet-weekend-plan" type="checkbox" data-cat="protein" data-save><span>Weekend protein option planned</span></label>
+        <label class="check"><input id="diet-groceries" type="checkbox" data-cat="protein" data-save><span>Protein groceries available</span></label>
+        <label class="check"><input id="diet-water" type="checkbox" data-cat="protein" data-save><span>Hydration handled most days</span></label>
+        <label class="check"><input id="diet-no-junk-mode" type="checkbox" data-cat="protein" data-save><span>No full junk mode</span></label>
+        <label class="check"><input id="diet-meal-prep" type="checkbox" data-cat="protein" data-save><span>At least one protein meal prepped</span></label>
+      </div>
+    </details>
+
+    <details id="study" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Career & Certification Study</h2><p class="hint">Connect studying to promotion, automation, and cybersecurity direction.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillStudy">14 hours/week minimum</span><button class="icon-btn edit-study-btn" type="button" title="Edit Study Plan">✎</button><span class="chev">⌄</span></div></summary>
+      <div class="content">
+        <table>
+          <thead><tr><th>Certification / Skill</th><th>Goal</th><th>Hours</th><th>Status</th></tr></thead>
+          <tbody id="studyRows">
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details id="projects" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Project Execution</h2><p class="hint">Commitment: 2 hours/week. Bonus stretch: 3 hours. Research only counts when it creates output.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillProject">2 hrs minimum · 3 bonus</span><span class="chev">⌄</span></div></summary>
+      <div class="content grid grid-3">
+        <div class="metric"><div class="top"><div><div class="metric-title">Project Hours</div><p class="hint" id="hintProject">Minimum target: 2 hrs</p></div><span class="metric-number"><span id="projectHoursValue">0</span>/<span id="projectTargetValue">2</span></span></div><div class="bar"><div class="bar-fill" id="projectBar"></div></div><label class="label" style="margin-top:14px">Hours completed</label><input id="projectHours" data-save type="number" min="0" step="0.25" value="0"></div>
+        <div class="metric"><div class="metric-title">Valid Output</div><label class="check"><input id="project-output" type="checkbox" data-cat="project" data-save><span>Code, workflow, documentation, or plan created</span></label><label class="check"><input id="project-documented" type="checkbox" data-cat="project" data-save><span>Progress documented</span></label><label class="check"><input id="project-next" type="checkbox" data-cat="project" data-save><span>Next action is clear</span></label></div>
+        <div class="metric"><div class="metric-title">Current Focus</div><textarea id="projectFocus" data-save placeholder="Example: portfolio site, side project, a feature you're shipping this week..."></textarea></div>
+      </div>
+    </details>
+
+    <details id="review" class="section section-card glass" open>
+      <summary><div class="summary-left"><h2>Weekly Review</h2><p class="hint">At the end of the week, copy this summary and paste it into ChatGPT for analysis.</p></div><span class="chev">⌄</span></summary>
+      <div class="content grid grid-2">
+        <div><label class="label">Wins this week</label><textarea id="wins" data-save></textarea></div>
+        <div><label class="label">Missed habits / friction</label><textarea id="misses" data-save></textarea></div>
+        <div><label class="label">What needs to change next week?</label><textarea id="changes" data-save></textarea></div>
+        <div><label class="label">One thing I refuse to drop</label><textarea id="refuseDrop" data-save></textarea></div>
+        <div><label class="label">Weekly Grade</label><select id="grade" data-save><option>Not graded yet</option><option>A - Strong execution</option><option>B - Good week</option><option>C - Barely maintained structure</option><option>D - Structure broke</option><option>F - Full reset needed</option></select></div>
+      </div>
+    </details>
+
+    <!-- Edit Day Modal -->
+    <div class="modal-backdrop" id="editDayModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="editDayTitle">
+        <h3 id="editDayTitle">Edit Day Checklist</h3>
+        <p class="hint">One task per line. Matching task names keep their completed status. New tasks are added safely.</p>
+        <textarea id="editDayTextarea" spellcheck="false"></textarea>
+        <div class="modal-actions">
+          <button class="danger" id="resetDayTemplateBtn" type="button">Reset This Day Template</button>
+          <button id="cancelDayEditBtn" type="button">Cancel</button>
+          <button id="saveDayTemplateBtn" type="button">Save Checklist</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal (replaces old Config modal) -->
+    <div class="modal-backdrop" id="settingsModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" style="max-width: 560px;">
+        <h3>⚙️ Settings</h3>
+
+        <div class="settings-tabs">
+          <button class="settings-tab active" data-settings-tab="goals">Goals</button>
+          <button class="settings-tab" data-settings-tab="appearance">Themes</button>
+          <button class="settings-tab" data-settings-tab="data">Data</button>
+          <button class="settings-tab" data-settings-tab="archive">🏆 Trophy</button>
+        </div>
+
+        <!-- Goals Tab -->
+        <div class="settings-panel" id="settingsGoals" data-panel="goals">
+          <label class="label">Minimum Workout Sessions / Week</label>
+          <input type="number" id="cfgWorkoutMin" data-cfg="true" value="5">
+          <label class="label">Minimum Protein Days / Week</label>
+          <input type="number" id="cfgProteinMin" data-cfg="true" value="7">
+          <label class="label">Career Study Target (Hours / Week)</label>
+          <input type="number" id="cfgStudyTarget" data-cfg="true" value="14">
+          <label class="label">Project Target (Hours / Week)</label>
+          <input type="number" id="cfgProjectTarget" data-cfg="true" value="2">
+        </div>
+
+        <!-- Appearance Tab -->
+        <div class="settings-panel" id="settingsAppearance" data-panel="appearance" style="display:none;">
+          <label class="label">Color Theme</label>
+          <p class="hint" style="margin-bottom: 12px;">Choose a color palette for the entire interface.</p>
+          <div class="theme-grid" id="themeGrid"></div>
+        </div>
+
+        <!-- Data Tab -->
+        <div class="settings-panel" id="settingsData" data-panel="data" style="display:none;">
+          <p class="hint" style="margin-bottom: 16px;">Manage your data backups and weekly reset.</p>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <button id="settingsExportBtn">📦 Export Full Backup</button>
+            <label class="file-label" for="settingsImportFile" style="text-align:center;">📥 Import Backup</label>
+            <input id="settingsImportFile" type="file" accept="application/json,.json" />
+            <button class="danger" id="settingsResetBtn">🗑️ Reset This Week</button>
+          </div>
+        </div>
+
+        <!-- Trophy Case Tab -->
+        <div class="settings-panel" id="settingsArchive" data-panel="archive" style="display:none;">
+          <p class="hint" style="margin-bottom: 16px;">Completed certifications and achieved goals live here forever. 🏆</p>
+          <div id="trophyList"></div>
+
+          <div class="add-trophy-form" id="addTrophyForm">
+            <label class="label">Achievement Title</label>
+            <input type="text" id="trophyTitle" placeholder="e.g., Certification Certified">
+            <label class="label">Category</label>
+            <select id="trophyCategory">
+              <option value="certification">🏆 Certification</option>
+              <option value="fitness">💪 Fitness Goal</option>
+              <option value="project">🚀 Project Milestone</option>
+              <option value="personal">⭐ Personal Achievement</option>
+            </select>
+            <label class="label">Notes (optional)</label>
+            <textarea id="trophyNotes" style="min-height:60px;" placeholder="Any notes about this achievement..."></textarea>
+            <div class="modal-actions" style="margin-top:12px;">
+              <button id="cancelTrophyBtn" type="button">Cancel</button>
+              <button id="saveTrophyBtn" type="button" class="primary">Save Achievement</button>
+            </div>
+          </div>
+
+          <button id="addTrophyBtn" class="primary" style="width:100%;margin-top:16px;">+ Add Achievement</button>
+        </div>
+
+        <div class="modal-actions">
+          <button id="closeSettingsBtn" type="button">Close</button>
+          <button id="saveSettingsBtn" type="button" class="primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Metrics Modal -->
+    <div class="modal-backdrop" id="editMetricsModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true">
+        <h3>Edit Scoreboard Labels</h3>
+        <p class="hint">One per line. Format: Title | Subtitle (Do not change the number of lines)</p>
+        <textarea id="editMetricsTextarea" spellcheck="false" style="min-height:200px;"></textarea>
+        <div class="modal-actions">
+          <button id="cancelMetricsBtn" type="button">Cancel</button>
+          <button id="saveMetricsBtn" type="button" class="primary">Save Labels</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Workouts Modal -->
+    <div class="modal-backdrop" id="editWorkoutsModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true">
+        <h3>Edit Workout Plan</h3>
+        <p class="hint">One plan per line (7 lines max, mapped to Mon-Sun).</p>
+        <textarea id="editWorkoutsTextarea" spellcheck="false"></textarea>
+        <div class="modal-actions">
+          <button id="cancelWorkoutsBtn" type="button">Cancel</button>
+          <button id="saveWorkoutsBtn" type="button" class="primary">Save Workouts</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Study Modal -->
+    <div class="modal-backdrop" id="editStudyModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true">
+        <h3>Edit Study Plan</h3>
+        <p class="hint">One certification or skill per line.</p>
+        <textarea id="editStudyTextarea" spellcheck="false"></textarea>
+        <div class="modal-actions">
+          <button id="cancelStudyBtn" type="button">Cancel</button>
+          <button id="saveStudyBtn" type="button" class="primary">Save Study Plan</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Heatmap Insights Modal -->
+    <div class="modal-backdrop" id="insightsModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true">
+        <h3 id="insightsTitle">Week Insights</h3>
+        <div id="insightsContent" style="margin-top: 16px; font-size: 14px; line-height: 1.6; color: var(--text-dim);"></div>
+        <div class="modal-actions">
+          <button id="closeInsightsBtn" type="button" class="primary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports Modal -->
+    <div class="modal-backdrop" id="reportsModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" style="max-width: 600px;">
+        <h3>Performance Report</h3>
+        <div style="display:flex;gap:8px;margin-top:12px;margin-bottom:24px;">
+          <button id="genMonthReportBtn" class="primary">Past 4 Weeks</button>
+          <button id="genYearReportBtn" class="primary">Past 52 Weeks</button>
+        </div>
+        <div id="reportContent"><div class="report-empty">Select an option above to generate a report.</div></div>
+        <div class="modal-actions">
+          <button id="copyReportBtn" type="button">Copy to Clipboard</button>
+          <button id="closeReportBtn" type="button" class="primary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="section quote-box glass">Do not make a bad day a bad week. Maintain the structure, stack small wins, and keep moving toward the version of you that can handle bigger responsibilities.</section>
+    <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
+  </main>
+
+  <script src="app.js?v=4"></script>
+</body>
+</html>
