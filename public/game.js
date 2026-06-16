@@ -257,9 +257,22 @@
         <span class="attr-lvl">Lv ${a.level}</span>
       </div>`).join("");
 
-    // Level-up celebration (lightweight; full FX lands in the dopamine phase)
-    if (lastLevel !== null && p.level > lastLevel) levelUpToast(p.level);
+    // Level-up celebration — prefer the rich FX layer if present
+    if (lastLevel !== null && p.level > lastLevel) {
+      if (window.FX && FX.levelUp) FX.levelUp(p.level, p.rank);
+      else levelUpToast(p.level);
+    }
     lastLevel = p.level;
+  }
+
+  // XP a single checkbox is worth (used by the FX layer for "+N XP" pops)
+  function checkXp(el) {
+    const cat = (el && el.dataset) ? el.dataset.cat : null;
+    return XP_BY_CAT[cat] || XP_BY_CAT.other;
+  }
+  function attrColorForCat(cat) {
+    const a = ATTRS.find(x => x.key === ATTR_OF_CAT[cat]);
+    return a ? a.color : "#38bdf8";
   }
 
   function levelUpToast(level) {
@@ -278,5 +291,5 @@
     t._timer = setTimeout(() => t.classList.remove("show"), 2600);
   }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor };
+  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, attrColorForCat };
 })();

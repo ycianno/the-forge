@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
   <main class="shell">
@@ -25,6 +25,7 @@
         <button class="ghost desktop-nav-item" id="openReportBtn">📊 Reports</button>
         <button class="ghost desktop-nav-item" id="expandAllBtn" title="Expand All">⬇️</button>
         <button class="ghost desktop-nav-item" id="collapseAllBtn" title="Collapse All">⬆️</button>
+        <button class="ghost desktop-nav-item" id="soundToggle" title="Sound on">🔊</button>
         <button class="ghost desktop-nav-item" id="openSettingsBtn">⚙️ Settings</button>
         <a href="/api/logout" class="danger desktop-nav-item" style="margin-left: 8px;">Logout</a>
 
@@ -391,7 +392,8 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="game.js?v=1"></script>
+  <script src="game.js?v=2"></script>
+  <script src="fx.js?v=1"></script>
   <script src="app.js?v=5"></script>
 </body>
 </html>
