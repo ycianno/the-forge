@@ -304,45 +304,74 @@ function calculateWeekScoreData(weekData) {
   return validKeys.size > 0 ? Math.round((done / validKeys.size) * 100) : 0;
 }
 
-function updateStreakAndHeatmap() {
-  const grade = settings.streakGrade || 75;
+// ===== DAILY CONTRIBUTION HEATMAP =====
+function dayPctInfo(date) {
+  const wk = database.weeks[iso(getStartOfWeek(date))];
+  if (!wk || !wk.checks) return null;
+  const di = date.getDay();
+  const tasks = getDailyBlueprint()[Object.keys(getDailyBlueprint())[di]] || [];
+  if (!tasks.length) return null;
+  let done = 0;
+  tasks.forEach(t => { if (wk.checks[taskId(di, t)]) done++; });
+  return { pct: Math.round(done / tasks.length * 100), done, total: tasks.length, tasks, di, wk };
+}
+function hmLevel(pct) {
+  if (pct == null || pct === 0) return 0;
+  if (pct < 50) return 1;
+  if (pct < 75) return 2;
+  if (pct < 100) return 3;
+  return 4;
+}
+function openDayInsights(date, info) {
+  document.getElementById("insightsTitle").textContent =
+    date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+  let html;
+  if (!info) {
+    html = "No data recorded for this day.";
+  } else {
+    html = `<strong>Completion:</strong> ${info.pct}% &nbsp;(${info.done}/${info.total} quests)<br><br>`;
+    html += info.tasks.map(t =>
+      `${info.wk.checks[taskId(info.di, t)] ? "✅" : "▫️"} ${escapeHtml(t)}`).join("<br>");
+  }
+  document.getElementById("insightsContent").innerHTML = html;
+  document.getElementById("insightsModal").classList.add("active");
+}
+function renderHeatmap() {
   const grid = document.getElementById("heatmapGrid");
-  if (grid) {
-    grid.innerHTML = "";
-    const currentWeekStart = getStartOfWeek(new Date());
-    for (let i = 51; i >= 0; i--) {
-      let weekDate = addDays(currentWeekStart, -i * 7);
-      let key = iso(weekDate);
-      let data = database.weeks[key];
-      let score = data ? calculateWeekScoreData(data) : 0;
-      let lvl = 0;
-      if (score >= 85) lvl = 3;
-      else if (score >= grade) lvl = 2;
-      else if (score >= 50) lvl = 1;
-      else if (score > 0) lvl = 'fail';
-
-      if (i === 0 && score < grade) lvl = 'current';
-      
-      let cell = document.createElement("div");
-      cell.className = `heatmap-cell lvl-${lvl}`;
-      cell.title = `Week of ${fmt(weekDate)}: ${score}%`;
-      cell.onclick = () => { 
-        document.getElementById("insightsTitle").textContent = `Week of ${fmt(weekDate)}`;
-        let details = `<strong>Score:</strong> ${score}%\n\n`;
-        if (data) {
-          details += `<strong>Wins:</strong>\n${escapeHtml(data.fields.wins || 'None recorded')}\n\n`;
-          details += `<strong>Friction:</strong>\n${escapeHtml(data.fields.misses || 'None recorded')}\n\n`;
-          details += `<strong>Grade:</strong> ${escapeHtml(data.fields.grade || 'Not graded')}`;
-        } else {
-          details += `No data recorded for this week.`;
-        }
-        document.getElementById("insightsContent").innerHTML = details.replace(/\n/g, '<br>');
-        document.getElementById("insightsModal").classList.add("active");
-      };
+  if (!grid) return;
+  grid.innerHTML = "";
+  const months = document.getElementById("hmMonths");
+  if (months) months.innerHTML = "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const startWeek = addDays(getStartOfWeek(today), -51 * 7); // 52 weeks incl. current
+  let lastMonth = -1;
+  for (let col = 0; col < 52; col++) {
+    const colDate = addDays(startWeek, col * 7);
+    if (months) {
+      const lbl = document.createElement("span");
+      lbl.className = "hm-month";
+      const m = colDate.getMonth();
+      if (m !== lastMonth) { lbl.textContent = colDate.toLocaleDateString(undefined, { month: "short" }); lastMonth = m; }
+      months.appendChild(lbl);
+    }
+    for (let row = 0; row < 7; row++) {
+      const date = addDays(startWeek, col * 7 + row);
+      const cell = document.createElement("div");
+      if (date > today) { cell.className = "hm-cell future"; grid.appendChild(cell); continue; }
+      const info = dayPctInfo(date);
+      cell.className = `hm-cell d${hmLevel(info ? info.pct : null)}`;
+      const dstr = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      cell.title = info ? `${dstr} — ${info.pct}% (${info.done}/${info.total})` : `${dstr} — no data`;
+      cell.onclick = () => openDayInsights(date, info);
       grid.appendChild(cell);
     }
   }
-  
+}
+
+function updateStreakAndHeatmap() {
+  const grade = settings.streakGrade || 75;
+  renderHeatmap();
+
   let streak = 0;
   let currentWeekStart = getStartOfWeek(new Date());
   let currentKey = iso(currentWeekStart);
@@ -765,7 +794,7 @@ function scrollToSection(id) {
 const SECTIONS = [
   ["scoreboard", "Scoreboard"], ["calendar", "Calendar"], ["daily", "Daily"],
   ["workout", "Training"], ["diet", "Diet"], ["study", "Study"],
-  ["projects", "Projects"], ["review", "Review"], ["yearly-heatmap", "Yearly Heatmap"]
+  ["projects", "Projects"], ["review", "Review"]
 ];
 function getHiddenSections() { return settings.hiddenSections || []; }
 function applySectionVisibility() {

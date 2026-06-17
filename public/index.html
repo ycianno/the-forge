@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
 </head>
 <body>
   <main class="shell">
@@ -138,6 +138,18 @@
           <span class="week-range-tag"><span id="weekRangeText">—</span> · <span id="todayText">—</span></span>
           <button id="copyBtn">Copy Summary</button>
         </div>
+
+        <div class="hero-heatmap">
+          <div class="hm-head"><span class="hm-title">Activity</span><span class="hm-sub">Last 52 weeks · click a day</span></div>
+          <div class="hm-chart">
+            <div class="hm-days"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+            <div class="heatmap-scroll">
+              <div class="hm-months" id="hmMonths"></div>
+              <div class="heatmap-grid" id="heatmapGrid"></div>
+            </div>
+          </div>
+          <div class="hm-legend"><span>Less</span><span class="hm-cell d0"></span><span class="hm-cell d1"></span><span class="hm-cell d2"></span><span class="hm-cell d3"></span><span class="hm-cell d4"></span><span>More</span></div>
+        </div>
       </div>
 
       <aside class="panel glass char-panel">
@@ -155,16 +167,6 @@
         </div>
       </aside>
     </section>
-
-    <div id="yearly-heatmap" class="heatmap-bare section">
-      <div class="heatmap-bare-header">
-        <h2>Yearly Heatmap</h2>
-        <span class="hint" style="margin-left: 8px;">Annual overview of execution (75% passing grade to maintain streak).</span>
-      </div>
-      <div class="heatmap-scroll">
-        <div class="heatmap-grid" id="heatmapGrid"></div>
-      </div>
-    </div>
 
     <details id="scoreboard" class="section section-card glass" open>
       <summary><div class="summary-left"><h2>Weekly Scoreboard</h2><p class="hint">Commitments are separated from bonus targets so the system stays honest.</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-metrics-btn" type="button" title="Edit Metrics"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
@@ -457,6 +459,6 @@
 
   <script src="game.js?v=8"></script>
   <script src="fx.js?v=4"></script>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
