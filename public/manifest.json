@@ -1,7 +1,7 @@
 {
-  "name": "Life Control Center",
-  "short_name": "LCC",
-  "description": "Everyday Non-Negotiables Tracker",
+  "name": "Forge",
+  "short_name": "Forge",
+  "description": "Forge — turn your daily discipline into an RPG.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#040406",

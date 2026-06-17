@@ -1,4 +1,4 @@
-# Life Control Center
+# Forge
 
 <div align="center">
   <p><strong>A private, highly opinionated, self-hosted control center for your life.</strong></p>

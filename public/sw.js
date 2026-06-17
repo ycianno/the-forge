@@ -3,7 +3,7 @@
  * redirects are respected), offline shell fallback. API is never cached —
  * app.js already falls back to localStorage when offline.
  */
-const CACHE = 'lcc-v2';
+const CACHE = 'lcc-v3';
 const SHELL = '/index.html';
 
 self.addEventListener('install', () => self.skipWaiting());
