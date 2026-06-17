@@ -2090,3 +2090,12 @@ input[type="file"] { display: none; }
 /* Forge brand mark (topbar) */
 .brand-mark { display: inline-grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; }
 .brand-mark svg { width: 24px; height: 24px; fill: var(--accent-primary); filter: drop-shadow(0 0 6px var(--score-glow)); }
+
+/* ===== CERT DEADLINES ===== */
+.cert-summary { margin-bottom: 14px; font-size: 13px; color: var(--text-dim); line-height: 1.5; padding: 11px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-left: 3px solid var(--accent-primary); }
+.cert-date { width: 150px; color-scheme: dark; }
+.cert-cd { display: inline-block; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 12px; padding: 4px 10px; border-radius: 99px; white-space: nowrap; background: rgba(255,255,255,0.05); color: var(--muted); }
+.cert-cd.cd-far { color: var(--pill-green-text); background: var(--pill-green-bg); }
+.cert-cd.cd-mid { color: var(--pill-amber-text); background: var(--pill-amber-bg); }
+.cert-cd.cd-soon { color: #fca5a5; background: rgba(239,68,68,0.14); }
+.cert-cd.cd-over { color: #fff; background: rgba(239,68,68,0.55); }

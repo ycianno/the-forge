@@ -422,18 +422,57 @@ const defaultStudyAreas = [
 ];
 function getStudyAreas() { return settings.studyAreas || defaultStudyAreas; }
 
+function getCertDates() { return settings.certDates || {}; }
+
 function renderStudyAreas() {
   const tbody = document.getElementById("studyRows");
   if (!tbody) return;
   tbody.innerHTML = "";
+  const dates = getCertDates();
   getStudyAreas().forEach((area, i) => {
+    const d = dates[area] || "";
     tbody.insertAdjacentHTML("beforeend", `<tr>
-      <td>${area}</td>
+      <td>${escapeHtml(area)}</td>
       <td><input id="goal-study-${i}" data-save type="text" placeholder="Goal..."></td>
       <td><input id="hours-study-${i}" class="small-input" data-save data-hours="study" type="number" min="0" step="0.25" value="0"> hrs</td>
       <td><select id="status-study-${i}" data-save><option>Planned</option><option>In Progress</option><option>Ready for Exam</option><option>Completed</option><option>Paused</option></select></td>
+      <td><input type="date" class="cert-date" data-certdate="${escapeHtml(area)}" value="${d}"></td>
+      <td><span class="cert-cd" id="cd-study-${i}">—</span></td>
     </tr>`);
   });
+  updateCertCountdowns();
+}
+
+function updateCertCountdowns() {
+  const dates = getCertDates();
+  const areas = getStudyAreas();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let soonest = null;
+  areas.forEach((area, i) => {
+    const el = document.getElementById(`cd-study-${i}`);
+    if (!el) return;
+    const ds = dates[area];
+    if (!ds) { el.textContent = "—"; el.className = "cert-cd"; return; }
+    const days = Math.round((new Date(ds + "T00:00:00") - today) / 86400000);
+    let cls = "cert-cd", txt;
+    if (days < 0) { txt = `${Math.abs(days)}d overdue`; cls += " cd-over"; }
+    else if (days === 0) { txt = "Today!"; cls += " cd-soon"; }
+    else { txt = days < 7 ? `${days}d left` : `${days}d · ${Math.ceil(days / 7)}w`; cls += days < 14 ? " cd-soon" : days < 35 ? " cd-mid" : " cd-far"; }
+    el.textContent = txt; el.className = cls;
+    if (days >= 0 && (soonest === null || days < soonest.days)) soonest = { area, days };
+  });
+  const sum = document.getElementById("certSummary");
+  if (sum) {
+    if (soonest) {
+      const wks = Math.max(1, Math.ceil(soonest.days / 7));
+      const tgt = settings.studyTarget || 14;
+      sum.innerHTML = `⏳ Next exam: <strong>${escapeHtml(soonest.area)}</strong> in <strong>${soonest.days}</strong> day${soonest.days === 1 ? "" : "s"} · ~${wks} week${wks === 1 ? "" : "s"} to prep at ${tgt} hrs/wk (${wks * tgt} hrs).`;
+      sum.style.display = "";
+    } else {
+      sum.innerHTML = `🎯 Set a target date on a certification to start its countdown.`;
+      sum.style.display = "";
+    }
+  }
 }
 
 // ===== EDITABLE LISTS: Diet / Project / Review =====
@@ -586,6 +625,7 @@ function applyWeekToUI() {
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
   applySectionVisibility();
+  updateCertCountdowns();
 
   // Apply mobile smart layout after rendering
   applyMobileSmartLayout();
@@ -835,6 +875,16 @@ function openSettings() {
 // ===== EVENT BINDING =====
 function bindEvents() {
   document.addEventListener("input", e => { if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateProgress(); } });
+  // Certification target dates (stored in settings.certDates, not week fields)
+  document.addEventListener("change", e => {
+    if (!e.target.matches("[data-certdate]")) return;
+    if (!settings.certDates) settings.certDates = {};
+    const name = e.target.dataset.certdate;
+    if (e.target.value) settings.certDates[name] = e.target.value;
+    else delete settings.certDates[name];
+    persistSettings();
+    updateCertCountdowns();
+  });
   document.addEventListener("change", e => { 
     if (e.target.matches("[data-save]")) { 
       saveWeekField(e.target); 

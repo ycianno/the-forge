@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=16" />
+  <link rel="stylesheet" href="style.css?v=17" />
 </head>
 <body>
   <main class="shell">
@@ -195,8 +195,9 @@
     <details id="study" class="section section-card glass" open>
       <summary><div class="summary-left"><h2>Career & Certification Study</h2><p class="hint">Connect studying to promotion, automation, and cybersecurity direction.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillStudy">14 hours/week minimum</span><button class="icon-btn edit-study-btn" type="button" title="Edit Study Plan"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
       <div class="content">
+        <div id="certSummary" class="cert-summary"></div>
         <table>
-          <thead><tr><th>Certification / Skill</th><th>Goal</th><th>Hours</th><th>Status</th></tr></thead>
+          <thead><tr><th>Certification / Skill</th><th>Goal</th><th>Hours</th><th>Status</th><th>Target</th><th>Days Left</th></tr></thead>
           <tbody id="studyRows">
           </tbody>
         </table>
@@ -458,6 +459,6 @@
 
   <script src="game.js?v=8"></script>
   <script src="fx.js?v=4"></script>
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
