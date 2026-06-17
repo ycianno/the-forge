@@ -199,8 +199,34 @@
       level: lv.level, xpIntoLevel: lv.xpIntoLevel, xpForNext: lv.xpForNext,
       rank, attrs,
       lifetimeStudyHours: Math.round(lifetimeStudyHours),
-      bestWeekPct, currentStreak: computeStreak(),
+      bestWeekPct, currentStreak: computeStreak(), dayStreak: computeDayStreak(),
     };
+  }
+
+  // Consecutive days (ending today, today optional) at >= 50% of that day's quests
+  function dayCompletion(date) {
+    if (typeof getStartOfWeek !== "function" || typeof getDailyBlueprint !== "function") return 0;
+    const db = (typeof database !== "undefined") ? database : null;
+    if (!db || !db.weeks) return 0;
+    const wk = db.weeks[iso(getStartOfWeek(date))];
+    if (!wk || !wk.checks) return 0;
+    const di = date.getDay();
+    const names = Object.keys(getDailyBlueprint());
+    const tasks = getDailyBlueprint()[names[di]] || [];
+    if (!tasks.length) return 0;
+    let done = 0;
+    tasks.forEach(t => { if (wk.checks[taskId(di, t)]) done++; });
+    return Math.round(done / tasks.length * 100);
+  }
+  function computeDayStreak() {
+    const thr = 50;
+    const today = new Date();
+    let d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    let streak = 0;
+    if (dayCompletion(d) >= thr) streak++;        // today counts once it's met
+    d.setDate(d.getDate() - 1);
+    while (dayCompletion(d) >= thr) { streak++; d.setDate(d.getDate() - 1); }
+    return streak;
   }
 
   function computeStreak() {
@@ -275,6 +301,7 @@
     setText("lifetimeXp", p.lifetimeXp.toLocaleString());
     setText("weeklyXp", "+" + p.weeklyXp.toLocaleString());
     setText("weeksActive", p.activeWeeks);
+    setText("dayStreak", p.dayStreak);
     setText("xpText", p.xpIntoLevel.toLocaleString() + " / " + p.xpForNext.toLocaleString() + " XP");
     setText("xpNextLabel", "to Level " + (p.level + 1));
 

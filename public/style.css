@@ -1953,3 +1953,17 @@ input[type="file"] { display: none; }
 .fx-badge-k { font-size: 10px; font-weight: 900; letter-spacing: 0.25em; color: var(--bc, var(--accent-primary)); }
 .fx-badge-v { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 20px; color: var(--text); }
 .fx-badge-r { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
+/* ===========================================================================
+ * FIXES & POLISH
+ * ======================================================================== */
+/* collapsed day cards must not stretch to their open row-partner's height */
+#daysGrid { align-items: start; }
+
+/* day-cleared celebration reuses .fx-overlay/.fx-card (green accent inline) */
+.fx-overlay.day-clear.show { background: rgba(2, 12, 6, 0.45); }
+
+@media (max-width: 768px) {
+  /* the date line is already shown in the mobile context bar — drop the dupe */
+  .week-range-tag { display: none; }
+}

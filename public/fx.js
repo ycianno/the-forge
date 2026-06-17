@@ -138,6 +138,35 @@
     setTimeout(() => ov.remove(), 2600);
   }
 
+  // ----- Day cleared celebration -------------------------------------------
+  let dayClearedFired = false;
+  function dayCleared() {
+    arp([523.25, 659.25, 783.99, 1046.5, 1318.5], 85, "triangle", 0.17);
+    vibrate([0, 40, 60, 40, 90, 40, 120]);
+    const ov = document.createElement("div");
+    ov.className = "fx-overlay day-clear";
+    ov.innerHTML = `
+      <div class="fx-confetti"></div>
+      <div class="fx-card">
+        <span class="fx-card-k" style="color:#34d399">DAY CLEARED</span>
+        <span class="fx-card-lv" style="background:linear-gradient(135deg,#22c55e,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent">100%</span>
+        <span class="fx-card-rank">All quests complete</span>
+      </div>`;
+    document.body.appendChild(ov);
+    const field = ov.querySelector(".fx-confetti");
+    for (let i = 0; i < 40; i++) {
+      const p = document.createElement("span");
+      p.className = "confetti-piece";
+      p.style.left = Math.random() * 100 + "%";
+      p.style.background = CONFETTI[i % CONFETTI.length];
+      p.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
+      field.appendChild(p);
+    }
+    requestAnimationFrame(() => ov.classList.add("show"));
+    setTimeout(() => ov.classList.remove("show"), 2400);
+    setTimeout(() => ov.remove(), 2900);
+  }
+
   // ----- Badge unlock toast ------------------------------------------------
   function badge(name, rarity, color) {
     arp([659.25, 880, 1108.73], 70, "triangle", 0.16);
@@ -165,6 +194,14 @@
     } else {
       resetCombo();
       playUncheck();
+    }
+    // Day-cleared celebration — all of TODAY's quests complete
+    const di = t.dataset.day;
+    if (di !== undefined && di !== null && di !== "" && di === String(new Date().getDay())) {
+      const boxes = [].slice.call(document.querySelectorAll('input[type="checkbox"][data-day="' + di + '"]'));
+      const allDone = boxes.length > 0 && boxes.every(c => c.checked);
+      if (allDone && !dayClearedFired) { dayClearedFired = true; dayCleared(); }
+      else if (!allDone) dayClearedFired = false;
     }
   }
 
@@ -195,5 +232,5 @@
   if (document.readyState !== "loading") wireToggle();
   else document.addEventListener("DOMContentLoaded", wireToggle);
 
-  window.FX = { levelUp, badge, xpPop, playCheck, setSfx, sfxOn };
+  window.FX = { levelUp, badge, dayCleared, xpPop, playCheck, setSfx, sfxOn };
 })();

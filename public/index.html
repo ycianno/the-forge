@@ -8,12 +8,12 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon.svg" />
-  <link rel="stylesheet" href="style.css?v=12" />
+  <link rel="stylesheet" href="style.css?v=13" />
 </head>
 <body>
   <main class="shell">
     <div class="topbar">
-      <div class="brand"><span class="orb"></span><span>Life Control Center</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> Weeks</span></div>
+      <div class="brand"><span class="orb"></span><span>Life Control Center</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> <span id="streakUnit">Weeks</span></span></div>
       <nav class="nav" id="mainNav">
         <!-- Desktop nav links -->
         <a href="#scoreboard" class="desktop-nav-item">Scoreboard</a>
@@ -120,7 +120,7 @@
         <div class="char-stats">
           <div class="cstat"><span class="cstat-v" id="lifetimeXp">0</span><span class="cstat-k">Lifetime XP</span></div>
           <div class="cstat"><span class="cstat-v" id="weeklyXp">+0</span><span class="cstat-k">This Week</span></div>
-          <div class="cstat"><span class="cstat-v" id="weeksActive">0</span><span class="cstat-k">Active Weeks</span></div>
+          <div class="cstat"><span class="cstat-v" id="dayStreak">0</span><span class="cstat-k">🔥 Day Streak</span></div>
         </div>
 
         <div class="mission-banner">
@@ -455,8 +455,8 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="game.js?v=7"></script>
-  <script src="fx.js?v=3"></script>
-  <script src="app.js?v=10"></script>
+  <script src="game.js?v=8"></script>
+  <script src="fx.js?v=4"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

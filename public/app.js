@@ -363,6 +363,8 @@ function updateStreakAndHeatmap() {
   const count = document.getElementById("streakCount");
   if (badge && count) {
     count.textContent = streak;
+    const unit = document.getElementById("streakUnit");
+    if (unit) unit.textContent = streak === 1 ? "Week" : "Weeks";
     badge.style.display = streak > 0 ? "inline-flex" : "none";
   }
 }
