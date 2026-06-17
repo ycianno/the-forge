@@ -10,5 +10,6 @@ services:
     restart: unless-stopped
     environment:
       - PORT=3007
+      # Set your own password before deploying (protects the dashboard).
       - APP_PASSWORD=changeme
       - DB_PATH=/app/data/database.sqlite

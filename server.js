@@ -4,7 +4,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const APP_PASSWORD = process.env.APP_PASSWORD || 'ycianno';
+const APP_PASSWORD = process.env.APP_PASSWORD || 'changeme';
 
 const app = express();
 const port = process.env.PORT || 3007;
