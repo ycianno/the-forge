@@ -421,6 +421,7 @@
     { id: "maker", name: "Maker", rarity: "epic", req: "Craft Lv 5", icon: "M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4z", test: p => attrLvl(p, "Craft") >= 5 },
     { id: "relentless", name: "Relentless", rarity: "legendary", req: "12-week streak", icon: "M12 2c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 1-3 0 2 3 2 3 0 0-2-1-3 0-5z", test: p => p.currentStreak >= 12 },
     { id: "ascendant", name: "Ascendant", rarity: "legendary", req: "Reach Level 20", icon: "M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5z", test: p => p.level >= 20 },
+    { id: "boss-slayer", name: "Boss Slayer", rarity: "rare", req: "Defeat a weekly boss", icon: "M13 2 4 14h6l-1 8 9-12h-6z", test: () => (typeof settings !== "undefined" && settings && settings.bossDefeated && Object.keys(settings.bossDefeated).length > 0) },
   ];
 
   function checkBadgeUnlocks(p) {

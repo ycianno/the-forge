@@ -627,6 +627,7 @@ function applyWeekToUI() {
   if (window.Game) Game.render();
   applySectionVisibility();
   updateCertCountdowns();
+  renderBoss();
 
   // Apply mobile smart layout after rendering
   applyMobileSmartLayout();
@@ -738,6 +739,7 @@ function updateProgress() {
 
   const reviewDone = ["wins", "misses", "changes", "refuseDrop"].filter(id => document.getElementById(id)?.value.trim()).length;
   setMetric("review", percent(reviewDone, 4));
+  if (typeof renderBoss === "function") renderBoss();
 }
 
 // ===== SETTINGS TABS =====
@@ -837,7 +839,7 @@ function scrollToSection(id) {
 // ===== SETTINGS MODAL =====
 // ===== SECTION VISIBILITY =====
 const SECTIONS = [
-  ["scoreboard", "Scoreboard"], ["calendar", "Calendar"], ["daily", "Daily"],
+  ["boss", "Weekly Boss"], ["scoreboard", "Scoreboard"], ["calendar", "Calendar"], ["daily", "Daily"],
   ["workout", "Training"], ["diet", "Diet"], ["study", "Study"],
   ["projects", "Projects"], ["review", "Review"]
 ];
@@ -901,6 +903,68 @@ function openSettings() {
 }
 
 // ===== EVENT BINDING =====
+// ===== WEEKLY BOSS =====
+const BOSSES = [
+  { name: "Inertia", emoji: "🪨", weak: "training", taunt: "You won't even start. Prove me wrong." },
+  { name: "The Procrastinator", emoji: "🦥", weak: "discipline", taunt: "Tomorrow, right? That's what you always say." },
+  { name: "Brain Fog", emoji: "🌫️", weak: "study", taunt: "Why study? You'll just forget it." },
+  { name: "The Glutton", emoji: "🍔", weak: "protein", taunt: "One more cheat day won't hurt…" },
+  { name: "The Drifter", emoji: "🌀", weak: "project", taunt: "Busywork feels like progress, doesn't it?" },
+  { name: "Lord Snooze", emoji: "😴", weak: "discipline", taunt: "Five more minutes. Every single morning." },
+  { name: "Doomscroll Hydra", emoji: "🐍", weak: "study", taunt: "Just one more scroll…" },
+  { name: "The Couch Wraith", emoji: "👻", weak: "training", taunt: "Skip the workout. Stay cozy." },
+];
+const BOSS_ATTR = { discipline: "Discipline", training: "Body", study: "Mind", protein: "Vitality", project: "Craft" };
+function bossForWeek(key) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return BOSSES[h % BOSSES.length];
+}
+function computeBossDamage() {
+  const boss = bossForWeek(weekKey());
+  const checks = getWeekData().checks || {};
+  const blueprint = getDailyBlueprint();
+  const names = Object.keys(blueprint);
+  let totW = 0, doneW = 0;
+  for (let i = 0; i < 7; i++) {
+    (blueprint[names[i]] || []).forEach((t) => {
+      const w = categoryFor(t) === boss.weak ? 2 : 1;
+      totW += w; if (checks[taskId(i, t)]) doneW += w;
+    });
+    const ww = boss.weak === "training" ? 2 : 1;
+    totW += ww; if (checks["workout-" + i]) doneW += ww;
+  }
+  return { boss, dmg: totW ? Math.round(doneW / totW * 100) : 0 };
+}
+function renderBoss() {
+  const panel = document.getElementById("boss");
+  if (!panel) return;
+  const { boss, dmg } = computeBossDamage();
+  const grade = settings.streakGrade || 75;
+  const defeated = dmg >= grade;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set("bossEmoji", boss.emoji);
+  set("bossName", boss.name);
+  set("bossWeak", "Weak to " + (BOSS_ATTR[boss.weak] || boss.weak) + " · those quests hit 2×");
+  set("bossStatus", defeated ? "DEFEATED" : Math.max(0, grade - dmg) + "% to defeat");
+  set("bossTaunt", defeated ? "Defeated. Next week, a new challenger." : boss.taunt);
+  const fill = document.getElementById("bossHpFill");
+  if (fill) { const hp = Math.max(0, Math.round((1 - dmg / grade) * 100)); fill.style.width = (defeated ? 100 : hp) + "%"; }
+  panel.classList.toggle("defeated", defeated);
+
+  // Defeat celebration — once per week; silent backfill on first ever run
+  const key = weekKey();
+  const first = !settings.bossDefeated;
+  if (!settings.bossDefeated) settings.bossDefeated = {};
+  if (defeated && !settings.bossDefeated[key]) {
+    settings.bossDefeated[key] = boss.name;
+    if (typeof persistSettings === "function") persistSettings();
+    if (!first && window.FX && FX.bossDefeated) FX.bossDefeated(boss.name);
+  } else if (first) {
+    if (typeof persistSettings === "function") persistSettings();
+  }
+}
+
 // ===== FOCUS TIMER =====
 let focusState = null;
 function openFocus() {

@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=21" />
+  <link rel="stylesheet" href="style.css?v=22" />
 </head>
 <body>
   <main class="shell">
@@ -166,6 +166,16 @@
           <button class="danger" id="resetBtn">Reset Week</button>
         </div>
       </aside>
+    </section>
+
+    <section class="section boss-card glass" id="boss">
+      <div class="boss-emoji" id="bossEmoji">🪨</div>
+      <div class="boss-body">
+        <div class="boss-top"><span class="boss-kicker">⚔️ Weekly Boss</span><span class="boss-status" id="bossStatus">—</span></div>
+        <div class="boss-name" id="bossName">—</div>
+        <div class="boss-hp"><div class="boss-hp-fill" id="bossHpFill"></div></div>
+        <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
+      </div>
     </section>
 
     <details id="scoreboard" class="section section-card glass" open>
@@ -499,8 +509,8 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="game.js?v=9"></script>
-  <script src="fx.js?v=6"></script>
-  <script src="app.js?v=19"></script>
+  <script src="game.js?v=10"></script>
+  <script src="fx.js?v=7"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>
