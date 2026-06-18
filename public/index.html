@@ -8,7 +8,7 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=20" />
+  <link rel="stylesheet" href="style.css?v=21" />
 </head>
 <body>
   <main class="shell">
@@ -23,6 +23,7 @@
         <a href="#study" class="desktop-nav-item">Study</a>
         <a href="#projects" class="desktop-nav-item">Projects</a>
         <span class="nav-divider desktop-nav-item" aria-hidden="true"></span>
+        <button class="ghost nav-icon desktop-nav-item" id="openFocusBtn" title="Focus timer" aria-label="Focus timer"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openReportBtn" title="Reports" aria-label="Reports"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20V10M10 20V4M16 20v-7M3 20h18"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="expandAllBtn" title="Expand all" aria-label="Expand all"><svg viewBox="0 0 24 24" class="ic"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="collapseAllBtn" title="Collapse all" aria-label="Collapse all"><svg viewBox="0 0 24 24" class="ic"><path d="M8 5l4 4 4-4M8 19l4-4 4 4"/></svg></button>
@@ -464,12 +465,42 @@
       </div>
     </div>
 
+    <!-- Focus Timer Modal -->
+    <div class="modal-backdrop" id="focusModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" style="max-width: 420px;">
+        <div class="modal-head">
+          <div class="modal-title-wrap"><span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg></span><h3>Focus</h3></div>
+          <button class="modal-close" id="closeFocusBtn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div id="focusSetup">
+          <label class="label">Focus on</label>
+          <select id="focusTarget"></select>
+          <label class="label" style="margin-top:16px;">Duration</label>
+          <div class="focus-durations">
+            <button type="button" class="focus-dur" data-min="25">25m</button>
+            <button type="button" class="focus-dur" data-min="50">50m</button>
+            <button type="button" class="focus-dur" data-min="90">90m</button>
+            <input type="number" id="focusCustom" min="1" max="240" placeholder="custom min">
+          </div>
+          <button class="primary" id="focusStartBtn" type="button" style="width:100%;margin-top:18px;">Start focus</button>
+        </div>
+        <div id="focusRunning" style="display:none;">
+          <div class="focus-ring" id="focusRing"><div class="focus-ring-inner"><span class="focus-time" id="focusTime">25:00</span></div></div>
+          <div class="focus-target-label" id="focusTargetLabel"></div>
+          <div class="modal-actions" style="justify-content:center;">
+            <button id="focusPauseBtn" type="button">Pause</button>
+            <button class="danger" id="focusStopBtn" type="button">Stop &amp; log</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <section class="section quote-box glass">Do not make a bad day a bad week. Maintain the structure, stack small wins, and keep moving toward the version of you that can handle bigger responsibilities.</section>
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
   <script src="game.js?v=9"></script>
-  <script src="fx.js?v=5"></script>
-  <script src="app.js?v=18"></script>
+  <script src="fx.js?v=6"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>

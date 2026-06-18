@@ -259,5 +259,16 @@
     setTimeout(() => ov.remove(), 2900);
   }
 
-  window.FX = { levelUp, badge, dayCleared, streakMilestone, xpPop, playCheck, setSfx, sfxOn };
+  function focusDone(hours, label, completed) {
+    arp([523.25, 659.25, 783.99, 1046.5], 80, "sine", 0.16);
+    vibrate([0, 40, 60, 40]);
+    let t = document.getElementById("fxBadgeToast");
+    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
+    t.style.setProperty("--bc", "var(--accent-primary)");
+    t.innerHTML = `<span class="fx-badge-k">FOCUS ${completed ? "COMPLETE" : "LOGGED"}</span><span class="fx-badge-v">${label}</span><span class="fx-badge-r">+${hours}h logged</span>`;
+    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
+  window.FX = { levelUp, badge, dayCleared, streakMilestone, focusDone, xpPop, playCheck, setSfx, sfxOn };
 })();

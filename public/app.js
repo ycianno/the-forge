@@ -901,6 +901,63 @@ function openSettings() {
 }
 
 // ===== EVENT BINDING =====
+// ===== FOCUS TIMER =====
+let focusState = null;
+function openFocus() {
+  const sel = document.getElementById("focusTarget");
+  if (sel) sel.innerHTML = getStudyAreas().map((a, i) => `<option value="study:${i}">${escapeHtml(a)}</option>`).join("") + `<option value="project">Project work</option>`;
+  document.getElementById("focusSetup").style.display = "";
+  document.getElementById("focusRunning").style.display = "none";
+  document.querySelectorAll(".focus-dur").forEach((b) => b.classList.remove("active"));
+  const def = document.querySelector('.focus-dur[data-min="25"]'); if (def) def.classList.add("active");
+  const c = document.getElementById("focusCustom"); if (c) c.value = "";
+  document.getElementById("focusModal").classList.add("active");
+}
+function focusLabel(sel) {
+  if (sel && sel.indexOf("study:") === 0) return getStudyAreas()[Number(sel.split(":")[1])] || "Study";
+  return "Project work";
+}
+function focusFormat(sec) { const m = Math.floor(sec / 60), s = sec % 60; return `${m}:${String(s).padStart(2, "0")}`; }
+function focusRender() {
+  if (!focusState) return;
+  const r = Math.max(0, focusState.remainSec);
+  const t = document.getElementById("focusTime"); if (t) t.textContent = focusFormat(r);
+  const ring = document.getElementById("focusRing");
+  if (ring) { const pct = focusState.totalSec ? (1 - r / focusState.totalSec) : 0; ring.style.background = `conic-gradient(var(--accent-primary) ${(pct * 360).toFixed(1)}deg, rgba(255,255,255,0.08) 0deg)`; }
+}
+function startFocus(minutes) {
+  const sel = document.getElementById("focusTarget").value;
+  const total = Math.max(1, Math.round(minutes)) * 60;
+  focusState = { sel, totalSec: total, remainSec: total, paused: false, timer: null };
+  document.getElementById("focusSetup").style.display = "none";
+  document.getElementById("focusRunning").style.display = "";
+  document.getElementById("focusTargetLabel").textContent = focusLabel(sel);
+  const pb = document.getElementById("focusPauseBtn"); if (pb) pb.textContent = "Pause";
+  focusRender();
+  focusState.timer = setInterval(() => {
+    if (!focusState || focusState.paused) return;
+    focusState.remainSec--;
+    focusRender();
+    if (focusState.remainSec <= 0) endFocus(true);
+  }, 1000);
+}
+function endFocus(completed) {
+  if (!focusState) { document.getElementById("focusModal").classList.remove("active"); return; }
+  const elapsed = focusState.totalSec - Math.max(0, focusState.remainSec);
+  const hours = Math.round(elapsed / 3600 * 100) / 100;
+  if (hours > 0) {
+    const el = focusState.sel.indexOf("study:") === 0
+      ? document.getElementById(`hours-study-${focusState.sel.split(":")[1]}`)
+      : document.getElementById("projectHours");
+    if (el) { el.value = (Number(el.value || 0) + hours).toFixed(2); el.dispatchEvent(new Event("input", { bubbles: true })); }
+  }
+  const label = focusLabel(focusState.sel);
+  if (focusState.timer) clearInterval(focusState.timer);
+  focusState = null;
+  document.getElementById("focusModal").classList.remove("active");
+  if (window.FX && FX.focusDone) FX.focusDone(hours, label, completed);
+}
+
 // ===== ANALYTICS / TRENDS =====
 function trBarBlock(title, items, max) {
   const m = max || 1;
@@ -1218,6 +1275,29 @@ function bindEvents() {
   if (closeInsightsBtn) closeInsightsBtn.onclick = () => document.getElementById("insightsModal").classList.remove("active");
 
   // Reports Modal
+  // Focus timer
+  const openFocusBtn = document.getElementById("openFocusBtn");
+  if (openFocusBtn) openFocusBtn.onclick = openFocus;
+  const closeFocusBtn = document.getElementById("closeFocusBtn");
+  if (closeFocusBtn) closeFocusBtn.onclick = () => { if (focusState) endFocus(false); else document.getElementById("focusModal").classList.remove("active"); };
+  document.querySelectorAll(".focus-dur").forEach((b) => b.onclick = () => {
+    document.querySelectorAll(".focus-dur").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    const c = document.getElementById("focusCustom"); if (c) c.value = "";
+  });
+  const focusCustomEl = document.getElementById("focusCustom");
+  if (focusCustomEl) focusCustomEl.oninput = () => { if (focusCustomEl.value) document.querySelectorAll(".focus-dur").forEach((x) => x.classList.remove("active")); };
+  const focusStartBtn = document.getElementById("focusStartBtn");
+  if (focusStartBtn) focusStartBtn.onclick = () => {
+    const custom = Number(document.getElementById("focusCustom").value);
+    const active = document.querySelector(".focus-dur.active");
+    startFocus(custom > 0 ? custom : (active ? Number(active.dataset.min) : 25));
+  };
+  const focusPauseBtn = document.getElementById("focusPauseBtn");
+  if (focusPauseBtn) focusPauseBtn.onclick = () => { if (focusState) { focusState.paused = !focusState.paused; focusPauseBtn.textContent = focusState.paused ? "Resume" : "Pause"; } };
+  const focusStopBtn = document.getElementById("focusStopBtn");
+  if (focusStopBtn) focusStopBtn.onclick = () => endFocus(false);
+
   const openReportBtn = document.getElementById("openReportBtn");
   if (openReportBtn) openReportBtn.onclick = () => {
     document.getElementById("reportsModal").classList.add("active");
