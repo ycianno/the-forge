@@ -1,0 +1,24 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t the-forge:ci .
+      - name: Smoke test (boots and serves login)
+        run: |
+          docker run -d --name forge-ci -e APP_PASSWORD=ci -p 3007:3007 the-forge:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3007/login.html >/dev/null; then echo "up"; exit 0; fi
+            sleep 1
+          done
+          echo "server did not come up"; docker logs forge-ci; exit 1
