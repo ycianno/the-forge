@@ -5,6 +5,22 @@ const path = require('path');
 const fs = require('fs');
 const webpush = require('web-push');
 
+// Load a local .env file if present (zero-dependency). Real environment
+// variables always win; this just makes a bare-metal `npm start` pick up the
+// password written by install.sh. Docker passes env directly, so .env is absent
+// there and this is a no-op.
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+      const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (m && process.env[m[1]] === undefined) {
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+      }
+    }
+  }
+} catch (e) { /* ignore malformed .env */ }
+
 const APP_PASSWORD = process.env.APP_PASSWORD || 'changeme';
 
 const app = express();
@@ -227,5 +243,21 @@ app.post('/api/push/unsubscribe', (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`The Forge running at http://0.0.0.0:${port}`);
+  const tty = process.stdout.isTTY;
+  const paint = (code, s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : s);
+  const amber = (s) => paint('38;5;208', s);
+  const cyan = (s) => paint('36', s);
+  const dim = (s) => paint('2', s);
+  const bold = (s) => paint('1', s);
+  console.log('');
+  console.log('  ' + amber('⚒  T H E   F O R G E'));
+  console.log('  ' + dim('─────────────────────────────────────'));
+  console.log('  ' + bold('▸') + ' Open    ' + cyan(`http://localhost:${port}`));
+  console.log('  ' + bold('▸') + ' Data    ' + dim(dbPath));
+  console.log('  ' + bold('▸') + ' Stop    ' + dim('Ctrl+C'));
+  if (APP_PASSWORD === 'changeme') {
+    console.log('');
+    console.log('  ' + paint('33', '⚠  Default password in use — set APP_PASSWORD before exposing this.'));
+  }
+  console.log('');
 });

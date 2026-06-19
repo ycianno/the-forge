@@ -54,28 +54,13 @@ It's opinionated and built for one person: you. Self-host it, set a password, an
   <img src="docs/screenshots/card.png" width="60%" alt="A shareable character card with level, rank, and attributes" />
 </div>
 
-## Quick start (Docker)
+## Install
 
-The Forge is designed to run on your own hardware — a Raspberry Pi, a Proxmox VM, a NAS, or any VPS.
+There are **two ways** to run The Forge — pick whichever you're comfortable with. Both run the exact same app on the same port; Docker just wraps it in a container. It's built to live on your own hardware: a Raspberry Pi, a NAS, a Proxmox VM, an old laptop, or a cheap VPS.
 
-```bash
-git clone https://github.com/ycianno/the-forge.git
-cd the-forge
+### Option A — Docker (recommended)
 
-# Set a password before you start (this is the only thing protecting your dashboard)
-cp .env.example .env
-#   then edit .env and change APP_PASSWORD
-
-docker compose up -d
-```
-
-Open **http://localhost:3007**, log in with your password, and start forging. Your database is persisted to `./data/database.sqlite`. On first launch you can **load sample data** to see a populated dashboard, or start fresh.
-
-> `docker-compose.yml` reads `APP_PASSWORD` from your `.env` file. If you prefer, you can also set it directly in the compose file.
-
-### Fastest: prebuilt image (no build)
-
-A multi-arch image (amd64 + arm64, so it runs on a Raspberry Pi too) is published to GitHub Container Registry:
+**Fastest — prebuilt image, nothing to build.** A multi-arch image (amd64 **+ arm64**, so it runs on a Raspberry Pi) is published to GitHub's Container Registry:
 
 ```bash
 docker run -d --name forge \
@@ -85,19 +70,38 @@ docker run -d --name forge \
   ghcr.io/ycianno/the-forge:latest
 ```
 
-Or in `docker-compose.yml`, comment out `build: .` and uncomment the `image:` line.
-
-### Without Docker
+**Or from source, with Compose:**
 
 ```bash
-npm install
-APP_PASSWORD=your-password npm start
-# → http://localhost:3007
+git clone https://github.com/ycianno/the-forge.git
+cd the-forge
+cp .env.example .env          # then edit .env and set APP_PASSWORD
+docker compose up -d
 ```
 
-Requires Node.js 20+. `better-sqlite3` compiles a native module, so you'll need build tools (`python3`, `make`, `g++`) on first install. This is the exact same server the Docker image runs — Docker just wraps `npm start`. Use whichever you prefer; there's nothing extra to maintain for both.
+> The default `docker-compose.yml` builds from source. To use the prebuilt image instead, comment out `build: .` and uncomment the `image:` line.
 
-**Keep it running (Linux, systemd).** Docker restarts the app automatically; for a bare-metal install, a small service unit does the same. Create `/etc/systemd/system/the-forge.service`:
+### Option B — Bare metal (Node, no Docker)
+
+**One-line installer.** It checks for Node, downloads The Forge, installs it, asks you to set a password, and offers to start it right away:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ycianno/the-forge/main/install.sh | bash
+```
+
+**Or do it by hand:**
+
+```bash
+git clone https://github.com/ycianno/the-forge.git
+cd the-forge
+npm install
+echo "APP_PASSWORD=your-password" > .env    # or: export APP_PASSWORD=your-password
+npm start
+```
+
+Requires **Node.js 20+**. `better-sqlite3` compiles a small native module, so on first install you'll need build tools (`python3`, `make`, `g++` on Linux; the Xcode Command Line Tools on macOS).
+
+**Keep it running on boot (Linux / systemd).** Docker restarts the app for you; on bare metal a small service unit does the same. Create `/etc/systemd/system/the-forge.service`:
 
 ```ini
 [Unit]
@@ -107,8 +111,6 @@ After=network.target
 [Service]
 WorkingDirectory=/opt/the-forge
 ExecStart=/usr/bin/node server.js
-Environment=APP_PASSWORD=your-password
-Environment=PORT=3007
 Restart=always
 User=forge
 
@@ -116,7 +118,11 @@ User=forge
 WantedBy=multi-user.target
 ```
 
-Then `sudo systemctl enable --now the-forge`. (On macOS, `pm2 start server.js --name the-forge` is the easy equivalent.)
+Then `sudo systemctl enable --now the-forge`. (On macOS, `pm2 start server.js --name the-forge` is the easy equivalent. The service reads your password from the `.env` file in `WorkingDirectory`.)
+
+---
+
+**However you start it:** open **http://localhost:3007** (or `http://<server-ip>:3007` from another device on your network), log in, and on first launch **load sample data** to explore — or start fresh. All your data lives in one SQLite file at `data/database.sqlite`.
 
 ## Configuration
 
