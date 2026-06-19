@@ -9,6 +9,7 @@
     <img alt="SQLite" src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white">
     <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white">
     <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green">
+    <a href="https://paypal.me/ycianno"><img alt="Donate" src="https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white"></a>
   </p>
 </div>
 
@@ -180,6 +181,14 @@ Still, treat it like what it is:
 ## Contributing
 
 Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The Forge is opinionated by design, so features that keep it simple and single-user are the easiest to land.
+
+## Support
+
+The Forge is free and open source. If it's helping you level up your life, you can fuel its development with a one-off tip — it genuinely helps and is hugely appreciated:
+
+<a href="https://paypal.me/ycianno"><img alt="Donate with PayPal" src="https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white&style=for-the-badge"></a>
+
+Not able to donate? Starring the repo and sharing it helps just as much. 🙏
 
 ## License
 
