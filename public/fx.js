@@ -174,7 +174,54 @@
     let t = document.getElementById("fxBadgeToast");
     if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
     t.style.setProperty("--bc", color || "#a78bfa");
-    t.innerHTML = `<span class="fx-badge-k">BADGE UNLOCKED</span><span class="fx-badge-v">${name}</span><span class="fx-badge-r">${rarity}</span>`;
+    t.innerHTML = `<span class="fx-badge-k">INSIGNIA UNLOCKED</span><span class="fx-badge-v">${name}</span><span class="fx-badge-r">${rarity}</span>`;
+    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
+  // ----- Trophy earned -----------------------------------------------------
+  const TROPHY_META = {
+    bronze:   { c: "#c17d3c", label: "Bronze" },
+    silver:   { c: "#9aa3ad", label: "Silver" },
+    gold:     { c: "#d4a017", label: "Gold" },
+    platinum: { c: "#3bb6c9", label: "Platinum" },
+  };
+  function trophy(grade, big) {
+    const m = TROPHY_META[grade] || { c: "var(--accent-primary)", label: grade };
+    if (big) {
+      // Platinum — full celebration
+      arp([392, 523.25, 659.25, 880, 1318.5], 90, "triangle", 0.16);
+      vibrate([0, 50, 60, 50, 120]);
+      const ov = document.createElement("div");
+      ov.className = "fx-overlay";
+      ov.innerHTML = `
+        <div class="fx-confetti"></div>
+        <div class="fx-card">
+          <span class="fx-card-k" style="color:${m.c}">TROPHY EARNED</span>
+          <span class="fx-card-lv" style="font-size:34px;color:${m.c}">${m.label}</span>
+          <span class="fx-card-rank">Six gold months — flawless.</span>
+        </div>`;
+      document.body.appendChild(ov);
+      const field = ov.querySelector(".fx-confetti");
+      for (let i = 0; i < 44; i++) {
+        const pc = document.createElement("span");
+        pc.className = "confetti-piece";
+        pc.style.left = Math.random() * 100 + "%";
+        pc.style.background = CONFETTI[i % CONFETTI.length];
+        pc.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
+        field.appendChild(pc);
+      }
+      requestAnimationFrame(() => ov.classList.add("show"));
+      setTimeout(() => ov.classList.remove("show"), 2600);
+      setTimeout(() => ov.remove(), 3100);
+      return;
+    }
+    arp([523.25, 698.46, 880], 75, "triangle", 0.15);
+    vibrate([0, 30, 40, 30]);
+    let t = document.getElementById("fxBadgeToast");
+    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
+    t.style.setProperty("--bc", m.c);
+    t.innerHTML = `<span class="fx-badge-k">TROPHY EARNED</span><span class="fx-badge-v">${m.label}</span><span class="fx-badge-r">trophy banked</span>`;
     t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
     clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
   }
@@ -297,5 +344,5 @@
     setTimeout(() => ov.remove(), 3000);
   }
 
-  window.FX = { levelUp, badge, dayCleared, streakMilestone, focusDone, bossDefeated, xpPop, playCheck, setSfx, sfxOn };
+  window.FX = { levelUp, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, xpPop, playCheck, setSfx, sfxOn };
 })();

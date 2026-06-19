@@ -762,7 +762,6 @@ function initSettingsTabs() {
       
       // Render content for specific tabs
       if (target === 'appearance') renderThemeGrid();
-      if (target === 'archive') { renderTrophyCase(); if (window.Game && Game.renderBadgeWall) Game.renderBadgeWall(); }
     });
   });
 }
@@ -897,10 +896,15 @@ function openSettings() {
   const rm = document.getElementById("cfgRemindMorning"); if (rm) rm.value = rem.morning || "08:00";
   const rv = document.getElementById("cfgRemindEvening"); if (rv) rv.value = rem.evening || "19:00";
   renderThemeGrid();
-  renderTrophyCase();
-  if (window.Game && Game.renderBadgeWall) Game.renderBadgeWall();
   document.getElementById("settingsModal").classList.add("active");
 }
+
+function openCabinet() {
+  if (window.Game && Game.renderCabinet) Game.renderCabinet();
+  renderTrophyCase();
+  document.getElementById("cabinetModal").classList.add("active");
+}
+function closeCabinet() { document.getElementById("cabinetModal").classList.remove("active"); }
 
 // ===== EVENT BINDING =====
 // ===== WEEKLY BOSS =====
@@ -1122,7 +1126,6 @@ function bindEvents() {
   document.getElementById("nextWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, 7); applyWeekToUI(); };
   document.getElementById("currentWeekBtn").onclick = () => { selectedWeekStart = getStartOfWeek(new Date()); applyWeekToUI(); };
   document.getElementById("resetBtn").onclick = resetThisWeek;
-  document.getElementById("copyBtn").onclick = copySummary;
   document.getElementById("exportBtn").onclick = exportBackup;
   document.getElementById("importFile").onchange = importBackup;
   document.getElementById("expandAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = true);
@@ -1191,6 +1194,19 @@ function bindEvents() {
   // Close settings modal on backdrop click
   document.getElementById("settingsModal")?.addEventListener("click", e => {
     if (e.target.id === "settingsModal") document.getElementById("settingsModal").classList.remove("active");
+  });
+
+  // Cabinet (trophies + insignias + records)
+  const openCabinetBtn = document.getElementById("openCabinetBtn");
+  if (openCabinetBtn) openCabinetBtn.onclick = openCabinet;
+  const openCabinetHeroBtn = document.getElementById("openCabinetHeroBtn");
+  if (openCabinetHeroBtn) openCabinetHeroBtn.onclick = openCabinet;
+  const closeCabinetBtn = document.getElementById("closeCabinetBtn");
+  if (closeCabinetBtn) closeCabinetBtn.onclick = closeCabinet;
+  const closeCabinetTopBtn = document.getElementById("closeCabinetTopBtn");
+  if (closeCabinetTopBtn) closeCabinetTopBtn.onclick = closeCabinet;
+  document.getElementById("cabinetModal")?.addEventListener("click", e => {
+    if (e.target.id === "cabinetModal") closeCabinet();
   });
 
   // Trophy Case

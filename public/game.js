@@ -53,13 +53,15 @@
   ];
 
   // ----- Rank tiers --------------------------------------------------------
+  // Forge-themed ladder — deliberately NOT metals, so it never collides with
+  // the Bronze/Silver/Gold/Platinum trophy grades.
   const RANKS = [
-    { min: 1,  name: "Bronze" },
-    { min: 8,  name: "Silver" },
-    { min: 16, name: "Gold" },
-    { min: 26, name: "Platinum" },
-    { min: 40, name: "Diamond" },
-    { min: 60, name: "Master" },
+    { min: 1,  name: "Initiate" },
+    { min: 8,  name: "Apprentice" },
+    { min: 16, name: "Journeyman" },
+    { min: 26, name: "Artisan" },
+    { min: 40, name: "Master" },
+    { min: 60, name: "Forgemaster" },
   ];
   function rankFor(level) {
     let r = RANKS[0], idx = 0;
@@ -164,6 +166,7 @@
     let activeWeeks = 0;
     let lifetimeStudyHours = 0;
     let bestWeekPct = 0;
+    let lifetimeChecks = 0;
     for (const key in weeks) {
       const wk = weeks[key];
       const before = lifetimeXp;
@@ -171,6 +174,9 @@
       if (lifetimeXp > before) activeWeeks++;
       if (wk && wk.fields) {
         for (const k in wk.fields) if (k.indexOf("hours-study-") === 0) lifetimeStudyHours += Number(wk.fields[k] || 0);
+      }
+      if (wk && wk.checks) {
+        for (const k in wk.checks) if (wk.checks[k]) lifetimeChecks++;
       }
       if (wk && typeof calculateWeekScoreData === "function") {
         const pct = calculateWeekScoreData(wk);
@@ -200,6 +206,7 @@
       level: lv.level, xpIntoLevel: lv.xpIntoLevel, xpForNext: lv.xpForNext,
       rank, attrs,
       lifetimeStudyHours: Math.round(lifetimeStudyHours),
+      lifetimeChecks,
       bestWeekPct, currentStreak: computeStreak(), dayStreak: ds.streak, streakUsed: ds.used,
     };
   }
@@ -260,7 +267,7 @@
   function setText(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
 
   function attrRadarSvg(attrs) {
-    const W = 272, H = 232, cx = 136, cy = 108, R = 82, gap = 20;
+    const W = 272, H = 232, cx = 136, cy = 118, R = 82, gap = 20;
     const n = attrs.length;
     const maxLevel = Math.max(1, ...attrs.map(a => a.level));
     const ang = i => (-90 + (360 / n) * i) * Math.PI / 180;
@@ -338,8 +345,10 @@
       else levelUpToast(p.level);
     }
     lastLevel = p.level;
-    checkBadgeUnlocks(p);
+    checkTrophies();
+    checkInsignias(p);
     checkStreakMilestones(p);
+    renderHeroTrophies(p);
   }
 
   // XP a single checkbox is worth (used by the FX layer for "+N XP" pops)
@@ -405,63 +414,324 @@
     inp.addEventListener("blur", () => commit(true));
   }
 
-  // ----- Badges & achievements 2.0 ----------------------------------------
-  const RARITY = { common: "#94a3b8", rare: "#38bdf8", epic: "#a78bfa", legendary: "#fbbf24" };
-  function attrLvl(p, key) { const a = p.attrs.find(x => x.key === key); return a ? a.level : 0; }
-  const BADGES = [
-    { id: "first-steps", name: "First Steps", rarity: "common", req: "Reach Level 2", icon: "M5 12h14M13 6l6 6-6 6", test: p => p.level >= 2 },
-    { id: "disciplined", name: "Disciplined", rarity: "common", req: "Discipline Lv 3", icon: "M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z", test: p => attrLvl(p, "Discipline") >= 3 },
-    { id: "bookworm", name: "Bookworm", rarity: "common", req: "Mind Lv 3", icon: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z", test: p => attrLvl(p, "Mind") >= 3 },
-    { id: "flawless-week", name: "Flawless Week", rarity: "rare", req: "Hit a 100% week", icon: "M20 6 9 17l-5-5", test: p => p.bestWeekPct >= 100 },
-    { id: "on-fire", name: "On Fire", rarity: "rare", req: "4-week streak", icon: "M12 2c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 1-3 0 2 3 2 3 0 0-2-1-3 0-5z", test: p => p.currentStreak >= 4 },
-    { id: "iron-body", name: "Iron Body", rarity: "rare", req: "Body Lv 5", icon: "M4 7l3-3 3 3-3 3zM17 14l3 3-3 3-3-3zM7.5 7.5l9 9", test: p => attrLvl(p, "Body") >= 5 },
-    { id: "scholar", name: "Scholar", rarity: "rare", req: "Log 50 study hours", icon: "M22 10 12 5 2 10l10 5 10-5zM6 12v5c0 1 3 2 6 2s6-1 6-2v-5", test: p => p.lifetimeStudyHours >= 50 },
-    { id: "centurion", name: "Centurion", rarity: "epic", req: "Reach Level 10", icon: "M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5z", test: p => p.level >= 10 },
-    { id: "polymath", name: "Polymath", rarity: "epic", req: "All attributes Lv 3+", icon: "M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z", test: p => p.attrs.every(a => a.level >= 3) },
-    { id: "maker", name: "Maker", rarity: "epic", req: "Craft Lv 5", icon: "M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4z", test: p => attrLvl(p, "Craft") >= 5 },
-    { id: "relentless", name: "Relentless", rarity: "legendary", req: "12-week streak", icon: "M12 2c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 1-3 0 2 3 2 3 0 0-2-1-3 0-5z", test: p => p.currentStreak >= 12 },
-    { id: "ascendant", name: "Ascendant", rarity: "legendary", req: "Reach Level 20", icon: "M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5z", test: p => p.level >= 20 },
-    { id: "boss-slayer", name: "Boss Slayer", rarity: "rare", req: "Defeat a weekly boss", icon: "M13 2 4 14h6l-1 8 9-12h-6z", test: () => (typeof settings !== "undefined" && settings && settings.bossDefeated && Object.keys(settings.bossDefeated).length > 0) },
-  ];
+  // ===========================================================================
+  // TROPHIES — cadence/consistency rewards that accumulate forever.
+  //   Bronze   = a perfect day (all of today's quests done)
+  //   Silver   = a completed week (week score >= 85%)
+  //   Gold     = a completed month (month completion >= 85%)
+  //   Platinum = six consecutive Gold months
+  // No backfill: only periods that complete on/after the epoch are ever awarded.
+  // Stored in settings.trophies = { bronze:{}, silver:{}, gold:{}, platinum:{}, since }.
+  // ===========================================================================
+  const GRADE = { bronze: "#c17d3c", silver: "#9aa3ad", gold: "#d4a017", platinum: "#3bb6c9" };
+  const GRADE_LABEL = { bronze: "Bronze", silver: "Silver", gold: "Gold", platinum: "Platinum" };
+  const TIER = { common: "#94a3b8", rare: "#38bdf8", epic: "#a78bfa", legendary: "#fbbf24" };
+  const SILVER_GOAL = 85, GOLD_GOAL = 85, PLAT_RUN = 6;
 
-  function checkBadgeUnlocks(p) {
+  // Inline SVG path strings for insignia / trophy icons
+  const IP = {
+    asc: "M4 14l8-8 8 8M4 20l8-8 8 8",
+    shield: "M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z",
+    body: "M4 7l3-3 3 3-3 3zM17 14l3 3-3 3-3-3zM7.5 7.5l9 9",
+    mind: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
+    vit: "M12 21C7 17 3 13.8 3 9.2 3 6.3 5.3 4 8 4c1.7 0 3.2.9 4 2.3C12.8 4.9 14.3 4 16 4c2.7 0 5 2.3 5 5.2 0 4.6-4 7.8-9 11.8z",
+    craft: "M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4z",
+    star: "M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z",
+    flame: "M12 2c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 1-3 0 2 3 2 3 0 0-2-1-3 0-5z",
+    boss: "M13 2 4 14h6l-1 8 9-12h-6z",
+    study: "M22 10 12 5 2 10l10 5 10-5zM6 12v5c0 1 3 2 6 2s6-1 6-2v-5",
+    check: "M20 6 9 17l-5-5",
+    calendar: "M3 9h18M7 3v4M17 3v4M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",
+    cup: "M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0V4zM6 6H3v1a3 3 0 0 0 3 3M18 6h3v1a3 3 0 0 1-3 3",
+    gem: "M6 3h12l3 6-9 12L3 9z",
+    lock: "M5 11h14v9H5zM8 11V7a4 4 0 0 1 8 0v4",
+  };
+
+  function nowIso() { return new Date().toISOString(); }
+  function parseYmd(s) { if (!s) return null; const a = String(s).split("-").map(Number); return new Date(a[0], (a[1] || 1) - 1, a[2] || 1); }
+  function monthKey(y, m) { return y + "-" + String(m + 1).padStart(2, "0"); }
+  function roman(n) { return ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"][n - 1] || ("#" + n); }
+  function trophyIcon(g) { return `<svg viewBox="0 0 24 24" class="ic"><path d="${g === "platinum" ? IP.gem : IP.cup}"/></svg>`; }
+
+  // ----- Per-period completion helpers -------------------------------------
+  function blueprintDay(date) {
+    if (typeof getDailyBlueprint !== "function") return [];
+    const names = Object.keys(getDailyBlueprint());
+    return getDailyBlueprint()[names[date.getDay()]] || [];
+  }
+  function weekChecks(date) {
+    const db = (typeof database !== "undefined") ? database : null;
+    if (!db || !db.weeks || typeof getStartOfWeek !== "function") return {};
+    const wk = db.weeks[iso(getStartOfWeek(date))];
+    return (wk && wk.checks) ? wk.checks : {};
+  }
+  // Blueprint quests only — matches the Daily tab + the day-cleared celebration.
+  function dayQuest(date) {
+    const tasks = blueprintDay(date), checks = weekChecks(date);
+    let done = 0;
+    tasks.forEach(t => { if (checks[taskId(date.getDay(), t)]) done++; });
+    return { done, total: tasks.length };
+  }
+  // Quests + that day's workout slot — matches calculateWeekScoreData's units.
+  function dayUnits(date) {
+    const q = dayQuest(date), checks = weekChecks(date);
+    return { done: q.done + (checks["workout-" + date.getDay()] ? 1 : 0), total: q.total + 1 };
+  }
+  function weekPct(weekStart) {
+    const db = (typeof database !== "undefined") ? database : null;
+    const wk = (db && db.weeks) ? db.weeks[iso(weekStart)] : null;
+    return (wk && typeof calculateWeekScoreData === "function") ? calculateWeekScoreData(wk) : 0;
+  }
+  // Aggregate month completion, only counting days within [since, upto).
+  function monthPct(y, m, since, upto) {
+    let done = 0, total = 0;
+    const last = new Date(y, m + 1, 0).getDate();
+    for (let d = 1; d <= last; d++) {
+      const dt = new Date(y, m, d);
+      if (since && dt < since) continue;
+      if (upto && dt >= upto) continue;
+      const u = dayUnits(dt); done += u.done; total += u.total;
+    }
+    return total ? Math.round(done / total * 100) : 0;
+  }
+
+  function ensureTrophies() {
+    if (typeof settings === "undefined" || !settings) return false;
+    if (!settings.trophies) { settings.trophies = { bronze: {}, silver: {}, gold: {}, platinum: {}, since: iso(new Date()) }; return true; }
+    return false;
+  }
+  function trophyCount(g) { const T = settings && settings.trophies; return (T && T[g]) ? Object.keys(T[g]).length : 0; }
+
+  // Ordered completed months (those wholly before the current month) with gold flag.
+  function completedMonths(since, today) {
+    const arr = [];
+    let y = since.getFullYear(), m = since.getMonth();
+    const cy = today.getFullYear(), cm = today.getMonth();
+    while (y < cy || (y === cy && m < cm)) {
+      arr.push({ key: monthKey(y, m), gold: monthPct(y, m, since, today) >= GOLD_GOAL });
+      m++; if (m > 11) { m = 0; y++; }
+    }
+    return arr;
+  }
+
+  function checkTrophies() {
     if (typeof settings === "undefined" || !settings) return;
-    const first = !settings.badges;            // first-ever run → backfill silently
-    const owned = settings.badges || {};
+    const first = ensureTrophies();
+    const T = settings.trophies;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const since = parseYmd(T.since) || today;
     let changed = false;
-    const now = new Date().toISOString();
-    BADGES.forEach(b => {
-      let pass = false;
-      try { pass = b.test(p); } catch (e) {}
-      if (pass && !owned[b.id]) {
-        owned[b.id] = now; changed = true;
-        if (!first && window.FX && FX.badge) FX.badge(b.name, b.rarity, RARITY[b.rarity]);
+    const fx = (g, big) => { if (!first && window.FX && FX.trophy) FX.trophy(g, big); };
+
+    // Bronze — the moment today is perfect
+    const tq = dayQuest(today), tk = iso(today);
+    if (tq.total > 0 && tq.done >= tq.total && !T.bronze[tk]) { T.bronze[tk] = nowIso(); changed = true; fx("bronze"); }
+
+    // Silver — each completed week since the epoch
+    let ws = getStartOfWeek(since);
+    while (addDays(ws, 6) < today) {
+      const k = iso(ws);
+      if (!T.silver[k] && weekPct(ws) >= SILVER_GOAL) { T.silver[k] = nowIso(); changed = true; fx("silver"); }
+      ws = addDays(ws, 7);
+    }
+
+    // Gold — each completed month; Platinum — every 6 consecutive golds
+    let run = 0;
+    completedMonths(since, today).forEach(mo => {
+      if (mo.gold && !T.gold[mo.key]) { T.gold[mo.key] = nowIso(); changed = true; fx("gold"); }
+      if (mo.gold) { run++; if (run % PLAT_RUN === 0 && !T.platinum[mo.key]) { T.platinum[mo.key] = nowIso(); changed = true; fx("platinum", true); } }
+      else run = 0;
+    });
+
+    if (changed && typeof persistSettings === "function") persistSettings();
+  }
+
+  // Live snapshot for the dashboard + cabinet (counts + current-period progress).
+  function trophyState() {
+    ensureTrophies();
+    const T = settings.trophies;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const since = parseYmd(T.since) || today;
+    const tq = dayQuest(today);
+    let run = 0; completedMonths(since, today).forEach(mo => { run = mo.gold ? run + 1 : 0; });
+    return {
+      counts: { bronze: trophyCount("bronze"), silver: trophyCount("silver"), gold: trophyCount("gold"), platinum: trophyCount("platinum") },
+      bronze: { done: tq.done, total: tq.total, pct: tq.total ? Math.round(tq.done / tq.total * 100) : 0 },
+      silver: { pct: weekPct(getStartOfWeek(today)) },
+      gold: { pct: monthPct(today.getFullYear(), today.getMonth(), since, addDays(today, 1)) },
+      platinum: { run },
+    };
+  }
+
+  // ===========================================================================
+  // INSIGNIAS — one-off feats, difficulty-coloured, with open-ended (∞) series.
+  // Everything derives from the existing profile + trophy counts — no tracking.
+  // Stored in settings.insignias = { id: earnedISO }.
+  // ===========================================================================
+  function rungs(base, current, step, ahead) {
+    const out = base.slice();
+    let v = base[base.length - 1] + step;
+    const cap = current + step * ahead;
+    while (v <= cap) { out.push(v); v += step; }
+    return out;
+  }
+  function gradeByVal(v, a, b, c) { return v <= a ? "common" : v <= b ? "rare" : v <= c ? "epic" : "legendary"; }
+
+  function buildInsignias(p) {
+    const out = [];
+    const add = (id, name, req, tier, cat, icon, owned) => out.push({ id, name, req, tier, cat, icon, owned: !!owned });
+
+    // Ascension (level) — named through 50, then ∞ every +10
+    const lvlNames = { 2: "Initiate", 5: "Apprentice", 10: "Journeyman", 15: "Artisan", 20: "Veteran", 30: "Elite", 40: "Master", 50: "Grandmaster" };
+    rungs([2, 5, 10, 15, 20, 30, 40, 50], p.level, 10, 2).forEach(L => {
+      const nm = lvlNames[L] || ("Ascension " + roman(Math.floor((L - 50) / 10) + 1));
+      add("lvl-" + L, nm, "Reach level " + L, gradeByVal(L, 5, 15, 30), "ascension", IP.asc, p.level >= L);
+    });
+
+    // Attribute mastery (×5) — 3/5/10/15/20 then ∞ every +5, plus cross-attr
+    const attrIcon = { Discipline: IP.shield, Body: IP.body, Mind: IP.mind, Vitality: IP.vit, Craft: IP.craft };
+    const attrWord = { 3: "Initiate", 5: "Adept", 10: "Master", 15: "Sage", 20: "Paragon" };
+    p.attrs.forEach(a => {
+      rungs([3, 5, 10, 15, 20], a.level, 5, 1).forEach(L => {
+        add("attr-" + a.key + "-" + L, a.key + " " + (attrWord[L] || ("Lv " + L)), a.key + " level " + L, gradeByVal(L, 5, 10, 20), "attributes", attrIcon[a.key] || IP.star, a.level >= L);
+      });
+    });
+    add("poly", "Polymath", "All attributes level 3+", "epic", "attributes", IP.star, p.attrs.every(a => a.level >= 3));
+    add("renai", "Renaissance", "All attributes level 5+", "epic", "attributes", IP.star, p.attrs.every(a => a.level >= 5));
+    add("virt", "Virtuoso", "All attributes level 10+", "legendary", "attributes", IP.star, p.attrs.every(a => a.level >= 10));
+
+    // Consistency — natural byproducts only (never rewards a miss)
+    const pd = trophyCount("bronze"), cw = trophyCount("silver");
+    rungs([10, 30, 100, 365], pd, 365, 1).forEach(N => add("pd-" + N, "Perfect Days " + N, N + " perfect days earned", gradeByVal(N, 30, 100, 365), "consistency", IP.flame, pd >= N));
+    rungs([4, 13, 26, 52], cw, 52, 1).forEach(N => add("cw-" + N, "Steady " + N, N + " weeks completed", gradeByVal(N, 13, 26, 52), "consistency", IP.calendar, cw >= N));
+    add("flaw", "Flawless Week", "Hit a 100% week", "rare", "consistency", IP.check, p.bestWeekPct >= 100);
+    rungs([7, 30, 100, 365], p.dayStreak, 365, 1).forEach(N => add("ds-" + N, "Unbroken " + N, N + "-day streak reached", gradeByVal(N, 30, 100, 365), "consistency", IP.flame, p.dayStreak >= N));
+
+    // Boss
+    const boss = (settings && settings.bossDefeated) ? Object.keys(settings.bossDefeated).length : 0;
+    add("boss-1", "Boss Slayer", "Defeat a weekly boss", "rare", "boss", IP.boss, boss >= 1);
+    rungs([5, 25], boss, 25, 1).forEach(N => add("boss-" + N, (N >= 25 ? "Boss Master " : "Boss Hunter ") + N, "Defeat " + N + " weekly bosses", gradeByVal(N, 5, 25, 75), "boss", IP.boss, boss >= N));
+
+    // Study & focus (hour-based)
+    rungs([10, 50, 100, 250, 500, 1000], p.lifetimeStudyHours, 500, 1).forEach(N => add("sh-" + N, "Scholar " + N, "Log " + N + " study hours", gradeByVal(N, 50, 250, 1000), "study", IP.study, p.lifetimeStudyHours >= N));
+
+    // Volume
+    const checks = p.lifetimeChecks || 0;
+    rungs([100, 500, 1000, 5000], checks, 5000, 1).forEach(N => add("qc-" + N, "Quest Count " + N, N + " quests completed", gradeByVal(N, 500, 1000, 5000), "volume", IP.check, checks >= N));
+
+    return out;
+  }
+
+  function checkInsignias(p) {
+    if (typeof settings === "undefined" || !settings) return;
+    const first = !settings.insignias;       // first run → backfill already-true feats silently
+    const owned = settings.insignias || {};
+    let changed = false;
+    buildInsignias(p).forEach(b => {
+      if (b.owned && !owned[b.id]) {
+        owned[b.id] = nowIso(); changed = true;
+        if (!first && window.FX && FX.badge) FX.badge(b.name, b.tier, TIER[b.tier]);
       }
     });
     if (changed || first) {
-      settings.badges = owned;
+      settings.insignias = owned;
       if (typeof persistSettings === "function") persistSettings();
-      renderBadgeWall();
+      renderInsignias(p);
     }
   }
 
-  function renderBadgeWall() {
-    const wall = document.getElementById("badgeWall");
-    if (!wall) return;
-    const owned = (settings && settings.badges) ? settings.badges : {};
-    const countEl = document.getElementById("badgeCount");
-    if (countEl) countEl.textContent = `${BADGES.filter(b => owned[b.id]).length} / ${BADGES.length}`;
-    wall.innerHTML = BADGES.map(b => {
+  // ----- Rendering: cabinet, hero summary ----------------------------------
+  let insigniaFilter = "all";
+  function renderInsignias(p) {
+    const grid = document.getElementById("insigniaGrid");
+    if (!grid) return;
+    p = p || computeProfile();
+    const owned = (settings && settings.insignias) ? settings.insignias : {};
+    const list = buildInsignias(p);
+    const cEl = document.getElementById("insigniaCount");
+    if (cEl) cEl.textContent = list.filter(b => owned[b.id]).length + " / " + list.length;
+    grid.innerHTML = list.filter(b => insigniaFilter === "all" || b.cat === insigniaFilter).map(b => {
       const on = !!owned[b.id];
-      const ic = on
-        ? `<svg viewBox="0 0 24 24" class="ic"><path d="${b.icon}"/></svg>`
-        : `<svg viewBox="0 0 24 24" class="ic"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
-      return `<div class="badge-tile ${on ? "unlocked" : "locked"}" title="${escapeHtml(b.name)} — ${escapeHtml(b.req)}" style="${on ? `--bc:${RARITY[b.rarity]}` : ""}">
+      const ic = `<svg viewBox="0 0 24 24" class="ic"><path d="${on ? b.icon : IP.lock}"/></svg>`;
+      return `<div class="badge-tile ${on ? "unlocked" : "locked"}" title="${escapeHtml(b.name)} — ${escapeHtml(b.req)}" style="${on ? `--bc:${TIER[b.tier]}` : ""}">
         <span class="badge-ic">${ic}</span>
-        <span class="badge-name">${on ? escapeHtml(b.name) : "Locked"}</span>
-        <span class="badge-req">${escapeHtml(on ? b.rarity : b.req)}</span>
+        <span class="badge-name">${on ? escapeHtml(b.name) : escapeHtml(b.name)}</span>
+        <span class="badge-req">${escapeHtml(on ? b.tier : b.req)}</span>
       </div>`;
     }).join("");
+    const chips = document.getElementById("insigniaFilters");
+    if (chips && !chips._wired) {
+      chips._wired = true;
+      chips.addEventListener("click", e => {
+        const c = e.target.closest("[data-filter]"); if (!c) return;
+        insigniaFilter = c.dataset.filter;
+        chips.querySelectorAll("[data-filter]").forEach(x => x.classList.toggle("on", x === c));
+        renderInsignias();
+      });
+    }
+  }
+
+  function tierCardHtml(g, count, pct, need) {
+    return `<div class="tro-tier" style="--mc:${GRADE[g]}">
+      <div class="tro-tier-top"><span class="tro-ic">${trophyIcon(g)}</span><span class="tro-count">${count}</span></div>
+      <div class="tro-grade">${GRADE_LABEL[g]}</div>
+      <div class="tro-bar"><span style="width:${Math.min(100, Math.max(0, Math.round(pct)))}%"></span></div>
+      <div class="tro-need">${escapeHtml(need)}</div>
+    </div>`;
+  }
+  function renderCabinet(p) {
+    p = p || computeProfile();
+    const show = document.getElementById("cabinetTrophies");
+    if (show) {
+      const s = trophyState();
+      show.innerHTML =
+        tierCardHtml("bronze", s.counts.bronze, s.bronze.pct, s.bronze.total ? (s.bronze.done + " / " + s.bronze.total + " quests today") : "no quests today") +
+        tierCardHtml("silver", s.counts.silver, s.silver.pct, "week at " + s.silver.pct + "% · need " + SILVER_GOAL + "%") +
+        tierCardHtml("gold", s.counts.gold, s.gold.pct, "month at " + s.gold.pct + "% · need " + GOLD_GOAL + "%") +
+        tierCardHtml("platinum", s.counts.platinum, s.platinum.run / PLAT_RUN * 100, s.platinum.run + " / " + PLAT_RUN + " gold months");
+    }
+    renderInsignias(p);
+  }
+
+  function miniTier(g, count, pct, need) {
+    return `<div class="ht-tier" style="--mc:${GRADE[g]}">
+      <span class="ht-ic">${trophyIcon(g)}</span>
+      <span class="ht-count">${count}</span>
+      <span class="ht-grade">${GRADE_LABEL[g]}</span>
+      <span class="ht-bar"><span style="width:${Math.min(100, Math.max(0, Math.round(pct)))}%"></span></span>
+      <span class="ht-need">${escapeHtml(need)}</span>
+    </div>`;
+  }
+  function todayAwards() {
+    const out = [], tk = iso(new Date());
+    const T = settings && settings.trophies;
+    if (T) ["bronze", "silver", "gold", "platinum"].forEach(g => {
+      const o = T[g] || {};
+      Object.keys(o).forEach(k => { if (String(o[k]).slice(0, 10) === tk) out.push({ label: GRADE_LABEL[g] + " trophy", color: GRADE[g] }); });
+    });
+    const ins = settings && settings.insignias;
+    if (ins) buildInsignias(computeProfile()).forEach(b => {
+      if (ins[b.id] && String(ins[b.id]).slice(0, 10) === tk) out.push({ label: b.name, color: TIER[b.tier] });
+    });
+    return out.slice(0, 6);
+  }
+  function renderHeroTrophies(p) {
+    const host = document.getElementById("heroTrophies");
+    if (!host) return;
+    const s = trophyState();
+    const tiers = document.getElementById("htTiers");
+    if (tiers) tiers.innerHTML =
+      miniTier("bronze", s.counts.bronze, s.bronze.pct, s.bronze.total ? (s.bronze.done + " / " + s.bronze.total + " today") : "rest day") +
+      miniTier("silver", s.counts.silver, s.silver.pct, s.silver.pct + "% this week") +
+      miniTier("gold", s.counts.gold, s.gold.pct, s.gold.pct + "% this month") +
+      miniTier("platinum", s.counts.platinum, s.platinum.run / PLAT_RUN * 100, s.platinum.run + " / " + PLAT_RUN + " months");
+    const today = document.getElementById("htToday");
+    if (today) {
+      const items = todayAwards();
+      today.innerHTML = '<span class="ht-today-k">Today</span>' + (items.length
+        ? items.map(x => `<span class="ht-chip" style="--bc:${x.color}">${escapeHtml(x.label)}</span>`).join("")
+        : '<span class="ht-today-none">Clear today’s quests to bank a bronze.</span>');
+    }
   }
 
   // ----- Day-streak milestones -----
@@ -486,5 +756,5 @@
   // XP earned in a single week (for the trends view)
   function weekXp(week) { return addWeekXp(week, {}); }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderBadgeWall, weekXp, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
+  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, weekXp, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
 })();

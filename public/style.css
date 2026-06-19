@@ -2100,6 +2100,103 @@ input[type="file"] { display: none; }
 .brand-mark { display: inline-grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; }
 .brand-mark svg { width: 24px; height: 24px; fill: var(--accent-primary); filter: drop-shadow(0 0 6px var(--score-glow)); }
 
+/* ===========================================================================
+ * TROPHIES — dashboard summary (in the hero, where the heatmap used to live)
+ * ======================================================================== */
+.hero-trophies {
+  margin-top: 6px; padding-top: 18px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.ht-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ht-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 15px; }
+.ht-open {
+  display: inline-flex; align-items: center; gap: 2px; padding: 5px 8px 5px 12px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  background: transparent; border: 1px solid var(--line); border-radius: 99px;
+}
+.ht-open .ic { width: 14px; height: 14px; }
+.ht-open:hover { color: var(--text); border-color: var(--line-strong); }
+.ht-tiers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.ht-tier {
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto auto; gap: 2px 8px;
+  align-items: center; padding: 10px; border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--mc) 30%, var(--line));
+  background: color-mix(in srgb, var(--mc) 7%, transparent);
+}
+.ht-ic { grid-row: 1 / 3; width: 30px; height: 30px; display: grid; place-items: center; color: var(--mc); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--mc) 55%, transparent)); }
+.ht-ic .ic { width: 26px; height: 26px; }
+.ht-count { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 22px; line-height: 1; color: var(--text); }
+.ht-grade { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mc); }
+.ht-bar { grid-column: 1 / 3; height: 5px; border-radius: 5px; background: rgba(255,255,255,0.07); overflow: hidden; margin-top: 6px; }
+.ht-bar > span { display: block; height: 100%; border-radius: 5px; background: var(--mc); box-shadow: 0 0 8px color-mix(in srgb, var(--mc) 60%, transparent); transition: width 0.4s ease; }
+.ht-need { grid-column: 1 / 3; font-size: 10px; color: var(--muted); }
+.ht-today { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ht-today-k { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-2); }
+.ht-today-none { font-size: 12px; color: var(--muted); }
+.ht-chip {
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 99px;
+  color: var(--bc); border: 1px solid color-mix(in srgb, var(--bc) 45%, transparent);
+  background: color-mix(in srgb, var(--bc) 12%, transparent);
+}
+@media (max-width: 768px) {
+  .ht-tiers { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Activity section (relocated heatmap, now full-size below the dashboard) */
+.activity-card { padding: 22px 26px; }
+.activity-card .hero-heatmap { margin-top: 0; padding-top: 0; border-top: none; }
+/* Desktop/tablet: the grid stretches to fill the whole card, cells stay square */
+.activity-card .hm-chart { align-items: stretch; gap: 10px; }
+.activity-card .hm-days { grid-template-rows: repeat(7, 1fr); height: auto; padding-top: 22px; }
+.activity-card .heatmap-scroll { flex: 1; min-width: 0; overflow: visible; }
+.activity-card .hm-months { width: 100%; grid-template-columns: repeat(52, 1fr); grid-auto-flow: row; grid-auto-columns: auto; }
+.activity-card .heatmap-grid { width: 100%; grid-template-columns: repeat(52, 1fr); grid-template-rows: repeat(7, auto); grid-auto-flow: column; grid-auto-columns: auto; gap: 3px; }
+.activity-card .hm-cell { width: auto; height: auto; aspect-ratio: 1 / 1; border-radius: 4px; }
+@media (max-width: 768px) {
+  .activity-card { padding: 16px; }
+  .activity-card .hm-chart { align-items: flex-start; }
+  .activity-card .hm-days { grid-template-rows: repeat(7, 11px); padding-top: 18px; }
+  .activity-card .heatmap-scroll { overflow-x: auto; }
+  .activity-card .hm-months { grid-template-columns: none; grid-auto-columns: 11px; width: max-content; }
+  .activity-card .heatmap-grid { width: max-content; grid-template-columns: none; grid-auto-columns: 11px; grid-template-rows: repeat(7, 11px); }
+  .activity-card .hm-cell { width: 11px; height: 11px; aspect-ratio: auto; }
+}
+
+/* ===========================================================================
+ * CABINET MODAL — trophy showcase + insignia collection + records
+ * ======================================================================== */
+.cab-section-label { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 22px 0 12px; }
+.cab-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 22px 0 12px; }
+.cab-section-head .cab-section-label { margin: 0; }
+.cab-section-sub { font-size: 12px; color: var(--muted-2); }
+
+.tro-showcase { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.tro-tier {
+  display: flex; flex-direction: column; gap: 6px; padding: 14px;
+  border-radius: 16px; border: 1px solid color-mix(in srgb, var(--mc) 35%, var(--line));
+  background: color-mix(in srgb, var(--mc) 8%, transparent);
+}
+.tro-tier-top { display: flex; align-items: center; justify-content: space-between; }
+.tro-ic { width: 30px; height: 30px; display: grid; place-items: center; color: var(--mc); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--mc) 60%, transparent)); }
+.tro-ic .ic { width: 28px; height: 28px; }
+.tro-count { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 26px; line-height: 1; color: var(--text); }
+.tro-grade { font-size: 12px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--mc); }
+.tro-bar { height: 6px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.tro-bar > span { display: block; height: 100%; border-radius: 6px; background: var(--mc); box-shadow: 0 0 8px color-mix(in srgb, var(--mc) 60%, transparent); transition: width 0.4s ease; }
+.tro-need { font-size: 10px; color: var(--muted); line-height: 1.3; }
+@media (max-width: 768px) { .tro-showcase { grid-template-columns: repeat(2, 1fr); } }
+
+.ins-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+.ins-filter {
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  padding: 6px 12px; border-radius: 99px;
+  background: transparent; border: 1px solid var(--line);
+}
+.ins-filter:hover { color: var(--text); border-color: var(--line-strong); transform: none; box-shadow: none; }
+.ins-filter.on { color: var(--text); border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 12%, transparent); }
+.cabinet-modal .badge-wall { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 768px) { .cabinet-modal .badge-wall { grid-template-columns: repeat(3, 1fr); } }
+
 /* ===== CERT DEADLINES ===== */
 .cert-summary { margin-bottom: 14px; font-size: 13px; color: var(--text-dim); line-height: 1.5; padding: 11px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-left: 3px solid var(--accent-primary); }
 .cert-date { width: 150px; color-scheme: dark; }
