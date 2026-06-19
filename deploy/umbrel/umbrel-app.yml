@@ -1,0 +1,35 @@
+manifestVersion: 1
+id: the-forge
+category: productivity
+name: The Forge
+version: "1.1.0"
+tagline: Turn your real life into an RPG
+description: >-
+  The Forge is a self-hosted, single-user habit tracker that gamifies your
+  goals — XP, levels, five life attributes, daily quests, streaks, badges, a
+  weekly boss, and a focus timer. No accounts, no cloud, no tracking: all of
+  your data lives in one SQLite file on your Umbrel.
+
+
+  It includes a shareable character card, a trophy Cabinet, 10 themes,
+  analytics, an installable PWA with push reminders, and an optional local-AI
+  Discord companion (via Ollama).
+releaseNotes: >-
+  v1.1.0 — Trophy Cabinet, shareable character card, sample-data onboarding,
+  the Initiate→Forgemaster rank ladder, login hardening, and self-hosted fonts
+  (fully offline).
+developer: YZEE Labs
+website: https://github.com/ycianno/the-forge
+dependencies: []
+repo: https://github.com/ycianno/the-forge
+support: https://github.com/ycianno/the-forge/issues
+port: 3007
+gallery:
+  - 1.png
+  - 2.png
+  - 3.png
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+submitter: ycianno
+submission: https://github.com/ycianno/the-forge

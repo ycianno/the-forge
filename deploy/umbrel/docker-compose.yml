@@ -1,0 +1,20 @@
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: the-forge_web_1
+      APP_PORT: 3007
+
+  web:
+    image: ghcr.io/ycianno/the-forge:latest
+    restart: on-failure
+    stop_grace_period: 1m
+    environment:
+      - PORT=3007
+      # Behind Umbrel's app_proxy the dashboard is already gated by your Umbrel
+      # login. Change this if you also expose the app directly.
+      - APP_PASSWORD=changeme
+      - DB_PATH=/app/data/database.sqlite
+    volumes:
+      - ${APP_DATA_DIR}/data:/app/data

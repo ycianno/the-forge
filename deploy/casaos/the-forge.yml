@@ -1,0 +1,51 @@
+name: the-forge
+services:
+  the-forge:
+    image: ghcr.io/ycianno/the-forge:latest
+    container_name: the-forge
+    restart: unless-stopped
+    ports:
+      - target: 3007
+        published: "3007"
+        protocol: tcp
+    environment:
+      - PORT=3007
+      - APP_PASSWORD=changeme
+      - DB_PATH=/app/data/database.sqlite
+    volumes:
+      - type: bind
+        source: /DATA/AppData/the-forge/data
+        target: /app/data
+    deploy:
+      resources:
+        reservations:
+          memory: 128M
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: the-forge
+  author: ycianno
+  developer: YZEE Labs
+  category: Productivity
+  port_map: "3007"
+  icon: https://raw.githubusercontent.com/ycianno/the-forge/main/public/icon-192.png
+  title:
+    en_us: The Forge
+  tagline:
+    en_us: Turn your real life into an RPG
+  description:
+    en_us: >-
+      A self-hosted, single-user gamified habit tracker — XP, levels, life
+      attributes, daily quests, streaks, badges, a weekly boss, and a focus
+      timer. All data stays in one local SQLite file. Includes a shareable
+      character card, a trophy Cabinet, 10 themes, and an optional local-AI
+      Discord companion.
+  tips:
+    custom: >-
+      Set APP_PASSWORD before exposing this outside your network. The dashboard
+      is served on port 3007.
+  screenshot_link:
+    - https://raw.githubusercontent.com/ycianno/the-forge/main/docs/screenshots/character.png
+    - https://raw.githubusercontent.com/ycianno/the-forge/main/docs/screenshots/cabinet.png
+    - https://raw.githubusercontent.com/ycianno/the-forge/main/docs/screenshots/themes.png
