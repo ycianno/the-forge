@@ -1,9 +1,9 @@
 # The Forge
 
 <div align="center">
-  <img src="public/icon.svg" width="96" height="96" alt="The Forge logo" />
+  <img src="public/icon-512.png" width="96" height="96" alt="The Forge logo" />
   <h3>Turn your real life into an RPG.</h3>
-  <p><strong>A self-hosted, single-user habit tracker that gamifies your goals</strong> — XP, levels, life attributes, daily quests, streaks, badges, and a weekly boss. No accounts, no cloud, no tracking. Your data lives in one SQLite file on your own machine.</p>
+  <p><strong>A self-hosted, single-user habit tracker that gamifies your goals</strong> — XP, levels, life attributes, daily quests, streaks, trophies, insignias, and a weekly boss. No accounts, no cloud, no tracking. Your data lives in one SQLite file on your own machine.</p>
   <p>
     <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white">
     <img alt="SQLite" src="https://img.shields.io/badge/SQLite-better--sqlite3-003B57?logo=sqlite&logoColor=white">
@@ -22,7 +22,7 @@ Most habit trackers are a flat list of checkboxes — easy to ignore, easy to ab
 - Every checked task awards **XP** with a sound, a particle pop, and a combo meter.
 - XP flows into a persistent **level + rank** and five **life attributes** you can watch grow on a radar chart.
 - A rotating **weekly boss** gives you something to beat each week; falling behind on its "weak" attribute lets it survive.
-- **Streaks**, **badges**, and **milestones** keep the dopamine coming.
+- **Streaks**, **trophies** (Bronze → Platinum), and **insignias** keep the dopamine coming.
 
 It's opinionated and built for one person: you. Self-host it, set a password, and own your data.
 
@@ -34,7 +34,7 @@ It's opinionated and built for one person: you. Self-host it, set a password, an
 | ✅ **Daily quests** | A per-day checklist where each task awards XP. Combos, haptics, and a "Day Cleared" celebration when you finish the day. |
 | 🔥 **Streaks & freeze** | Daily and weekly streaks with milestone rewards (7 / 30 / 100 / 365 days) and a configurable "freeze" grace day so one bad day doesn't reset everything. |
 | 🏆 **Trophy Cabinet** | A dedicated showcase: trophy grades, a filterable wall of auto-unlocking **insignias** (Ascension, Attributes, Consistency, Boss, Study, Volume) across rarities, and manually-logged **Records** for real-world wins (certifications, PRs, goals). |
-| 👹 **Weekly boss** | A deterministic boss each week whose HP drains as you complete your week — with double damage to its weak attribute. Defeat it for a badge and a victory celebration. |
+| 👹 **Weekly boss** | A deterministic boss each week whose HP drains as you complete your week — with double damage to its weak attribute. Defeat it for an insignia and a victory celebration. |
 | ⏱️ **Focus timer** | A built-in Pomodoro/focus timer that logs elapsed hours straight into your study/project goals. |
 | 📊 **Analytics** | Weekly completion & XP trends, by-weekday breakdowns, and your most-skipped quests. |
 | 📅 **Goal tracking** | Certifications & study goals with deadline countdowns and pacing, weekly project-output tracking, diet/protein checklists, and a structured weekly review. |
