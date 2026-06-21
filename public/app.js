@@ -384,6 +384,12 @@ function renderHeatmap() {
       grid.appendChild(cell);
     }
   }
+  // On phones the 52-week strip scrolls horizontally — land on the most recent
+  // weeks (right edge) instead of a year ago.
+  const scroller = grid.closest(".heatmap-scroll");
+  if (scroller && window.innerWidth <= 768) {
+    requestAnimationFrame(() => { scroller.scrollLeft = scroller.scrollWidth; });
+  }
 }
 
 function updateStreakAndHeatmap() {
@@ -447,11 +453,11 @@ function renderStudyAreas() {
     const d = dates[area] || "";
     tbody.insertAdjacentHTML("beforeend", `<tr>
       <td>${escapeHtml(area)}</td>
-      <td><input id="goal-study-${i}" data-save type="text" placeholder="Goal..."></td>
-      <td><input id="hours-study-${i}" class="small-input" data-save data-hours="study" type="number" min="0" step="0.25" value="0"> hrs</td>
-      <td><select id="status-study-${i}" data-save><option>Planned</option><option>In Progress</option><option>Ready for Exam</option><option>Completed</option><option>Paused</option></select></td>
-      <td><input type="date" class="cert-date" data-certdate="${escapeHtml(area)}" value="${d}"></td>
-      <td><span class="cert-cd" id="cd-study-${i}">—</span></td>
+      <td data-label="Goal"><input id="goal-study-${i}" data-save type="text" placeholder="Goal..."></td>
+      <td data-label="Hours"><input id="hours-study-${i}" class="small-input" data-save data-hours="study" type="number" min="0" step="0.25" value="0"> hrs</td>
+      <td data-label="Status"><select id="status-study-${i}" data-save><option>Planned</option><option>In Progress</option><option>Ready for Exam</option><option>Completed</option><option>Paused</option></select></td>
+      <td data-label="Target"><input type="date" class="cert-date" data-certdate="${escapeHtml(area)}" value="${d}"></td>
+      <td data-label="Days Left"><span class="cert-cd" id="cd-study-${i}">—</span></td>
     </tr>`);
   });
   updateCertCountdowns();
@@ -606,6 +612,9 @@ function renderDays() {
       const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
       group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><span class="q-xp">+${xp}</span></label>`);
     });
+    if (!tasks.length) {
+      group.innerHTML = `<div class="day-empty">No quests yet for ${day}. Tap ✎ to build this day's checklist.</div>`;
+    }
     wrap.appendChild(card);
   });
 }
@@ -614,7 +623,7 @@ function renderWorkouts() {
   const body = document.getElementById("workoutRows");
   body.innerHTML = "";
   getWorkouts().forEach(([day, plan], i) => {
-    body.insertAdjacentHTML("beforeend", `<tr><td>${day}</td><td>${plan}</td><td><label class="check"><input id="workout-${i}" type="checkbox" data-cat="training" data-save><span>Done</span></label></td><td><input id="workout-note-${i}" type="text" placeholder="Example: 20 lb DB, 3x10, felt strong..." data-save></td></tr>`);
+    body.insertAdjacentHTML("beforeend", `<tr><td>${day}</td><td data-label="Plan">${plan}</td><td><label class="check"><input id="workout-${i}" type="checkbox" data-cat="training" data-save><span>Done</span></label></td><td data-label="Notes / Weight / Reps"><input id="workout-note-${i}" type="text" placeholder="Example: 20 lb DB, 3x10, felt strong..." data-save></td></tr>`);
   });
 }
 
@@ -780,14 +789,22 @@ function initSettingsTabs() {
 }
 
 // ===== MOBILE TAB BAR =====
+function tabHaptic() {
+  if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+}
+function scrollToTop() {
+  (document.scrollingElement || document.documentElement).scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function initMobileTabBar() {
   const tabBtns = document.querySelectorAll('.tab-btn');
   const moreDrawer = document.getElementById('moreDrawer');
-  
+
   tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.target;
-      
+      tabHaptic();
+
       // Handle "More" drawer toggle
       if (target === 'more') {
         moreDrawer.classList.toggle('active');
@@ -796,14 +813,19 @@ function initMobileTabBar() {
         btn.classList.add('active');
         return;
       }
-      
+
+      const wasActive = btn.classList.contains('active');
+
       // Close more drawer if open
       moreDrawer.classList.remove('active');
-      
+
       // Update active tab
       tabBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      
+
+      // Re-tapping the Home/Today tab returns to the character screen at the top.
+      if (target === 'daily' && wasActive) { scrollToTop(); return; }
+
       // Scroll to target section
       const targetEl = document.getElementById(target);
       if (targetEl) {
@@ -812,6 +834,8 @@ function initMobileTabBar() {
       }
     });
   });
+
+  initScrollSpy(tabBtns, moreDrawer);
   
   // More drawer items
   const moreActions = {
@@ -823,6 +847,9 @@ function initMobileTabBar() {
     'moreCalendarBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('calendar'); },
     'moreExpandBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = true); },
     'moreCollapseBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = false); },
+    'moreExportBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('exportBtn').click(); },
+    'moreImportBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('importFile').click(); },
+    'moreResetBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('resetBtn').click(); },
   };
   
   Object.entries(moreActions).forEach(([id, handler]) => {
@@ -846,6 +873,45 @@ function scrollToSection(id) {
     if (el.tagName === 'DETAILS' && !el.open) el.open = true;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+}
+
+// Keep the active bottom-tab in sync with what's actually on screen, so the bar
+// stops lying after the user scrolls. Sections without their own tab fold into
+// the nearest one (calendar→Score, diet→Train, projects/review→More).
+function initScrollSpy(tabBtns, moreDrawer) {
+  const MAP = [
+    ['charScreen', 'daily'], ['boss', 'daily'], ['daily', 'daily'],
+    ['scoreboard', 'scoreboard'], ['calendar', 'scoreboard'],
+    ['workout', 'workout'], ['diet', 'workout'],
+    ['study', 'study'],
+    ['projects', 'more'], ['review', 'more'],
+  ];
+  const LINE = 120; // activation line measured from the top of the viewport
+  let ticking = false;
+
+  function update() {
+    ticking = false;
+    if (!isMobile()) return;
+    if (moreDrawer && moreDrawer.classList.contains('active')) return; // don't fight the drawer
+    // Pick the section sitting closest to the activation line from above — this
+    // is order-independent, so it stays correct even though the page's vertical
+    // order (scoreboard sits above the daily list) differs from MAP order.
+    let current = MAP[0][1];
+    let bestTop = -Infinity;
+    for (const [secId, target] of MAP) {
+      const el = document.getElementById(secId);
+      if (!el || el.offsetParent === null) continue; // skip hidden sections
+      const top = el.getBoundingClientRect().top;
+      if (top - LINE <= 0 && top > bestTop) { bestTop = top; current = target; }
+    }
+    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.target === current));
+  }
+
+  window.addEventListener('scroll', () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(update); }
+  }, { passive: true });
+  window.addEventListener('resize', update);
+  update();
 }
 
 // ===== SETTINGS MODAL =====

@@ -1376,7 +1376,7 @@ input[type="file"] { display: none; }
   .tab-icon { font-size: 22px; line-height: 1; }
   .tab-label { font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }
   
-  .shell { padding-bottom: 100px; padding-left: 12px; padding-right: 12px; }
+  .shell { padding-bottom: 100px; padding-left: 12px; padding-right: 12px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
   
   /* Modals on mobile */
   .modal { padding: 20px; border-radius: 20px; }
@@ -2279,3 +2279,197 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .boss-card.defeated .boss-hp-fill { background: linear-gradient(90deg, #22c55e, #4ade80); box-shadow: 0 0 12px var(--glow-green); }
 .boss-card.defeated .boss-emoji { filter: grayscale(0.5) drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
 @media (max-width: 768px) { .boss-taunt { display: none; } .boss-emoji { font-size: 36px; } }
+
+/* ===========================================================================
+ * MOBILE UX POLISH PASS  (added 2026-06)
+ * Goals: real-feeling navigation (scroll-spy), thumb-friendly targets,
+ * no accidental zoom, readable tables, and a more tactile bottom bar.
+ * ======================================================================== */
+
+/* Tab-jumps and #anchor scrolls land just below the sticky context bar. */
+html { scroll-padding-top: 84px; }
+
+@media (max-width: 768px) {
+  /* Remove the 300ms tap delay + grey flash; block accidental double-tap zoom
+     on controls (pinch-zoom on content still works — see viewport meta). */
+  a, button, summary, label, select,
+  .tab-btn, .more-item, .icon-btn, .ht-open, .check {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* iOS zooms the page when focusing an input under 16px. Keep them at 16px. */
+  input, select, textarea,
+  .mini input, .small-input { font-size: 16px; }
+
+  /* Stop the rubber-band overscroll from revealing the browser chrome behind. */
+  body { overscroll-behavior-y: contain; }
+
+  /* Land in-page jumps cleanly below the sticky header. */
+  section.hero, #boss, details.section-card { scroll-margin-top: 84px; }
+
+  /* --- Keep this-week context within thumb reach while scrolling --- */
+  .mobile-context {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 900;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  }
+
+  /* --- Bottom tab bar: larger targets, active indicator, press feedback --- */
+  .tab-btn {
+    position: relative;
+    min-height: 56px;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: color 0.2s ease, transform 0.08s ease;
+  }
+  .tab-btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 26px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent-primary);
+    box-shadow: 0 0 10px var(--score-glow);
+    transform: translateX(-50%) scaleX(0);
+    transition: transform 0.24s cubic-bezier(0.4, 1.3, 0.5, 1);
+  }
+  .tab-btn.active::before { transform: translateX(-50%) scaleX(1); }
+  .tab-btn .tab-icon { transition: transform 0.2s ease; }
+  .tab-btn.active .tab-icon { transform: translateY(-1px) scale(1.08); }
+  .tab-btn:active { transform: scale(0.9); }
+
+  /* --- Thumb-sized targets for hero + section controls --- */
+  .char-actions button,
+  .ht-open,
+  .nav-icon,
+  .icon-btn { min-height: 44px; }
+  .char-actions button { padding: 10px 16px; }
+  .icon-btn { min-width: 44px; }
+
+  /* --- Tables become stacked cards (Workout + Study sections) --- */
+  .content table,
+  .content tbody,
+  .content tr,
+  .content td { display: block; width: 100%; }
+  .content thead { display: none; }
+  .content table { white-space: normal; overflow: visible; }
+  .content tbody tr {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 4px 14px 10px;
+    margin-bottom: 12px;
+  }
+  .content td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 0;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    min-height: 44px;
+  }
+  .content td:last-child { border-bottom: none; }
+  .content td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  /* First cell of each row is the title (Day name / certification). */
+  .content td:first-child {
+    font-size: 16px;
+    font-weight: 800;
+    padding-top: 8px;
+  }
+  .content td:first-child::before { display: none; }
+  /* Inputs/selects fill the right side of their stacked row. */
+  .content td input[type="text"],
+  .content td input[type="number"],
+  .content td input[type="date"],
+  .content td select {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+  }
+  .content td select { text-align: left; }
+  /* Free-text fields get a full-width input under their label (no cramping). */
+  .content td:has(input[type="text"]) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .content td:has(input[type="text"]) input[type="text"] {
+    width: 100%;
+    max-width: none;
+    text-align: left;
+  }
+  /* The "Done" toggle reads left-to-right with no empty gutter. */
+  .content td:has(.check) { justify-content: flex-start; gap: 12px; }
+}
+
+/* ===========================================================================
+ * MOBILE UX PHASE 2  (added 2026-06)
+ * Bottom-sheet modals, notch-safe header, trimmed hero.
+ * ======================================================================== */
+@media (max-width: 768px) {
+  /* --- Modals behave like native bottom sheets --- */
+  .modal-backdrop { place-items: end center; }
+  .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 88vh;
+    border-radius: 24px 24px 0 0 !important;
+    padding: 18px 18px calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateY(32px);
+  }
+  .modal-backdrop.active .modal { transform: translateY(0); }
+  /* Grab handle so it reads as a sheet you can flick down. */
+  .modal::before {
+    content: "";
+    display: block;
+    width: 38px;
+    height: 4px;
+    border-radius: 99px;
+    background: var(--line-strong);
+    margin: 2px auto 14px;
+  }
+  /* Keep the title + close reachable while the body scrolls under them. */
+  .modal-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0 -18px 16px;
+    padding: 0 18px 14px;
+    background: linear-gradient(var(--bg-2) 70%, transparent);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* --- Trim the hero so the daily quests are a shorter scroll away --- */
+  .util-actions { display: none; } /* Export / Import / Reset moved to More */
+  .char-panel { padding: 18px; }
+  .char-panel .panel-sub { display: none; }
+
+  /* Focus timer: let the custom-minutes field wrap to its own row. */
+  .focus-durations { flex-wrap: wrap; }
+  .focus-durations input { flex: 1 1 100%; width: auto; }
+}
+
+/* Friendly empty state for a day with no quests yet. */
+.day-empty {
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+}

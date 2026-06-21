@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>The Forge — level up your life</title>
   <meta name="description" content="A private, self-hosted control center for discipline, training, certification progress, project execution, and weekly review." />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=23" />
+  <link rel="stylesheet" href="style.css?v=26" />
 </head>
 <body>
   <main class="shell">
@@ -85,6 +85,9 @@
         <button class="more-item" id="moreCalendarBtn"><span class="more-icon">📅</span>Calendar</button>
         <button class="more-item" id="moreExpandBtn"><span class="more-icon">⬇️</span>Expand All</button>
         <button class="more-item" id="moreCollapseBtn"><span class="more-icon">⬆️</span>Collapse All</button>
+        <button class="more-item" id="moreExportBtn"><span class="more-icon">📤</span>Export</button>
+        <button class="more-item" id="moreImportBtn"><span class="more-icon">📥</span>Import</button>
+        <button class="more-item" id="moreResetBtn"><span class="more-icon">♻️</span>Reset Week</button>
         <a href="/api/logout" class="more-item"><span class="more-icon">🚪</span>Logout</a>
       </div>
     </div>
@@ -555,7 +558,7 @@
 
   <script src="game.js?v=11"></script>
   <script src="fx.js?v=7"></script>
-  <script src="app.js?v=21"></script>
+  <script src="app.js?v=22"></script>
   <script src="extras.js?v=1"></script>
 </body>
 </html>
