@@ -4,7 +4,8 @@
   "description": "The Forge — a self-hosted, single-user habit tracker that turns your goals into an RPG (XP, levels, attributes, quests, streaks, weekly boss).",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "DB_PATH=/tmp/forge-dev.sqlite PORT=3099 node server.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",
