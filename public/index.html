@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=40" />
+  <link rel="stylesheet" href="style.css?v=41" />
 </head>
 <body>
   <main class="shell">
@@ -17,7 +17,6 @@
       <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></span><span>The Forge</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> <span id="streakUnit">Weeks</span></span></div>
       <nav class="nav" id="mainNav">
         <!-- Desktop nav links -->
-        <a href="#today" class="desktop-nav-item">Today</a>
         <a href="#scoreboard" class="desktop-nav-item">Scoreboard</a>
         <a href="#daily" class="desktop-nav-item">Daily</a>
         <a href="#workout" class="desktop-nav-item">Training</a>
@@ -36,7 +35,7 @@
         <a href="/api/logout" class="danger nav-icon desktop-nav-item" title="Logout" aria-label="Logout" style="margin-left: 6px;"><svg viewBox="0 0 24 24" class="ic"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></a>
 
         <!-- Mobile bottom tab bar -->
-        <button class="tab-btn active" data-target="today" id="tabDaily">
+        <button class="tab-btn active" data-target="daily" id="tabDaily">
           <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
           <span class="tab-label">Today</span>
         </button>
@@ -199,14 +198,6 @@
         <div class="boss-hp"><div class="boss-hp-fill" id="bossHpFill"></div></div>
         <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
       </div>
-    </section>
-
-    <section class="section today-card glass" id="today">
-      <div class="today-head">
-        <div class="summary-left"><h2>Today</h2><p class="hint">Everything due today, grouped by the stat it trains. Log it once here — it syncs with every section.</p></div>
-        <span class="today-progress" id="todayProgress"></span>
-      </div>
-      <div class="today-lanes" id="todayLanes"></div>
     </section>
 
     <details id="scoreboard" class="section section-card glass" open>
@@ -661,7 +652,7 @@
   <script src="modules.js?v=5"></script>
   <script src="game.js?v=16"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=37"></script>
+  <script src="app.js?v=38"></script>
   <script src="extras.js?v=1"></script>
 </body>
 </html>

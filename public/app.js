@@ -53,6 +53,21 @@ function applyModuleLayout() {
     const h2 = sec.querySelector(".summary-left h2");
     if (h2 && m.name) h2.textContent = m.name;
     sec.style.display = (m.enabled === false) ? "none" : "";
+    // Attribute badge in the header — makes "what stat this section feeds" obvious.
+    // (Daily has no single attr — its tasks carry per-task dots instead.)
+    const summary = sec.querySelector("summary");
+    if (summary && m.attr) {
+      let badge = summary.querySelector(".attr-badge");
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "attr-badge";
+        const chev = summary.querySelector(".chev");
+        if (chev && chev.parentNode) chev.parentNode.insertBefore(badge, chev);
+        else summary.appendChild(badge);
+      }
+      badge.textContent = attrName(m.attr);
+      badge.style.setProperty("--ac", attrColor(m.attr));
+    }
     if (anchor && anchor.parentNode === sec.parentNode) anchor.parentNode.insertBefore(sec, anchor);
   });
 }
@@ -1314,59 +1329,7 @@ function updateProgress() {
   const reviewDone = ["wins", "misses", "changes", "refuseDrop"].filter(id => document.getElementById(id)?.value.trim()).length;
   setMetric("review", percent(reviewDone, 4));
   renderXpChips();
-  renderToday();
   if (typeof renderBoss === "function") renderBoss();
-}
-
-// ===== TODAY VIEW =====
-// A single consolidated checklist for today, grouped by the stat (attribute)
-// each item trains. Items are PROXIES over the real week.checks ids (daily
-// tasks + today's training row) — no duplicate ids, so toggling here updates the
-// same data the sections use. This is the "log once, organized by stat" surface.
-function renderToday() {
-  const host = document.getElementById("todayLanes");
-  if (!host) return;
-  const wk = getWeekData();
-  const di = getTodayDayIndex();
-  const blueprint = getDailyBlueprint();
-  const dayName = Object.keys(blueprint)[di];
-  const items = [];
-  (blueprint[dayName] || []).forEach((t) => {
-    const attr = taskAttr(t);
-    items.push({ id: taskId(di, t), label: t, attr, xp: (window.Game && Game.xpForCat) ? Game.xpForCat(attrCat(attr)) : 10 });
-  });
-  // Today's training row — surfaced here so you don't keep a duplicate "Workout"
-  // daily task; checking it ticks the same workout-N box the Training table uses.
-  const training = getModules().find((m) => m.id === "workout");
-  if (training && training.enabled !== false) {
-    const wo = (getWorkouts()[di] || []);
-    items.push({ id: `workout-${di}`, label: wo[1] || "Workout", attr: "Body", xp: (window.Game && Game.xpForCat) ? Game.xpForCat("training") : 30, tag: training.name || "Training" });
-  }
-  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
-  let html = "";
-  let totalDone = 0;
-  attrs.forEach((a) => {
-    const lane = items.filter((it) => it.attr === a);
-    if (!lane.length) return;
-    const done = lane.filter((it) => wk.checks[it.id]).length;
-    totalDone += done;
-    html += `<div class="today-lane"><div class="tl-head"><span class="tl-dot" style="--ac:${attrColor(a)}"></span><span class="tl-name">${escapeHtml(attrName(a))}</span><span class="tl-count">${done}/${lane.length}</span></div>`;
-    html += lane.map((it) => `<label class="check today-item"><input type="checkbox" data-today-id="${escapeHtml(it.id)}" ${wk.checks[it.id] ? "checked" : ""}><span class="q-text">${escapeHtml(it.label)}</span>${it.tag ? `<span class="ti-tag">${escapeHtml(it.tag)}</span>` : ""}<span class="q-xp">+${it.xp}</span></label>`).join("");
-    html += `</div>`;
-  });
-  host.innerHTML = html || `<div class="day-empty">Nothing scheduled for today. Add habits in the Daily section.</div>`;
-  const prog = document.getElementById("todayProgress");
-  if (prog) prog.textContent = items.length ? `${totalDone}/${items.length}` : "";
-}
-function toggleTodayItem(id, checked) {
-  const wk = getWeekData();
-  wk.checks[id] = checked;
-  wk.updatedAt = new Date().toISOString();
-  const secEl = document.getElementById(id);          // mirror onto the section's own checkbox
-  if (secEl && secEl.type === "checkbox") secEl.checked = checked;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { persistDatabase(); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
-  updateProgress();   // refreshes ring, metrics, chips, and re-renders Today
 }
 
 // ===== CALENDAR (month view) =====
@@ -1584,8 +1547,8 @@ function scrollToSection(id) {
 // Today; diet→Train; projects/review→More. Cabinet is a modal, never scroll-lit.
 function initScrollSpy(tabBtns, moreDrawer) {
   const MAP = [
-    ['charScreen', 'today'], ['boss', 'today'], ['today', 'today'],
-    ['scoreboard', 'today'], ['daily', 'today'],
+    ['charScreen', 'daily'], ['boss', 'daily'],
+    ['scoreboard', 'daily'], ['daily', 'daily'],
     ['workout', 'workout'], ['diet', 'workout'],
     ['study', 'study'],
     ['projects', 'more'], ['review', 'more'],
@@ -1879,8 +1842,6 @@ function renderTrends() {
 
 function bindEvents() {
   document.addEventListener("input", e => { if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateProgress(); } });
-  // Today view proxy checkboxes — toggle the underlying week.checks id once.
-  document.addEventListener("change", e => { if (e.target.matches && e.target.matches("input[data-today-id]")) toggleTodayItem(e.target.getAttribute("data-today-id"), e.target.checked); });
   // Certification target dates (stored in settings.certDates, not week fields)
   document.addEventListener("change", e => {
     if (!e.target.matches("[data-certdate]")) return;
@@ -2064,7 +2025,7 @@ function bindEvents() {
     selectedWeekStart = getStartOfWeek(date);
     applyWeekToUI();
     closeCalendar();
-    scrollToSection("today");
+    scrollToSection("daily");
   });
   const openCabinetHeroBtn = document.getElementById("openCabinetHeroBtn");
   if (openCabinetHeroBtn) openCabinetHeroBtn.onclick = openCabinet;

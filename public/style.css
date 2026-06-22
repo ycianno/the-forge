@@ -2031,19 +2031,19 @@ input[type="file"] { display: none; }
 .al-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .al-hint { opacity: 0.7; font-weight: 600; font-style: italic; }
 
-/* Today view — consolidated, attribute-grouped daily checklist */
-.today-card { padding: 20px 24px 22px; }
-.today-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.today-progress { flex: 0 0 auto; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 15px; color: var(--gradient-success-text); background: var(--pill-green-bg); border: 1px solid var(--pill-green-border); border-radius: 99px; padding: 4px 12px; }
-.today-progress:empty { display: none; }
-.today-lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.today-lane { border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 10px 12px; background: rgba(255,255,255,0.02); }
-.tl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.tl-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ac, #94a3b8); flex: 0 0 auto; }
-.tl-name { font-weight: 800; font-size: 13px; letter-spacing: 0.02em; }
-.tl-count { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--muted); }
-.today-item { padding: 6px 2px; }
-.ti-tag { flex: 0 0 auto; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: rgba(255,255,255,0.06); border-radius: 6px; padding: 2px 6px; margin-right: 2px; }
+/* Section attribute badge — shows which stat a section feeds, in that stat's color */
+.attr-badge {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 11px;
+  letter-spacing: 0.03em; text-transform: uppercase; line-height: 1;
+  color: var(--ac, #94a3b8);
+  background: color-mix(in srgb, var(--ac, #94a3b8) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ac, #94a3b8) 40%, transparent);
+  border-radius: 99px; padding: 4px 10px; margin-right: 4px; white-space: nowrap;
+}
+/* a dot before the label */
+.attr-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ac, #94a3b8); margin-right: 6px; flex: 0 0 auto; }
+@media (max-width: 768px) { details.section-card > summary .attr-badge { display: none; } }
 
 /* Calendar modal (month view) */
 .cal-nav { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
