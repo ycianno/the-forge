@@ -169,8 +169,8 @@
 
   // ----- Badge unlock toast ------------------------------------------------
   function badge(name, rarity, color) {
-    arp([659.25, 880, 1108.73], 70, "triangle", 0.16);
-    vibrate([0, 30, 40, 30]);
+    if (rarity === "mythic") { arp([523.25, 659.25, 880, 1174.66, 1567.98], 80, "triangle", 0.17); vibrate([0, 50, 50, 50, 90]); }
+    else { arp([659.25, 880, 1108.73], 70, "triangle", 0.16); vibrate([0, 30, 40, 30]); }
     let t = document.getElementById("fxBadgeToast");
     if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
     t.style.setProperty("--bc", color || "#a78bfa");
@@ -344,5 +344,83 @@
     setTimeout(() => ov.remove(), 3000);
   }
 
-  window.FX = { levelUp, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, xpPop, playCheck, setSfx, sfxOn };
+  // ----- Hero Class evolution ----------------------------------------------
+  function classUp(name, color, blurb) {
+    arp([392, 523.25, 659.25, 880, 1046.5], 85, "sine", 0.16);
+    vibrate([0, 40, 60, 40, 90]);
+    const ov = document.createElement("div");
+    ov.className = "fx-overlay";
+    ov.innerHTML = `
+      <div class="fx-confetti"></div>
+      <div class="fx-card">
+        <span class="fx-card-k" style="color:${color || "#a78bfa"}">SOUL EVOLUTION</span>
+        <span class="fx-card-lv" style="font-size:38px;color:${color || "#a78bfa"}">${name}</span>
+        <span class="fx-card-rank">${blurb || "A new path opens"}</span>
+      </div>`;
+    document.body.appendChild(ov);
+    const field = ov.querySelector(".fx-confetti");
+    for (let i = 0; i < 34; i++) {
+      const pc = document.createElement("span");
+      pc.className = "confetti-piece";
+      pc.style.left = Math.random() * 100 + "%";
+      pc.style.background = color || CONFETTI[i % CONFETTI.length];
+      pc.style.animationDelay = (Math.random() * 0.28).toFixed(2) + "s";
+      field.appendChild(pc);
+    }
+    requestAnimationFrame(() => ov.classList.add("show"));
+    setTimeout(() => ov.classList.remove("show"), 2400);
+    setTimeout(() => ov.remove(), 2900);
+  }
+
+  // ----- Daily missions ----------------------------------------------------
+  function missionComplete(label, xp) {
+    blip(880, 0.13, "triangle", 0.15);
+    vibrate(16);
+    let t = document.getElementById("fxBadgeToast");
+    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
+    t.style.setProperty("--bc", "#34d399");
+    t.innerHTML = `<span class="fx-badge-k">MISSION CLEARED</span><span class="fx-badge-v">${label}</span><span class="fx-badge-r">+${xp} XP</span>`;
+    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2600);
+  }
+  function missionsAllClear(total) {
+    arp([523.25, 659.25, 783.99, 1046.5, 1318.5], 80, "triangle", 0.17);
+    vibrate([0, 40, 60, 40, 90]);
+    const ov = document.createElement("div");
+    ov.className = "fx-overlay";
+    ov.innerHTML = `
+      <div class="fx-confetti"></div>
+      <div class="fx-card">
+        <span class="fx-card-k" style="color:#34d399">MISSIONS CLEARED</span>
+        <span class="fx-card-lv" style="font-size:40px;background:linear-gradient(135deg,#22c55e,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent">+${total} XP</span>
+        <span class="fx-card-rank">All daily missions complete</span>
+      </div>`;
+    document.body.appendChild(ov);
+    const field = ov.querySelector(".fx-confetti");
+    for (let i = 0; i < 38; i++) {
+      const pc = document.createElement("span");
+      pc.className = "confetti-piece";
+      pc.style.left = Math.random() * 100 + "%";
+      pc.style.background = CONFETTI[i % CONFETTI.length];
+      pc.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
+      field.appendChild(pc);
+    }
+    requestAnimationFrame(() => ov.classList.add("show"));
+    setTimeout(() => ov.classList.remove("show"), 2400);
+    setTimeout(() => ov.remove(), 2900);
+  }
+
+  // ----- Record logged (auto-milestone) ------------------------------------
+  function record(title) {
+    arp([523.25, 783.99, 1046.5], 70, "triangle", 0.15);
+    vibrate([0, 30, 40, 30]);
+    let t = document.getElementById("fxBadgeToast");
+    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
+    t.style.setProperty("--bc", "#fbbf24");
+    t.innerHTML = `<span class="fx-badge-k">RECORD LOGGED</span><span class="fx-badge-v">${title}</span><span class="fx-badge-r">added to your cabinet</span>`;
+    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
+  window.FX = { levelUp, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, classUp, missionComplete, missionsAllClear, record, xpPop, playCheck, setSfx, sfxOn };
 })();

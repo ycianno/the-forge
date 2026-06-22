@@ -59,6 +59,21 @@ db.exec(`
   );
 `);
 
+// Idempotent schema migration: add the richer Record columns if they don't exist.
+// All new columns are nullable / defaulted so existing rows are untouched. `meta`
+// is a JSON catch-all so future record kinds need no further migration.
+(function migrate() {
+  const cols = db.prepare('PRAGMA table_info(achievements)').all().map((c) => c.name);
+  const add = (name, ddl) => { if (!cols.includes(name)) db.exec(`ALTER TABLE achievements ADD COLUMN ${ddl}`); };
+  add('value', 'value REAL');
+  add('unit', 'unit TEXT');
+  add('tags', 'tags TEXT');
+  add('pinned', 'pinned INTEGER DEFAULT 0');
+  add('source', "source TEXT DEFAULT 'manual'");
+  add('ext_key', 'ext_key TEXT');
+  add('meta', 'meta TEXT');
+})();
+
 // Persisted random secret used to sign the session cookie (survives restarts).
 function getSessionSecret() {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'session_secret'").get();
@@ -212,11 +227,38 @@ app.get('/api/achievements', (req, res) => {
 });
 
 app.post('/api/achievements', (req, res) => {
-  const { title, category, completed_at, notes, week_key } = req.body;
+  const { title, category, completed_at, notes, week_key, value, unit, tags, pinned, source, ext_key, meta } = req.body;
+  // Auto records carry an ext_key and must never duplicate (server-side dedup).
+  if (ext_key) {
+    const dup = db.prepare('SELECT id FROM achievements WHERE ext_key = ?').get(ext_key);
+    if (dup) return res.json({ success: true, id: dup.id, deduped: true });
+  }
   const info = db.prepare(
-    'INSERT INTO achievements (title, category, completed_at, notes, week_key) VALUES (?, ?, ?, ?, ?)'
-  ).run(title, category || 'certification', completed_at || new Date().toISOString(), notes || '', week_key || '');
+    `INSERT INTO achievements (title, category, completed_at, notes, week_key, value, unit, tags, pinned, source, ext_key, meta)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    title, category || 'certification', completed_at || new Date().toISOString(), notes || '', week_key || '',
+    (value === '' || value == null) ? null : Number(value), unit || null, tags || null,
+    pinned ? 1 : 0, source || 'manual', ext_key || null, meta || null
+  );
   res.json({ success: true, id: info.lastInsertRowid });
+});
+
+// Edit a record (also used for pin toggle). Only updates fields that are sent.
+app.put('/api/achievements/:id', (req, res) => {
+  const allowed = ['title', 'category', 'completed_at', 'notes', 'value', 'unit', 'tags', 'pinned', 'meta'];
+  const sets = [], vals = [];
+  for (const k of allowed) {
+    if (!(k in req.body)) continue;
+    let v = req.body[k];
+    if (k === 'pinned') v = v ? 1 : 0;
+    if (k === 'value') v = (v === '' || v == null) ? null : Number(v);
+    sets.push(`${k} = ?`); vals.push(v);
+  }
+  if (!sets.length) return res.json({ success: true, unchanged: true });
+  vals.push(req.params.id);
+  db.prepare(`UPDATE achievements SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  res.json({ success: true });
 });
 
 app.delete('/api/achievements/:id', (req, res) => {

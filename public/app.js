@@ -6,6 +6,362 @@ let selectedWeekStart = getStartOfWeek(new Date());
 let database = { version: 2, weeks: {} };
 let settings = { version: 3, dayTemplates: null };
 let achievements = [];
+
+// The module engine (modules.js) is the single source of truth for ids, score
+// and XP. Built fresh from the current settings each call so in-place edits to
+// settings.* lists are always reflected (rebuild is cheap at this app's scale).
+function getModules() {
+  if (!(window.Forge && Forge.buildBaseModules)) return [];
+  const base = Forge.buildBaseModules(settings);
+  const custom = (settings.customModules || []).map(normalizeCustomModule);
+  return Forge.applyOverlays(base.concat(custom), settings);
+}
+
+// Fill in any missing fields on a stored custom module (defensive).
+function normalizeCustomModule(m) {
+  const cm = Object.assign({ custom: true, enabled: true, countScore: false, icon: "star" }, m);
+  cm.idPrefix = cm.idPrefix || cm.id;
+  cm.source = cm.source || cm.id;
+  cm.category = cm.category || (window.Forge && Forge.CAT_OF_ATTR[cm.attr]) || "discipline";
+  if (cm.type === "counter") cm.field = cm.field || `${cm.idPrefix}-count`;
+  if (cm.type === "notes") cm.field = cm.field || `${cm.idPrefix}-notes`;
+  return cm;
+}
+
+// Build a fresh custom-module definition from the Add Section form.
+function makeCustomModule({ name, type, attr, items, targetValue, unit, xpPer }) {
+  const id = "custom-" + (slugify(name).slice(0, 20) || "section") + "-" + Math.random().toString(36).slice(2, 6);
+  const cat = (window.Forge && Forge.CAT_OF_ATTR[attr]) || "discipline";
+  const m = { id, idPrefix: id, source: id, name: name || "New Section", type, attr, category: cat, icon: "star", enabled: true, countScore: false, custom: true };
+  if (type === "checklist") { m.items = (items && items.length) ? items : ["First item"]; m.xpPer = Number(xpPer) || 10; }
+  else if (type === "counter") { m.field = `${id}-count`; m.target = { kind: /hour|hr|min/i.test(unit || "") ? "hours" : "count", value: Number(targetValue) || 1, unit: unit || "" }; m.xpPer = Number(xpPer) || 5; }
+  else if (type === "notes") { m.field = `${id}-notes`; m.xpPer = Number(xpPer) || 10; }
+  return m;
+}
+
+// Drive the section DOM from the module list: apply each module's editable name
+// to its <h2>, reorder sections to match module order, and apply visibility.
+// Built-in section bodies are still rendered by the per-type render functions;
+// custom sections are rendered generically (renderCustomSections). All emit the
+// same ids the engine reads.
+function applyModuleLayout() {
+  const mods = getModules();
+  const anchor = document.getElementById("editDayModal"); // sits right after the last section
+  mods.forEach((m) => {
+    const sec = document.getElementById(m.id);
+    if (!sec) return;
+    const h2 = sec.querySelector(".summary-left h2");
+    if (h2 && m.name) h2.textContent = m.name;
+    sec.style.display = (m.enabled === false) ? "none" : "";
+    if (anchor && anchor.parentNode === sec.parentNode) anchor.parentNode.insertBefore(sec, anchor);
+  });
+}
+
+// ===== GENERIC CUSTOM-SECTION RENDERER =====
+function customHint(m) {
+  if (m.type === "checklist") return `Each item is worth +${m.xpPer} XP.`;
+  if (m.type === "counter") { const u = m.target && m.target.unit ? ` ${m.target.unit}` : ""; return `Target: ${(m.target && m.target.value) || 1}${u} per week · +${m.xpPer} XP each.`; }
+  if (m.type === "notes") return `Free-form notes · +${m.xpPer} XP when filled.`;
+  return "";
+}
+function customSectionHtml(m) {
+  const head = `<summary><div class="summary-left"><h2>${escapeHtml(m.name)}</h2><p class="hint">${escapeHtml(customHint(m))}</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-section-btn" type="button" data-module-id="${m.id}" title="Edit section"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>`;
+  let body = "";
+  if (m.type === "checklist") {
+    body = `<div class="content"><div class="grid grid-3">` + (m.items || []).map((it) =>
+      `<label class="check quest"><input id="${Forge.checklistId(m.idPrefix, it)}" type="checkbox" data-cat="${escapeHtml(m.category)}" data-save><span class="q-text">${escapeHtml(it)}</span><span class="q-xp">+${m.xpPer}</span></label>`
+    ).join("") + `</div></div>`;
+  } else if (m.type === "counter") {
+    const u = m.target && m.target.unit ? escapeHtml(m.target.unit) : "";
+    body = `<div class="content"><div class="metric"><div class="top"><div><div class="metric-title">${escapeHtml(m.name)}</div><p class="hint">Target: ${(m.target && m.target.value) || 1} ${u} · +${m.xpPer} XP each</p></div></div><label class="label" style="margin-top:14px">Logged ${u}</label><input id="${escapeHtml(m.field)}" type="number" min="0" step="any" value="0" data-save></div></div>`;
+  } else if (m.type === "notes") {
+    body = `<div class="content"><textarea id="${escapeHtml(m.field)}" data-save placeholder="${escapeHtml(m.name)}..."></textarea></div>`;
+  }
+  return head + body;
+}
+function renderCustomSections() {
+  if (!window.Forge) return;
+  const mods = getModules().filter((m) => m.custom);
+  const anchor = document.getElementById("editDayModal");
+  const present = new Set();
+  mods.forEach((m) => {
+    present.add(m.id);
+    let sec = document.getElementById(m.id);
+    if (!sec) {
+      sec = document.createElement("details");
+      sec.id = m.id;
+      sec.className = "section section-card glass";
+      sec.open = true;
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(sec, anchor);
+    }
+    sec.dataset.custom = "1";
+    sec.innerHTML = customSectionHtml(m);
+  });
+  document.querySelectorAll('details.section-card[data-custom="1"]').forEach((sec) => {
+    if (!present.has(sec.id)) sec.remove();
+  });
+}
+
+// ===== SECTIONS (MODULES) EDITOR =====
+let modPersistTimer = null;
+function persistSettingsSoon() {
+  clearTimeout(modPersistTimer);
+  modPersistTimer = setTimeout(persistSettings, 350);
+}
+function renderModulesEditor() {
+  const wrap = document.getElementById("modulesEditor");
+  if (!wrap) return;
+  const mods = getModules();
+  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : ["Discipline", "Body", "Mind", "Vitality", "Craft"];
+  const rows = mods.map((m, i) => {
+    const row = `
+    <div class="mod-row" data-id="${m.id}">
+      <div class="mod-reorder">
+        <button class="mod-up" type="button" title="Move up" aria-label="Move up" ${i === 0 ? "disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
+        <button class="mod-down" type="button" title="Move down" aria-label="Move down" ${i === mods.length - 1 ? "disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <input class="mod-name" type="text" value="${escapeHtml(m.name)}" maxlength="28" aria-label="Section name" spellcheck="false">
+      <label class="mod-show"><input type="checkbox" class="mod-enabled" ${m.enabled ? "checked" : ""}><span>Show</span></label>
+      ${m.custom
+        ? `<button class="mod-edit" type="button" title="Edit section" aria-label="Edit section"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+           <button class="mod-del" type="button" title="Delete section" aria-label="Delete section"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`
+        : `<span class="mod-builtin" title="Built-in section (edit its content from the section itself)"><svg viewBox="0 0 24 24" class="ic"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3z"/></svg></span>`}
+    </div>`;
+    return row;
+  }).join("");
+  const form = `
+    <div class="mod-add">
+      <button class="mod-add-toggle" type="button" id="modAddToggle">+ Add a section</button>
+      <div class="mod-add-form" id="modAddForm" style="display:none;">
+        <label class="label">Name</label>
+        <input type="text" id="newModName" placeholder="e.g. Reading" maxlength="28">
+        <div class="form-row">
+          <div class="form-col"><label class="label">Type</label>
+            <select id="newModType">
+              <option value="checklist">Checklist</option>
+              <option value="counter">Counter (number / hours)</option>
+              <option value="notes">Notes</option>
+            </select></div>
+          <div class="form-col"><label class="label">Feeds stat</label>
+            <select id="newModAttr">${attrs.map((a) => `<option value="${a}">${escapeHtml(attrName(a))}</option>`).join("")}</select></div>
+        </div>
+        <div id="newModChecklist">
+          <label class="label">Items (one per line)</label>
+          <textarea id="newModItems" placeholder="Read 20 pages&#10;No phone in bed"></textarea>
+        </div>
+        <div id="newModCounter" style="display:none;">
+          <div class="form-row">
+            <div class="form-col"><label class="label">Weekly target</label><input type="number" id="newModTarget" min="0" step="any" value="7"></div>
+            <div class="form-col"><label class="label">Unit</label><input type="text" id="newModUnit" placeholder="pages · min · km"></div>
+          </div>
+        </div>
+        <label class="label">XP per item/unit</label>
+        <input type="number" id="newModXp" min="0" step="1" value="10">
+        <div class="modal-actions" style="margin-top:12px;">
+          <button type="button" id="newModCancel">Cancel</button>
+          <button type="button" class="primary" id="newModSave">Add Section</button>
+        </div>
+      </div>
+    </div>`;
+  const presets = (window.Forge && Forge.PRESETS) ? Forge.PRESETS : {};
+  const presetRow = `<div class="mod-presets"><span class="mod-presets-label">Start from a preset</span><div class="mod-presets-row">`
+    + Object.entries(presets).map(([id, p]) => `<button class="mod-preset" type="button" data-preset="${id}" title="${escapeHtml(p.desc)}">${escapeHtml(p.name)}</button>`).join("")
+    + `</div></div>`;
+  wrap.innerHTML = presetRow + rows + form;
+}
+// ----- Edit Section modal (custom sections) — reachable from the section's own
+// pencil and from Settings → Sections. Lets the user set name, stat, XP, items,
+// and the weekly target/limit.
+let editSectionId = null;
+function sectionEditBodyHtml(m) {
+  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
+  const attrOpts = attrs.map((a) => `<option value="${a}" ${a === m.attr ? "selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
+  let typeFields = "";
+  if (m.type === "checklist") {
+    typeFields = `<label class="label">Items (one per line)</label><textarea class="es-items">${escapeHtml((m.items || []).join("\n"))}</textarea>`;
+  } else if (m.type === "counter") {
+    typeFields = `<div class="form-row"><div class="form-col"><label class="label">Weekly target (your limit)</label><input type="number" class="es-target" min="0" step="any" value="${(m.target && m.target.value) || 0}"></div><div class="form-col"><label class="label">Unit</label><input type="text" class="es-unit" value="${escapeHtml((m.target && m.target.unit) || "")}"></div></div>`;
+  }
+  return `<label class="label">Name</label><input type="text" class="es-name" value="${escapeHtml(m.name)}" maxlength="28" spellcheck="false">
+    <div class="form-row">
+      <div class="form-col"><label class="label">Feeds stat</label><select class="es-attr">${attrOpts}</select></div>
+      <div class="form-col"><label class="label">XP per ${m.type === "counter" ? "unit" : "item"}</label><input type="number" class="es-xp" min="0" step="1" value="${m.xpPer || 0}"></div>
+    </div>
+    ${typeFields}
+    <label class="me-score" style="margin-top:12px;"><input type="checkbox" class="es-countscore" ${m.countScore ? "checked" : ""}><span>Count toward weekly score</span></label>`;
+}
+function openSectionEditor(id) {
+  const m = (settings.customModules || []).find((x) => x.id === id);
+  if (!m) return;
+  editSectionId = id;
+  document.getElementById("editSectionTitle").textContent = `Edit ${m.name}`;
+  document.getElementById("editSectionBody").innerHTML = sectionEditBodyHtml(m);
+  const md = document.getElementById("editSectionModal");
+  md.classList.add("active"); md.setAttribute("aria-hidden", "false");
+}
+function closeSectionEditor() {
+  editSectionId = null;
+  const md = document.getElementById("editSectionModal");
+  md.classList.remove("active"); md.setAttribute("aria-hidden", "true");
+}
+function saveSectionEditor() {
+  const m = (settings.customModules || []).find((x) => x.id === editSectionId);
+  const body = document.getElementById("editSectionBody");
+  if (!m || !body) { closeSectionEditor(); return; }
+  const name = (body.querySelector(".es-name").value || "").trim();
+  if (name) { m.name = name; if (settings.moduleNames) delete settings.moduleNames[m.id]; }
+  const attr = body.querySelector(".es-attr").value;
+  m.attr = attr;
+  m.category = (window.Forge && Forge.CAT_OF_ATTR[attr]) || "discipline";
+  m.xpPer = Number(body.querySelector(".es-xp").value) || 0;
+  m.countScore = body.querySelector(".es-countscore").checked;
+  if (m.type === "checklist") {
+    const items = (body.querySelector(".es-items").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+    m.items = items.length ? items : ["First item"];
+  } else if (m.type === "counter") {
+    const unit = body.querySelector(".es-unit").value || "";
+    m.target = { kind: /hour|hr|min/i.test(unit) ? "hours" : "count", value: Number(body.querySelector(".es-target").value) || 1, unit };
+  }
+  persistSettings();
+  closeSectionEditor();
+  renderModulesEditor();
+  applyWeekToUI();
+}
+function applyPreset(id) {
+  const p = (window.Forge && Forge.PRESETS) ? Forge.PRESETS[id] : null;
+  if (!p) return;
+  if (!confirm(`Load the "${p.name}" preset? It rearranges your sections and may add a few. Your logged data is kept.`)) return;
+  settings.hiddenSections = (p.hidden || []).slice();
+  settings.moduleNames = Object.assign({}, p.names || {});
+  settings.customModules = (p.custom || []).map((spec) => makeCustomModule(spec));
+  const order = (p.order && p.order.length) ? p.order.slice() : (window.Forge ? Forge.BUILTIN_ORDER.slice() : []);
+  settings.moduleOrder = order.concat(settings.customModules.map((m) => m.id));
+  persistSettings();
+  renderModulesEditor();
+  applyWeekToUI();
+}
+function toggleAddFormFields() {
+  const t = document.getElementById("newModType");
+  if (!t) return;
+  const cl = document.getElementById("newModChecklist");
+  const co = document.getElementById("newModCounter");
+  if (cl) cl.style.display = t.value === "checklist" ? "" : "none";
+  if (co) co.style.display = t.value === "counter" ? "" : "none";
+}
+function addCustomModuleFromForm() {
+  const name = (document.getElementById("newModName").value || "").trim();
+  if (!name) { alert("Give the section a name."); return; }
+  const m = makeCustomModule({
+    name,
+    type: document.getElementById("newModType").value,
+    attr: document.getElementById("newModAttr").value,
+    items: (document.getElementById("newModItems").value || "").split("\n").map((s) => s.trim()).filter(Boolean),
+    targetValue: document.getElementById("newModTarget").value,
+    unit: document.getElementById("newModUnit").value,
+    xpPer: document.getElementById("newModXp").value,
+  });
+  if (!settings.customModules) settings.customModules = [];
+  settings.customModules.push(m);
+  settings.moduleOrder = getModules().map((x) => x.id); // keep new section at the end, stably
+  persistSettings();
+  renderModulesEditor();
+  applyWeekToUI();
+}
+function deleteCustomModule(id) {
+  if (!confirm("Delete this section? Anything you already logged stays in your weeks; only the section is removed.")) return;
+  settings.customModules = (settings.customModules || []).filter((m) => m.id !== id);
+  if (Array.isArray(settings.moduleOrder)) settings.moduleOrder = settings.moduleOrder.filter((x) => x !== id);
+  if (settings.moduleNames) delete settings.moduleNames[id];
+  if (Array.isArray(settings.hiddenSections)) settings.hiddenSections = settings.hiddenSections.filter((x) => x !== id);
+  persistSettings();
+  renderModulesEditor();
+  applyWeekToUI();
+}
+function moveModule(id, dir) {
+  const order = getModules().map(m => m.id);
+  const i = order.indexOf(id), j = i + dir;
+  if (i < 0 || j < 0 || j >= order.length) return;
+  [order[i], order[j]] = [order[j], order[i]];
+  settings.moduleOrder = order;
+  persistSettings();
+  renderModulesEditor();
+  applyModuleLayout();
+}
+function renameModule(id, name) {
+  if (!settings.moduleNames) settings.moduleNames = {};
+  settings.moduleNames[id] = name;
+  applyModuleLayout();        // live preview of the new <h2>
+  persistSettingsSoon();      // debounced server write
+}
+function toggleModule(id, show) {
+  let hidden = getHiddenSections().slice();
+  if (show) hidden = hidden.filter(x => x !== id);
+  else if (!hidden.includes(id)) hidden.push(id);
+  settings.hiddenSections = hidden;
+  persistSettings();
+  applySectionVisibility();
+}
+function wireModulesEditor() {
+  const wrap = document.getElementById("modulesEditor");
+  if (!wrap) return;
+  wrap.addEventListener("click", (e) => {
+    const pBtn = e.target.closest(".mod-preset");
+    if (pBtn) { applyPreset(pBtn.dataset.preset); return; }
+    if (e.target.closest("#modAddToggle")) { const f = document.getElementById("modAddForm"); if (f) { f.style.display = ""; toggleAddFormFields(); } return; }
+    if (e.target.closest("#newModCancel")) { const f = document.getElementById("modAddForm"); if (f) f.style.display = "none"; return; }
+    if (e.target.closest("#newModSave")) { addCustomModuleFromForm(); return; }
+    const row = e.target.closest(".mod-row"); if (!row) return;
+    if (e.target.closest(".mod-up")) moveModule(row.dataset.id, -1);
+    else if (e.target.closest(".mod-down")) moveModule(row.dataset.id, 1);
+    else if (e.target.closest(".mod-edit")) openSectionEditor(row.dataset.id);
+    else if (e.target.closest(".mod-del")) deleteCustomModule(row.dataset.id);
+  });
+  wrap.addEventListener("input", (e) => {
+    if (!e.target.classList.contains("mod-name")) return;
+    const row = e.target.closest(".mod-row"); if (row) renameModule(row.dataset.id, e.target.value);
+  });
+  wrap.addEventListener("change", (e) => {
+    if (e.target.id === "newModType") { toggleAddFormFields(); return; }
+    if (!e.target.classList.contains("mod-enabled")) return;
+    const row = e.target.closest(".mod-row"); if (row) toggleModule(row.dataset.id, e.target.checked);
+  });
+}
+
+// ===== STATS (ATTRIBUTES) EDITOR — rename + recolor the 5 stats =====
+let attrRefreshTimer = null;
+function refreshAttrUISoon() {
+  clearTimeout(attrRefreshTimer);
+  attrRefreshTimer = setTimeout(() => { applyWeekToUI(); if (window.Game) Game.render(); }, 200);
+}
+function renderStatsEditor() {
+  const wrap = document.getElementById("statsEditor");
+  if (!wrap) return;
+  const keys = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
+  wrap.innerHTML = keys.map((k) => `
+    <div class="stat-row" data-attr="${k}">
+      <input type="color" class="stat-color" value="${attrColor(k)}" aria-label="${k} color">
+      <input type="text" class="stat-name" value="${escapeHtml(attrName(k))}" maxlength="18" aria-label="${k} name" spellcheck="false">
+      <span class="stat-key">${k}</span>
+    </div>`).join("");
+}
+function wireStatsEditor() {
+  const wrap = document.getElementById("statsEditor");
+  if (!wrap) return;
+  wrap.addEventListener("input", (e) => {
+    const row = e.target.closest(".stat-row"); if (!row) return;
+    const k = row.dataset.attr;
+    if (e.target.classList.contains("stat-name")) {
+      if (!settings.attrLabels) settings.attrLabels = {};
+      const v = e.target.value.trim();
+      if (v && v !== k) settings.attrLabels[k] = v; else delete settings.attrLabels[k];
+    } else if (e.target.classList.contains("stat-color")) {
+      if (!settings.attrColors) settings.attrColors = {};
+      settings.attrColors[k] = e.target.value;
+    } else return;
+    persistSettingsSoon();
+    refreshAttrUISoon();
+  });
+}
 let saveTimer = null;
 let editingDayIndex = null;
 let booting = true;   // suppresses persistence during the instant cache-paint at startup
@@ -199,14 +555,31 @@ async function migrateLegacyIfNeeded() {
   } catch {}
 }
 
+// Category inference for free-text daily tasks now lives in modules.js (single
+// source of truth, shared by the XP engine). This thin wrapper keeps callers.
 function categoryFor(text) {
-  const t = text.toLowerCase();
-  if (t.includes("workout") || t.includes("cardio") || t.includes("weights") || t.includes("movement") || t.includes("recovery")) return "training";
-  if (t.includes("study") || t.includes("certification")) return "study";
-  if (t.includes("protein") || t.includes("cook")) return "protein";
-  if (t.includes("project")) return "project";
-  return "discipline";
+  return (window.Forge && Forge.categoryFor) ? Forge.categoryFor(text) : "discipline";
 }
+
+// A daily task's attribute (explicit override, else keyword default). The
+// attribute is the link between a daily habit and the section that trains the
+// same stat — e.g. a "Body" task lines up with Training (also Body).
+function taskAttr(text) {
+  return (window.Forge && Forge.dailyAttr) ? Forge.dailyAttr(text, settings.taskAttrs) : "Discipline";
+}
+function setTaskAttr(text, attr) {
+  if (!settings.taskAttrs) settings.taskAttrs = {};
+  const key = (window.Forge && Forge.dailyAttrKey) ? Forge.dailyAttrKey(text) : text;
+  settings.taskAttrs[key] = attr;
+  persistSettings();
+  applyWeekToUI();
+}
+function attrCat(attr) { return (window.Forge && Forge.CAT_OF_ATTR[attr]) || "discipline"; }
+// Attribute display name + color honor the user's overrides (Phase D). The
+// internal key (Body/Mind/…) never changes, so the engine/classes/insignias keep
+// working; only the label and color the user sees are customizable.
+function attrName(attr) { return (settings.attrLabels && settings.attrLabels[attr]) || attr; }
+function attrColor(attr) { return (settings.attrColors && settings.attrColors[attr]) || (window.Forge && Forge.ATTR_COLOR[attr]) || "#94a3b8"; }
 
 // ===== THEME SYSTEM =====
 function applyTheme(themeId) {
@@ -237,64 +610,258 @@ function renderThemeGrid() {
 }
 
 // ===== TROPHY CASE =====
+// ----- Records (achievements) -------------------------------------------
+// SVG icons (no emoji) keep Records visually consistent with the rest of the app.
+const RECORD_ICONS = {
+  certification: "M12 15a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM8.21 13.89 7 23l5-3 5 3-1.21-9.12",
+  learning:      "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
+  career:        "M23 6l-9.5 9.5-5-5L1 18M17 6h6v6",
+  fitness:       "M6.5 6.5v11M3.5 9v5M17.5 6.5v11M20.5 9v5M6.5 12h11",
+  project:       "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2zM9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5",
+  finance:       "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
+  milestone:     "M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7",
+  personal:      "M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z",
+};
+const RECORD_COLOR = {
+  certification: "#fbbf24", learning: "#a78bfa", career: "#38bdf8", fitness: "#fb7185",
+  project: "#34d399", finance: "#22d3ee", milestone: "#f43f5e", personal: "#94a3b8",
+};
+const RECORD_LABEL = {
+  certification: "Certification", learning: "Learning", career: "Career", fitness: "Fitness PR",
+  project: "Project", finance: "Finance", milestone: "Milestone", personal: "Personal",
+};
+const REC_BTN = {
+  star: "M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z",
+  pencil: "M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
+  x: "M18 6 6 18M6 6l12 12",
+};
+let recordFilter = "all";
+function recIcon(cat) { return RECORD_ICONS[cat] || RECORD_ICONS.personal; }
+function recSvg(path) { return `<svg viewBox="0 0 24 24" class="ic"><path d="${path}"/></svg>`; }
+function recTags(a) { return (a.tags || "").split(",").map(t => t.trim()).filter(Boolean); }
+
+// Personal-best map: for fitness records with a value, the max per group (first
+// tag, else title) is the PR; record the delta from the prior best in the group.
+function computePRs() {
+  const groups = {};
+  achievements.forEach(a => {
+    if (a.category !== "fitness" || a.value == null) return;
+    const key = (recTags(a)[0] || a.title || "").toLowerCase();
+    (groups[key] = groups[key] || []).push(a);
+  });
+  const pr = {};
+  Object.values(groups).forEach(arr => {
+    arr.sort((x, y) => Number(x.value) - Number(y.value));
+    const best = arr[arr.length - 1], prev = arr[arr.length - 2];
+    if (best) pr[best.id] = { isPR: true, delta: prev ? Number(best.value) - Number(prev.value) : 0 };
+  });
+  return pr;
+}
+
 function renderTrophyCase() {
   const list = document.getElementById('trophyList');
   if (!list) return;
+  renderRecordFilters();
 
-  if (achievements.length === 0) {
+  const total = achievements.length;
+  const pinnedN = achievements.filter(a => a.pinned).length;
+  const countEl = document.getElementById('recordCount');
+  if (countEl) countEl.textContent = total ? `${total} record${total === 1 ? '' : 's'}${pinnedN ? ` · ${pinnedN} pinned` : ''}` : 'Real-life wins worth keeping';
+
+  if (total === 0) {
     list.innerHTML = `
       <div class="trophy-empty">
-        <div class="trophy-empty-icon">🏆</div>
-        <p>No achievements yet.</p>
-        <p class="hint">Complete a certification or goal and archive it here!</p>
+        <div class="trophy-empty-icon">${recSvg(RECORD_ICONS.milestone)}</div>
+        <p>No records yet.</p>
+        <p class="hint">Log a certification, a PR, a launch — anything worth keeping.</p>
       </div>`;
     return;
   }
 
-  list.innerHTML = achievements.map(a => {
-    const icon = a.category === 'certification' ? '🏆' : a.category === 'fitness' ? '💪' : a.category === 'project' ? '🚀' : '⭐';
+  const pr = computePRs();
+  const rows = achievements
+    .filter(a => recordFilter === 'all' || a.category === recordFilter)
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.completed_at) - new Date(a.completed_at));
+
+  if (rows.length === 0) {
+    list.innerHTML = `<div class="trophy-empty"><p class="hint">No ${escapeHtml(RECORD_LABEL[recordFilter] || recordFilter)} records yet.</p></div>`;
+    return;
+  }
+
+  list.innerHTML = rows.map(a => {
+    const cat = a.category || 'personal';
+    const color = RECORD_COLOR[cat] || RECORD_COLOR.personal;
+    const tags = recTags(a);
+    const prInfo = pr[a.id];
+    const metric = (a.value != null && a.value !== '') ? `<span class="rec-metric">${escapeHtml(String(a.value))}${a.unit ? ' ' + escapeHtml(a.unit) : ''}</span>` : '';
+    const prBadge = prInfo && prInfo.isPR ? `<span class="rec-pr" title="Personal best">PR${prInfo.delta > 0 ? ' +' + (Math.round(prInfo.delta * 100) / 100) : ''}</span>` : '';
+    const autoBadge = a.source === 'auto' ? '<span class="rec-auto">auto</span>' : '';
+    const dateStr = a.completed_at ? new Date(a.completed_at).toLocaleDateString() : '';
     return `
-    <div class="trophy-item">
-      <div class="trophy-icon">${icon}</div>
-      <div class="trophy-details">
-        <strong>${escapeHtml(a.title)}</strong>
-        <span class="hint">${new Date(a.completed_at).toLocaleDateString()} · ${escapeHtml(a.category)}</span>
-        ${a.notes ? `<p class="hint" style="margin-top:4px;">${escapeHtml(a.notes)}</p>` : ''}
+    <div class="rec-card ${a.pinned ? 'pinned' : ''} ${prInfo && prInfo.isPR ? 'is-pr' : ''}" style="--rc:${color}">
+      <span class="rec-ic">${recSvg(recIcon(cat))}</span>
+      <div class="rec-body">
+        <div class="rec-top">
+          <strong class="rec-title">${escapeHtml(a.title)}</strong>
+          ${metric}
+        </div>
+        <div class="rec-meta">
+          <span>${escapeHtml(dateStr)}</span><span class="rec-cat">${escapeHtml(RECORD_LABEL[cat] || cat)}</span>${autoBadge}${prBadge}
+        </div>
+        ${tags.length ? `<div class="rec-tags">${tags.map(t => `<span class="rec-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+        ${a.notes ? `<p class="rec-notes">${escapeHtml(a.notes)}</p>` : ''}
       </div>
-      <button class="icon-btn delete-trophy" data-trophy-id="${a.id}" title="Remove" style="width:28px;height:28px;font-size:12px;">✕</button>
+      <div class="rec-actions">
+        <button class="rec-btn rec-pin ${a.pinned ? 'on' : ''}" data-id="${a.id}" title="${a.pinned ? 'Unpin' : 'Pin'}">${recSvg(REC_BTN.star)}</button>
+        <button class="rec-btn rec-edit" data-id="${a.id}" title="Edit">${recSvg(REC_BTN.pencil)}</button>
+        <button class="rec-btn rec-del" data-id="${a.id}" title="Remove">${recSvg(REC_BTN.x)}</button>
+      </div>
     </div>`;
   }).join('');
 
-  // Bind delete buttons
-  list.querySelectorAll('.delete-trophy').forEach(btn => {
-    btn.onclick = async (e) => {
-      e.stopPropagation();
-      if (!confirm('Remove this achievement?')) return;
-      try {
-        await fetch(`/api/achievements/${btn.dataset.trophyId}`, { method: 'DELETE' });
-        await loadAchievements();
-        renderTrophyCase();
-      } catch (err) { alert('Failed to delete: ' + err.message); }
-    };
+  list.querySelectorAll('.rec-pin').forEach(btn => btn.onclick = async () => {
+    const a = achievements.find(x => String(x.id) === btn.dataset.id);
+    if (a) await updateRecord(a.id, { pinned: a.pinned ? 0 : 1 });
+  });
+  list.querySelectorAll('.rec-edit').forEach(btn => btn.onclick = () => {
+    const a = achievements.find(x => String(x.id) === btn.dataset.id);
+    if (a) openRecordForm(a);
+  });
+  list.querySelectorAll('.rec-del').forEach(btn => btn.onclick = async (e) => {
+    e.stopPropagation();
+    if (!confirm('Remove this record?')) return;
+    try {
+      await fetch(`/api/achievements/${btn.dataset.id}`, { method: 'DELETE' });
+      await loadAchievements();
+      renderTrophyCase();
+    } catch (err) { alert('Failed to delete: ' + err.message); }
   });
 }
 
-async function addAchievement(title, category, notes) {
+function renderRecordFilters() {
+  const host = document.getElementById('recordFilters');
+  if (!host) return;
+  const cats = [...new Set(achievements.map(a => a.category || 'personal'))];
+  if (cats.length <= 1) { host.innerHTML = ''; return; }
+  const chip = (f, label) => `<button class="rec-filter ${recordFilter === f ? 'on' : ''}" data-rfilter="${f}" type="button">${escapeHtml(label)}</button>`;
+  host.innerHTML = chip('all', 'All') + cats.map(c => chip(c, RECORD_LABEL[c] || c)).join('');
+  if (!host._wired) {
+    host._wired = true;
+    host.addEventListener('click', e => {
+      const b = e.target.closest('[data-rfilter]'); if (!b) return;
+      recordFilter = b.dataset.rfilter;
+      renderTrophyCase();
+    });
+  }
+}
+
+// Low-level create/update used by the form, the legacy shim, and auto-records.
+async function saveRecord(payload) {
   try {
-    await fetch('/api/achievements', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        category,
-        notes,
-        completed_at: new Date().toISOString(),
-        week_key: weekKey()
-      })
+    const res = await fetch('/api/achievements', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
     await loadAchievements();
     renderTrophyCase();
+    return res.json().catch(() => ({}));
   } catch (err) { alert('Failed to save: ' + err.message); }
+}
+async function updateRecord(id, patch) {
+  try {
+    await fetch(`/api/achievements/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    await loadAchievements();
+    renderTrophyCase();
+  } catch (err) { alert('Failed to update: ' + err.message); }
+}
+// Legacy shim — kept so existing callers (cert auto-archive) keep working.
+async function addAchievement(title, category, notes) {
+  return saveRecord({ title, category, notes, completed_at: new Date().toISOString(), week_key: weekKey() });
+}
+
+// ----- Record add/edit form ----------------------------------------------
+function openRecordForm(record) {
+  const form = document.getElementById('addTrophyForm');
+  const addBtn = document.getElementById('addTrophyBtn');
+  if (!form) return;
+  const g = id => document.getElementById(id);
+  g('trophyEditId').value = record ? record.id : '';
+  g('trophyTitle').value = record ? record.title : '';
+  g('trophyCategory').value = record ? (record.category || 'personal') : 'certification';
+  g('trophyDate').value = (record && record.completed_at) ? String(record.completed_at).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  g('trophyValue').value = (record && record.value != null) ? record.value : '';
+  g('trophyUnit').value = record ? (record.unit || '') : '';
+  g('trophyTags').value = record ? (record.tags || '') : '';
+  g('trophyNotes').value = record ? (record.notes || '') : '';
+  g('saveTrophyBtn').textContent = record ? 'Save Changes' : 'Save Record';
+  form.classList.add('active');
+  if (addBtn) addBtn.style.display = 'none';
+  g('trophyTitle').focus();
+}
+function closeRecordForm() {
+  const form = document.getElementById('addTrophyForm');
+  const addBtn = document.getElementById('addTrophyBtn');
+  if (form) form.classList.remove('active');
+  if (addBtn) addBtn.style.display = 'block';
+  const e = document.getElementById('trophyEditId'); if (e) e.value = '';
+}
+async function saveRecordForm() {
+  const g = id => document.getElementById(id);
+  const title = g('trophyTitle').value.trim();
+  if (!title) { alert('Please enter a title.'); return; }
+  const editId = g('trophyEditId').value;
+  const dateStr = g('trophyDate').value;
+  const completed_at = dateStr ? new Date(dateStr + 'T12:00:00').toISOString() : new Date().toISOString();
+  const payload = {
+    title,
+    category: g('trophyCategory').value,
+    completed_at,
+    value: g('trophyValue').value,
+    unit: g('trophyUnit').value.trim(),
+    tags: g('trophyTags').value.trim(),
+    notes: g('trophyNotes').value.trim(),
+  };
+  if (editId) await updateRecord(editId, payload);
+  else await saveRecord({ ...payload, week_key: weekKey(), source: 'manual' });
+  closeRecordForm();
+}
+
+// ----- Auto-milestone records --------------------------------------------
+// Called from game.js render() with the computed profile. Mirrors the engine's
+// silent-first-run pattern: on the very first run we seed settings.seenRecords
+// with whatever is already true (creating NO historical records); thereafter only
+// freshly-crossed milestones POST a keepable record (source:auto, deduped by ext_key).
+function autoMilestones(p) {
+  const out = [];
+  const add = (key, title, value) => out.push({ key, title, value });
+  [10, 25, 50, 75, 99].forEach(L => { if (p.level >= L) add('lvl:' + L, 'Reached Level ' + L, L); });
+  if (p.rank && p.rank.name) add('rank:' + p.rank.name, 'Became a ' + p.rank.name, null);
+  [30, 100, 365].forEach(N => { if (p.dayStreak >= N) add('streak:' + N, N + '-day streak', N); });
+  const bosses = (settings && settings.bossDefeated) ? Object.keys(settings.bossDefeated).length : 0;
+  for (let m = 10; m <= bosses; m += 10) add('boss:' + m, 'Defeated ' + m + ' bosses', m);
+  return out;
+}
+async function checkAutoRecords(p) {
+  if (typeof settings === 'undefined' || !settings || !p) return;
+  const first = !settings.seenRecords;
+  const seen = settings.seenRecords || [];
+  const seenSet = new Set(seen);
+  const fresh = autoMilestones(p).filter(m => !seenSet.has(m.key));
+  if (!fresh.length) { if (first) { settings.seenRecords = seen; if (typeof persistSettings === 'function') persistSettings(); } return; }
+  fresh.forEach(m => seen.push(m.key));
+  settings.seenRecords = seen;
+  if (typeof persistSettings === 'function') persistSettings();
+  if (first) return; // silent backfill — record nothing historical
+  for (const m of fresh) {
+    await saveRecord({
+      title: m.title, category: 'milestone', completed_at: new Date().toISOString(),
+      week_key: weekKey(), value: m.value, source: 'auto', ext_key: m.key,
+    });
+    if (window.FX && FX.record) FX.record(m.title);
+  }
 }
 
 // ===== RENDERING =====
@@ -306,20 +873,11 @@ function renderStatic() {
   renderReview();
 }
 
+// Weekly completion % — delegated to the module engine (counts every module
+// flagged countScore). Verified byte-identical to the legacy logic.
 function calculateWeekScoreData(weekData) {
   if (!weekData || !weekData.checks) return 0;
-  const blueprint = getDailyBlueprint();
-  let validKeys = new Set();
-  for (let i = 0; i < 7; i++) {
-    validKeys.add(`workout-${i}`);
-    const dayName = Object.keys(blueprint)[i];
-    if (blueprint[dayName]) {
-      blueprint[dayName].forEach(task => validKeys.add(taskId(i, task)));
-    }
-  }
-  let done = 0;
-  validKeys.forEach(k => { if (weekData.checks[k]) done++; });
-  return validKeys.size > 0 ? Math.round((done / validKeys.size) * 100) : 0;
+  return (window.Forge && Forge.weekScore) ? Forge.weekScore(weekData, getModules()) : 0;
 }
 
 // ===== DAILY CONTRIBUTION HEATMAP =====
@@ -559,22 +1117,18 @@ function renderScoreboard() {
   });
 }
 
-function renderCalendar() {
-  const grid = document.getElementById("calendarGrid");
-  grid.innerHTML = "";
-  const todayIso = iso(new Date());
-  dayNames().forEach((name, idx) => {
-    const date = addDays(selectedWeekStart, idx);
-    const dateIso = iso(date);
-    grid.insertAdjacentHTML("beforeend", `<div class="calendar-cell ${dateIso === todayIso ? "today" : ""}"><div class="dow">${name}</div><div class="date">${fmt(date)}</div><div class="bar"><div class="bar-fill" id="calBar-${idx}"></div></div><p class="hint" id="calText-${idx}">0% complete</p></div>`);
-  });
-}
-
 function renderDays() {
   const wrap = document.getElementById("daysGrid");
   const blueprint = getDailyBlueprint();
   const wk = getWeekData();
   wrap.innerHTML = "";
+
+  // Attribute legend — teaches what the colored dots on each habit mean.
+  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
+  if (attrs.length) {
+    const legend = attrs.map((a) => `<span class="al-item"><span class="al-dot" style="background:${attrColor(a)}"></span>${escapeHtml(attrName(a))}</span>`).join("");
+    wrap.insertAdjacentHTML("beforeend", `<div class="attr-legend-row">${legend}<span class="al-hint">tap a dot to set which stat a habit trains</span></div>`);
+  }
 
   const todayIndex = getTodayDayIndex();
   const entries = Object.entries(blueprint);
@@ -608,9 +1162,10 @@ function renderDays() {
       const id = taskId(dayIndex, task);
       const legacyId = `day-${dayIndex}-task-${taskIndex}`;
       if (wk.checks[id] === undefined && wk.checks[legacyId] !== undefined) wk.checks[id] = wk.checks[legacyId];
-      const cat = categoryFor(task);
+      const attr = taskAttr(task);
+      const cat = attrCat(attr);
       const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
-      group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><span class="q-xp">+${xp}</span></label>`);
+      group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><button class="q-attr" type="button" data-task="${escapeHtml(task)}" data-attr="${attr}" style="--ac:${attrColor(attr)}" title="Trains ${escapeHtml(attrName(attr))} · click to change" aria-label="Attribute: ${escapeHtml(attrName(attr))}"></button><span class="q-xp">+${xp}</span></label>`);
     });
     if (!tasks.length) {
       group.innerHTML = `<div class="day-empty">No quests yet for ${day}. Tap ✎ to build this day's checklist.</div>`;
@@ -640,13 +1195,14 @@ function applyWeekToUI() {
   if (mobileWeek) mobileWeek.textContent = `${fmt(selectedWeekStart)} – ${fmt(addDays(selectedWeekStart, 6))}`;
   if (mobileToday) mobileToday.textContent = new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   
-  renderCalendar();
   renderDays();
   renderWorkouts();
+  renderCustomSections();
   loadWeekFields();
   updateProgress();
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
+  applyModuleLayout();
   applySectionVisibility();
   updateCertCountdowns();
   renderBoss();
@@ -660,7 +1216,7 @@ function applyMobileSmartLayout() {
   if (!isMobile()) return;
   
   // On mobile, auto-collapse non-essential sections
-  const sectionsToCollapse = ['scoreboard', 'calendar', 'workout', 'diet', 'study', 'projects', 'review'];
+  const sectionsToCollapse = ['scoreboard', 'workout', 'diet', 'study', 'projects', 'review'];
   sectionsToCollapse.forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'DETAILS') el.open = false;
@@ -742,12 +1298,8 @@ function updateProgress() {
     const p = percent(dayDone, items.length);
     const badge = document.getElementById(`dayBadge-${d}`);
     const bar = document.getElementById(`dayBar-${d}`);
-    const calBar = document.getElementById(`calBar-${d}`);
-    const calText = document.getElementById(`calText-${d}`);
     if (badge) badge.textContent = `${dayDone}/${items.length}`;
     if (bar) bar.style.width = p + "%";
-    if (calBar) calBar.style.width = p + "%";
-    if (calText) calText.textContent = `${p}% complete`;
   }
 
   const studyHours = [...document.querySelectorAll('[data-hours="study"]')].reduce((sum, el) => sum + Number(el.value || 0), 0);
@@ -761,7 +1313,134 @@ function updateProgress() {
 
   const reviewDone = ["wins", "misses", "changes", "refuseDrop"].filter(id => document.getElementById(id)?.value.trim()).length;
   setMetric("review", percent(reviewDone, 4));
+  renderXpChips();
+  renderToday();
   if (typeof renderBoss === "function") renderBoss();
+}
+
+// ===== TODAY VIEW =====
+// A single consolidated checklist for today, grouped by the stat (attribute)
+// each item trains. Items are PROXIES over the real week.checks ids (daily
+// tasks + today's training row) — no duplicate ids, so toggling here updates the
+// same data the sections use. This is the "log once, organized by stat" surface.
+function renderToday() {
+  const host = document.getElementById("todayLanes");
+  if (!host) return;
+  const wk = getWeekData();
+  const di = getTodayDayIndex();
+  const blueprint = getDailyBlueprint();
+  const dayName = Object.keys(blueprint)[di];
+  const items = [];
+  (blueprint[dayName] || []).forEach((t) => {
+    const attr = taskAttr(t);
+    items.push({ id: taskId(di, t), label: t, attr, xp: (window.Game && Game.xpForCat) ? Game.xpForCat(attrCat(attr)) : 10 });
+  });
+  // Today's training row — surfaced here so you don't keep a duplicate "Workout"
+  // daily task; checking it ticks the same workout-N box the Training table uses.
+  const training = getModules().find((m) => m.id === "workout");
+  if (training && training.enabled !== false) {
+    const wo = (getWorkouts()[di] || []);
+    items.push({ id: `workout-${di}`, label: wo[1] || "Workout", attr: "Body", xp: (window.Game && Game.xpForCat) ? Game.xpForCat("training") : 30, tag: training.name || "Training" });
+  }
+  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
+  let html = "";
+  let totalDone = 0;
+  attrs.forEach((a) => {
+    const lane = items.filter((it) => it.attr === a);
+    if (!lane.length) return;
+    const done = lane.filter((it) => wk.checks[it.id]).length;
+    totalDone += done;
+    html += `<div class="today-lane"><div class="tl-head"><span class="tl-dot" style="--ac:${attrColor(a)}"></span><span class="tl-name">${escapeHtml(attrName(a))}</span><span class="tl-count">${done}/${lane.length}</span></div>`;
+    html += lane.map((it) => `<label class="check today-item"><input type="checkbox" data-today-id="${escapeHtml(it.id)}" ${wk.checks[it.id] ? "checked" : ""}><span class="q-text">${escapeHtml(it.label)}</span>${it.tag ? `<span class="ti-tag">${escapeHtml(it.tag)}</span>` : ""}<span class="q-xp">+${it.xp}</span></label>`).join("");
+    html += `</div>`;
+  });
+  host.innerHTML = html || `<div class="day-empty">Nothing scheduled for today. Add habits in the Daily section.</div>`;
+  const prog = document.getElementById("todayProgress");
+  if (prog) prog.textContent = items.length ? `${totalDone}/${items.length}` : "";
+}
+function toggleTodayItem(id, checked) {
+  const wk = getWeekData();
+  wk.checks[id] = checked;
+  wk.updatedAt = new Date().toISOString();
+  const secEl = document.getElementById(id);          // mirror onto the section's own checkbox
+  if (secEl && secEl.type === "checkbox") secEl.checked = checked;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { persistDatabase(); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
+  updateProgress();   // refreshes ring, metrics, chips, and re-renders Today
+}
+
+// ===== CALENDAR (month view) =====
+let calViewDate = null;
+function openCalendar() {
+  calViewDate = new Date();
+  renderCalendarMonth();
+  const md = document.getElementById("calendarModal");
+  if (md) { md.classList.add("active"); md.setAttribute("aria-hidden", "false"); }
+}
+function closeCalendar() {
+  const md = document.getElementById("calendarModal");
+  if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); }
+}
+function calShiftMonth(delta) {
+  if (!calViewDate) calViewDate = new Date();
+  calViewDate = new Date(calViewDate.getFullYear(), calViewDate.getMonth() + delta, 1);
+  renderCalendarMonth();
+}
+function renderCalendarMonth() {
+  const grid = document.getElementById("calGrid");
+  if (!grid || !calViewDate) return;
+  const year = calViewDate.getFullYear(), month = calViewDate.getMonth();
+  const first = new Date(year, month, 1);
+  const startDay = first.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const titleEl = document.getElementById("calTitle");
+  if (titleEl) titleEl.textContent = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  let cells = "";
+  let activeDays = 0, sumPct = 0, ratedDays = 0, questsDone = 0;
+  for (let i = 0; i < startDay; i++) cells += `<div class="cal-cell empty" aria-hidden="true"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d);
+    const isToday = date.getTime() === today.getTime();
+    const isFuture = date > today;
+    const info = isFuture ? null : dayPctInfo(date);
+    const lvl = info ? hmLevel(info.pct) : 0;
+    if (info && info.done > 0) { activeDays++; questsDone += info.done; }
+    if (info && info.total > 0) { sumPct += info.pct; ratedDays++; }
+    const meta = (info && info.total) ? `<span class="cal-meta">${info.done}/${info.total}</span>` : "";
+    cells += `<button class="cal-cell d${lvl}${isToday ? " today" : ""}${isFuture ? " future" : ""}" data-date="${iso(date)}"${isFuture ? ' tabindex="-1"' : ""}><span class="cal-num">${d}</span>${meta}</button>`;
+  }
+  grid.innerHTML = cells;
+  const avg = ratedDays ? Math.round(sumPct / ratedDays) : 0;
+  const sum = document.getElementById("calSummary");
+  if (sum) sum.innerHTML =
+    `<span class="cs-item"><strong>${activeDays}</strong> active days</span>` +
+    `<span class="cs-item"><strong>${avg}%</strong> avg completion</span>` +
+    `<span class="cs-item"><strong>${questsDone}</strong> quests done</span>`;
+}
+
+// Per-section "+N XP this week" chips, so XP is visibly earned from every tab.
+// Driven by the module list (built-in + custom), keyed by each module's section
+// id and XP source. Chips are injected into each <summary> (CSP-safe DOM) and
+// refreshed on every change via updateProgress().
+function renderXpChips() {
+  const bySource = (window.Game && Game.weekXpBySource) ? Game.weekXpBySource(getWeekData()) : {};
+  getModules().forEach((m) => {
+    const section = document.getElementById(m.id);
+    if (!section) return;
+    const summary = section.querySelector("summary");
+    if (!summary) return;
+    let chip = summary.querySelector(".xp-chip");
+    if (!chip) {
+      chip = document.createElement("span");
+      chip.className = "xp-chip";
+      const chev = summary.querySelector(".chev");
+      if (chev && chev.parentNode) chev.parentNode.insertBefore(chip, chev);
+      else summary.appendChild(chip);
+    }
+    const xp = Math.round(bySource[m.source] || 0);
+    chip.textContent = xp > 0 ? `+${xp} XP` : "";   // hidden via .xp-chip:empty
+  });
 }
 
 // ===== SETTINGS TABS =====
@@ -784,6 +1463,7 @@ function initSettingsTabs() {
       
       // Render content for specific tabs
       if (target === 'appearance') renderThemeGrid();
+      if (target === 'modules') { renderModulesEditor(); renderStatsEditor(); }
     });
   });
 }
@@ -823,8 +1503,6 @@ function initMobileTabBar() {
         return;
       }
 
-      const wasActive = btn.classList.contains('active');
-
       // Close more drawer if open
       moreDrawer.classList.remove('active');
 
@@ -832,10 +1510,8 @@ function initMobileTabBar() {
       tabBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
 
-      // Re-tapping the Home/Today tab returns to the character screen at the top.
-      if (target === 'daily' && wasActive) { scrollToTop(); return; }
-
-      // Scroll to target section
+      // Scroll to the target section. Today goes straight to today's task list
+      // (the dashboard hero is reachable by tapping the mobile header instead).
       const targetEl = document.getElementById(target);
       if (targetEl) {
         if (targetEl.tagName === 'DETAILS' && !targetEl.open) targetEl.open = true;
@@ -845,6 +1521,13 @@ function initMobileTabBar() {
   });
 
   initScrollSpy(tabBtns, moreDrawer);
+
+  // Tapping the mobile header — the sticky context bar or the brand wordmark —
+  // jumps back up to the dashboard hero (character screen).
+  document.querySelectorAll('.mobile-context, .brand').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => { tabHaptic(); scrollToTop(); });
+  });
   
   // More drawer items
   const moreActions = {
@@ -854,7 +1537,7 @@ function initMobileTabBar() {
     'moreProjectsBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('projects'); },
     'moreDietBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('diet'); },
     'moreReviewBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('review'); },
-    'moreCalendarBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('calendar'); },
+    'moreCalendarBtn': () => { moreDrawer.classList.remove('active'); openCalendar(); },
     'moreExpandBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = true); },
     'moreCollapseBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = false); },
     'moreExportBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('exportBtn').click(); },
@@ -897,12 +1580,12 @@ function scrollToSection(id) {
 
 // Keep the active bottom-tab in sync with what's actually on screen, so the bar
 // stops lying after the user scrolls. Sections without their own tab fold into
-// the nearest one — the whole top region (hero/boss/scoreboard/calendar) is
+// the nearest one — the whole top region (hero/boss/scoreboard) is
 // Today; diet→Train; projects/review→More. Cabinet is a modal, never scroll-lit.
 function initScrollSpy(tabBtns, moreDrawer) {
   const MAP = [
-    ['charScreen', 'daily'], ['boss', 'daily'],
-    ['scoreboard', 'daily'], ['calendar', 'daily'], ['daily', 'daily'],
+    ['charScreen', 'today'], ['boss', 'today'], ['today', 'today'],
+    ['scoreboard', 'today'], ['daily', 'today'],
     ['workout', 'workout'], ['diet', 'workout'],
     ['study', 'study'],
     ['projects', 'more'], ['review', 'more'],
@@ -939,8 +1622,8 @@ function initScrollSpy(tabBtns, moreDrawer) {
 // ===== SETTINGS MODAL =====
 // ===== SECTION VISIBILITY =====
 const SECTIONS = [
-  ["boss", "Weekly Boss"], ["scoreboard", "Scoreboard"], ["calendar", "Calendar"], ["daily", "Daily"],
-  ["workout", "Training"], ["diet", "Diet"], ["study", "Study"],
+  ["boss", "Weekly Boss"], ["scoreboard", "Scoreboard"], ["daily", "Daily"],
+  ["workout", "Training"], ["diet", "Nutrition"], ["study", "Study"],
   ["projects", "Projects"], ["review", "Review"]
 ];
 function getHiddenSections() { return settings.hiddenSections || []; }
@@ -992,6 +1675,8 @@ function openSettings() {
   const sf = document.getElementById("cfgStreakFreeze"); if (sf) sf.value = (settings.streakFreeze != null ? settings.streakFreeze : 1);
   const cs = document.getElementById("cfgCallsign"); if (cs) cs.value = settings.callsign || "";
   renderSectionToggles();
+  renderModulesEditor();
+  renderStatsEditor();
   const rem = getReminders();
   const re = document.getElementById("cfgRemindEnable"); if (re) re.checked = !!rem.enabled;
   const rm = document.getElementById("cfgRemindMorning"); if (rm) rm.value = rem.morning || "08:00";
@@ -1194,6 +1879,8 @@ function renderTrends() {
 
 function bindEvents() {
   document.addEventListener("input", e => { if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateProgress(); } });
+  // Today view proxy checkboxes — toggle the underlying week.checks id once.
+  document.addEventListener("change", e => { if (e.target.matches && e.target.matches("input[data-today-id]")) toggleTodayItem(e.target.getAttribute("data-today-id"), e.target.checked); });
   // Certification target dates (stored in settings.certDates, not week fields)
   document.addEventListener("change", e => {
     if (!e.target.matches("[data-certdate]")) return;
@@ -1213,8 +1900,13 @@ function bindEvents() {
       if (e.target.id?.startsWith('status-study-') && e.target.value === 'Completed') {
         const idx = parseInt(e.target.id.split('-').pop());
         const area = getStudyAreas()[idx];
-        if (area && confirm(`🏆 Archive "${area}" as a completed certification?`)) {
-          addAchievement(area, 'certification', `Completed during week of ${document.getElementById('weekRangeText').textContent}`);
+        if (area && confirm(`Archive "${area}" as a completed certification?`)) {
+          saveRecord({
+            title: area, category: 'certification',
+            notes: `Completed during week of ${document.getElementById('weekRangeText').textContent}`,
+            completed_at: new Date().toISOString(), week_key: weekKey(),
+            source: 'auto', ext_key: 'cert:' + area + ':' + weekKey(),
+          });
         }
       }
     } 
@@ -1223,6 +1915,30 @@ function bindEvents() {
     const btn = e.target.closest(".edit-day-btn");
     if (btn) { e.preventDefault(); e.stopPropagation(); openDayEditor(Number(btn.dataset.dayIndex)); }
   });
+  // Click a daily task's attribute dot to cycle which stat it trains.
+  document.addEventListener("click", e => {
+    const dot = e.target.closest(".q-attr");
+    if (!dot) return;
+    e.preventDefault(); e.stopPropagation();
+    const list = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : ["Discipline", "Body", "Mind", "Vitality", "Craft"];
+    const next = list[(list.indexOf(dot.dataset.attr) + 1) % list.length];
+    setTaskAttr(dot.dataset.task, next);
+  });
+  // Pencil on a custom section opens the Edit Section modal.
+  document.addEventListener("click", e => {
+    const eb = e.target.closest(".edit-section-btn");
+    if (!eb) return;
+    e.preventDefault(); e.stopPropagation();
+    openSectionEditor(eb.dataset.moduleId);
+  });
+  const esClose = document.getElementById("editSectionClose");
+  if (esClose) esClose.onclick = closeSectionEditor;
+  const esCancel = document.getElementById("editSectionCancel");
+  if (esCancel) esCancel.onclick = closeSectionEditor;
+  const esSave = document.getElementById("editSectionSave");
+  if (esSave) esSave.onclick = saveSectionEditor;
+  const esModal = document.getElementById("editSectionModal");
+  if (esModal) esModal.addEventListener("click", e => { if (e.target.id === "editSectionModal") closeSectionEditor(); });
   document.getElementById("prevWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, -7); applyWeekToUI(); };
   document.getElementById("nextWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, 7); applyWeekToUI(); };
   document.getElementById("currentWeekBtn").onclick = () => { selectedWeekStart = getStartOfWeek(new Date()); applyWeekToUI(); };
@@ -1232,9 +1948,36 @@ function bindEvents() {
   document.getElementById("expandAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = true);
   document.getElementById("collapseAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = false);
   document.getElementById("cancelDayEditBtn").onclick = closeDayEditor;
+  const cancelDayTop = document.getElementById("cancelDayEditTopBtn");
+  if (cancelDayTop) cancelDayTop.onclick = closeDayEditor;
   document.getElementById("saveDayTemplateBtn").onclick = saveDayTemplate;
   document.getElementById("resetDayTemplateBtn").onclick = resetDayTemplate;
   document.getElementById("editDayModal").addEventListener("click", e => { if (e.target.id === "editDayModal") closeDayEditor(); });
+  // Day-editor rows: add / reorder / delete / live stat-dot
+  const addDayTaskBtn = document.getElementById("addDayTaskBtn");
+  if (addDayTaskBtn) addDayTaskBtn.onclick = () => {
+    const rows = dayEditorReadRows();
+    rows.push({ text: "", attr: "Discipline" });
+    renderDayEditorRows(rows);
+    const inputs = document.querySelectorAll("#editDayRows .de-text");
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  };
+  const dayRows = document.getElementById("editDayRows");
+  if (dayRows) {
+    dayRows.addEventListener("click", (e) => {
+      const row = e.target.closest(".day-edit-row"); if (!row) return;
+      const rows = dayEditorReadRows();
+      const idx = [...dayRows.children].indexOf(row);
+      if (e.target.closest(".de-del")) { rows.splice(idx, 1); renderDayEditorRows(rows); }
+      else if (e.target.closest(".de-up") && idx > 0) { [rows[idx - 1], rows[idx]] = [rows[idx], rows[idx - 1]]; renderDayEditorRows(rows); }
+      else if (e.target.closest(".de-down") && idx < rows.length - 1) { [rows[idx + 1], rows[idx]] = [rows[idx], rows[idx + 1]]; renderDayEditorRows(rows); }
+    });
+    dayRows.addEventListener("change", (e) => {
+      if (!e.target.classList.contains("de-attr")) return;
+      const dot = e.target.closest(".day-edit-row").querySelector(".de-dot");
+      if (dot) dot.style.setProperty("--ac", attrColor(e.target.value));
+    });
+  }
 
   document.querySelectorAll(".nav a[href^='#']").forEach(link => {
     link.addEventListener("click", e => {
@@ -1300,6 +2043,29 @@ function bindEvents() {
   // Cabinet (trophies + insignias + records)
   const openCabinetBtn = document.getElementById("openCabinetBtn");
   if (openCabinetBtn) openCabinetBtn.onclick = openCabinet;
+  // Calendar modal
+  const openCalBtn = document.getElementById("openCalendarBtn");
+  if (openCalBtn) openCalBtn.onclick = openCalendar;
+  const calClose = document.getElementById("calClose");
+  if (calClose) calClose.onclick = closeCalendar;
+  const calPrev = document.getElementById("calPrev");
+  if (calPrev) calPrev.onclick = () => calShiftMonth(-1);
+  const calNext = document.getElementById("calNext");
+  if (calNext) calNext.onclick = () => calShiftMonth(1);
+  const calTodayBtn = document.getElementById("calToday");
+  if (calTodayBtn) calTodayBtn.onclick = () => { calViewDate = new Date(); renderCalendarMonth(); };
+  const calModal = document.getElementById("calendarModal");
+  if (calModal) calModal.addEventListener("click", (e) => { if (e.target.id === "calendarModal") closeCalendar(); });
+  const calGrid = document.getElementById("calGrid");
+  if (calGrid) calGrid.addEventListener("click", (e) => {
+    const cell = e.target.closest(".cal-cell[data-date]");
+    if (!cell || cell.classList.contains("future") || cell.classList.contains("empty")) return;
+    const date = new Date(cell.dataset.date + "T00:00:00");
+    selectedWeekStart = getStartOfWeek(date);
+    applyWeekToUI();
+    closeCalendar();
+    scrollToSection("today");
+  });
   const openCabinetHeroBtn = document.getElementById("openCabinetHeroBtn");
   if (openCabinetHeroBtn) openCabinetHeroBtn.onclick = openCabinet;
   const closeCabinetBtn = document.getElementById("closeCabinetBtn");
@@ -1310,38 +2076,13 @@ function bindEvents() {
     if (e.target.id === "cabinetModal") closeCabinet();
   });
 
-  // Trophy Case
+  // Records form (add + edit)
   const addTrophyBtn = document.getElementById("addTrophyBtn");
-  const addTrophyForm = document.getElementById("addTrophyForm");
-  if (addTrophyBtn && addTrophyForm) {
-    addTrophyBtn.onclick = () => {
-      addTrophyForm.classList.toggle('active');
-      addTrophyBtn.style.display = addTrophyForm.classList.contains('active') ? 'none' : 'block';
-    };
-  }
+  if (addTrophyBtn) addTrophyBtn.onclick = () => openRecordForm(null);
   const cancelTrophyBtn = document.getElementById("cancelTrophyBtn");
-  if (cancelTrophyBtn) {
-    cancelTrophyBtn.onclick = () => {
-      addTrophyForm.classList.remove('active');
-      addTrophyBtn.style.display = 'block';
-    };
-  }
+  if (cancelTrophyBtn) cancelTrophyBtn.onclick = () => closeRecordForm();
   const saveTrophyBtn = document.getElementById("saveTrophyBtn");
-  if (saveTrophyBtn) {
-    saveTrophyBtn.onclick = async () => {
-      const title = document.getElementById("trophyTitle").value.trim();
-      if (!title) { alert("Please enter a title."); return; }
-      const category = document.getElementById("trophyCategory").value;
-      const notes = document.getElementById("trophyNotes").value.trim();
-      await addAchievement(title, category, notes);
-      // Reset form
-      document.getElementById("trophyTitle").value = '';
-      document.getElementById("trophyNotes").value = '';
-      document.getElementById("trophyCategory").selectedIndex = 0;
-      addTrophyForm.classList.remove('active');
-      addTrophyBtn.style.display = 'block';
-    };
-  }
+  if (saveTrophyBtn) saveTrophyBtn.onclick = () => saveRecordForm();
 
   // Edit Metrics
   const editMetricsBtn = document.querySelector(".edit-metrics-btn");
@@ -1553,6 +2294,8 @@ function bindEvents() {
 
   // Init settings tabs
   initSettingsTabs();
+  wireModulesEditor();
+  wireStatsEditor();
   
   // Init mobile tab bar
   initMobileTabBar();
@@ -1567,15 +2310,40 @@ function bindEvents() {
   });
 }
 
+function dayEditorAttrs() { return (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : ["Discipline", "Body", "Mind", "Vitality", "Craft"]; }
+function renderDayEditorRows(rows) {
+  const wrap = document.getElementById("editDayRows");
+  if (!wrap) return;
+  const attrs = dayEditorAttrs();
+  wrap.innerHTML = rows.map((row) => {
+    const attr = row.attr || "Discipline";
+    const opts = attrs.map((a) => `<option value="${a}" ${a === attr ? "selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
+    return `<div class="day-edit-row">
+      <div class="de-move">
+        <button class="de-up" type="button" aria-label="Move up"><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
+        <button class="de-down" type="button" aria-label="Move down"><svg viewBox="0 0 24 24" class="ic"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <span class="de-dot" style="--ac:${attrColor(attr)}"></span>
+      <input class="de-text" type="text" value="${escapeHtml(row.text)}" placeholder="Task name" spellcheck="false">
+      <select class="de-attr" aria-label="Stat">${opts}</select>
+      <button class="de-del" type="button" aria-label="Remove task"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>`;
+  }).join("");
+}
+function dayEditorReadRows() {
+  return [...document.querySelectorAll("#editDayRows .day-edit-row")].map((r) => ({
+    text: r.querySelector(".de-text").value.trim(),
+    attr: r.querySelector(".de-attr").value,
+  }));
+}
 function openDayEditor(dayIndex) {
   editingDayIndex = dayIndex;
   const name = dayNames()[dayIndex];
   const tasks = getDailyBlueprint()[name] || [];
   document.getElementById("editDayTitle").textContent = `Edit ${name} Checklist`;
-  document.getElementById("editDayTextarea").value = tasks.join("\n");
+  renderDayEditorRows(tasks.map((t) => ({ text: t, attr: taskAttr(t) })));
   document.getElementById("editDayModal").classList.add("active");
   document.getElementById("editDayModal").setAttribute("aria-hidden", "false");
-  setTimeout(() => document.getElementById("editDayTextarea").focus(), 20);
 }
 
 function closeDayEditor() {
@@ -1587,11 +2355,15 @@ function closeDayEditor() {
 async function saveDayTemplate() {
   if (editingDayIndex === null) return;
   const name = dayNames()[editingDayIndex];
-  const tasks = document.getElementById("editDayTextarea").value.split("\n").map(x => x.trim()).filter(Boolean);
-  if (!tasks.length) { alert("Keep at least one task in the day."); return; }
+  const rows = dayEditorReadRows().filter((r) => r.text);
+  if (!rows.length) { alert("Keep at least one task in the day."); return; }
   const templates = structuredCloneSafe(getDailyBlueprint());
-  templates[name] = tasks;
+  templates[name] = rows.map((r) => r.text);
   settings.dayTemplates = templates;
+  // Persist each task's chosen attribute explicitly (keyed by task slug) so it's
+  // no longer inferred — the picker is now the source of truth.
+  if (!settings.taskAttrs) settings.taskAttrs = {};
+  rows.forEach((r) => { if (window.Forge) settings.taskAttrs[Forge.dailyAttrKey(r.text)] = r.attr; });
   await persistSettings();
   closeDayEditor();
   applyWeekToUI();

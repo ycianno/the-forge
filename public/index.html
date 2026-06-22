@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=28" />
+  <link rel="stylesheet" href="style.css?v=40" />
 </head>
 <body>
   <main class="shell">
@@ -17,14 +17,16 @@
       <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></span><span>The Forge</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> <span id="streakUnit">Weeks</span></span></div>
       <nav class="nav" id="mainNav">
         <!-- Desktop nav links -->
+        <a href="#today" class="desktop-nav-item">Today</a>
         <a href="#scoreboard" class="desktop-nav-item">Scoreboard</a>
-        <a href="#calendar" class="desktop-nav-item">Calendar</a>
         <a href="#daily" class="desktop-nav-item">Daily</a>
         <a href="#workout" class="desktop-nav-item">Training</a>
+        <a href="#diet" class="desktop-nav-item">Nutrition</a>
         <a href="#study" class="desktop-nav-item">Study</a>
         <a href="#projects" class="desktop-nav-item">Projects</a>
         <span class="nav-divider desktop-nav-item" aria-hidden="true"></span>
         <button class="ghost nav-icon desktop-nav-item" id="openFocusBtn" title="Focus timer" aria-label="Focus timer"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg></button>
+        <button class="ghost nav-icon desktop-nav-item" id="openCalendarBtn" title="Calendar" aria-label="Calendar"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openReportBtn" title="Reports" aria-label="Reports"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20V10M10 20V4M16 20v-7M3 20h18"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="expandAllBtn" title="Expand all" aria-label="Expand all"><svg viewBox="0 0 24 24" class="ic"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="collapseAllBtn" title="Collapse all" aria-label="Collapse all"><svg viewBox="0 0 24 24" class="ic"><path d="M8 5l4 4 4-4M8 19l4-4 4 4"/></svg></button>
@@ -34,7 +36,7 @@
         <a href="/api/logout" class="danger nav-icon desktop-nav-item" title="Logout" aria-label="Logout" style="margin-left: 6px;"><svg viewBox="0 0 24 24" class="ic"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></a>
 
         <!-- Mobile bottom tab bar -->
-        <button class="tab-btn active" data-target="daily" id="tabDaily">
+        <button class="tab-btn active" data-target="today" id="tabDaily">
           <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
           <span class="tab-label">Today</span>
         </button>
@@ -77,19 +79,19 @@
     <!-- More Drawer (mobile) -->
     <div class="more-drawer" id="moreDrawer">
       <div class="more-grid">
-        <button class="more-item" id="moreScoreboardBtn"><span class="more-icon">📋</span>Scoreboard</button>
-        <button class="more-item" id="moreReportsBtn"><span class="more-icon">📊</span>Reports</button>
-        <button class="more-item" id="moreSettingsBtn"><span class="more-icon">⚙️</span>Settings</button>
-        <button class="more-item" id="moreProjectsBtn"><span class="more-icon">🚀</span>Projects</button>
-        <button class="more-item" id="moreDietBtn"><span class="more-icon">🥗</span>Diet</button>
-        <button class="more-item" id="moreReviewBtn"><span class="more-icon">📝</span>Review</button>
-        <button class="more-item" id="moreCalendarBtn"><span class="more-icon">📅</span>Calendar</button>
-        <button class="more-item" id="moreExpandBtn"><span class="more-icon">⬇️</span>Expand All</button>
-        <button class="more-item" id="moreCollapseBtn"><span class="more-icon">⬆️</span>Collapse All</button>
-        <button class="more-item" id="moreExportBtn"><span class="more-icon">📤</span>Export</button>
-        <button class="more-item" id="moreImportBtn"><span class="more-icon">📥</span>Import</button>
-        <button class="more-item" id="moreResetBtn"><span class="more-icon">♻️</span>Reset Week</button>
-        <a href="/api/logout" class="more-item"><span class="more-icon">🚪</span>Logout</a>
+        <button class="more-item" id="moreScoreboardBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="m9 13 2 2 4-4"/></svg></span>Scoreboard</button>
+        <button class="more-item" id="moreReportsBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20V10M10 20V4M16 20v-7M3 20h18"/></svg></span>Reports</button>
+        <button class="more-item" id="moreSettingsBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>Settings</button>
+        <button class="more-item" id="moreProjectsBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg></span>Projects</button>
+        <button class="more-item" id="moreDietBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06z"/><path d="M10 2c1 .5 2 2 2 5"/></svg></span>Nutrition</button>
+        <button class="more-item" id="moreReviewBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></span>Review</button>
+        <button class="more-item" id="moreCalendarBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Calendar</button>
+        <button class="more-item" id="moreExpandBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span>Expand All</button>
+        <button class="more-item" id="moreCollapseBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M8 5l4 4 4-4M8 19l4-4 4 4"/></svg></span>Collapse All</button>
+        <button class="more-item" id="moreExportBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></span>Export</button>
+        <button class="more-item" id="moreImportBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span>Import</button>
+        <button class="more-item" id="moreResetBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span>Reset Week</button>
+        <a href="/api/logout" class="more-item"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>Logout</a>
       </div>
     </div>
 
@@ -199,33 +201,36 @@
       </div>
     </section>
 
+    <section class="section today-card glass" id="today">
+      <div class="today-head">
+        <div class="summary-left"><h2>Today</h2><p class="hint">Everything due today, grouped by the stat it trains. Log it once here — it syncs with every section.</p></div>
+        <span class="today-progress" id="todayProgress"></span>
+      </div>
+      <div class="today-lanes" id="todayLanes"></div>
+    </section>
+
     <details id="scoreboard" class="section section-card glass" open>
       <summary><div class="summary-left"><h2>Weekly Scoreboard</h2><p class="hint">Commitments are separated from bonus targets so the system stays honest.</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-metrics-btn" type="button" title="Edit Metrics"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
       <div class="content"><div class="grid grid-4" id="scoreboardGrid"></div></div>
     </details>
 
-    <details id="calendar" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Internal Week Calendar</h2><p class="hint">This dashboard automatically tracks the selected week. Use this as the command map.</p></div><span class="chev">⌄</span></summary>
-      <div class="content"><div class="calendar" id="calendarGrid"></div></div>
-    </details>
-
     <details id="daily" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Daily Discipline Timeline</h2><p class="hint">Daily basics protect the structure: hygiene, movement, protein, study, reading, sleep.</p></div><span class="chev">⌄</span></summary>
+      <summary><div class="summary-left"><h2>Daily Habits</h2><p class="hint">Daily basics protect the structure. Build each day's checklist however you train.</p></div><span class="chev">⌄</span></summary>
       <div class="content"><div class="grid grid-2" id="daysGrid"></div></div>
     </details>
 
     <details id="workout" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Workout Progress</h2><p class="hint">Notes preserve progression across the plan.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillWorkout">5 sessions minimum</span><button class="icon-btn edit-workouts-btn" type="button" title="Edit Workouts"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
+      <summary><div class="summary-left"><h2>Training</h2><p class="hint">Notes preserve progression across the plan.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillWorkout">5 sessions minimum</span><button class="icon-btn edit-workouts-btn" type="button" title="Edit Workouts"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
       <div class="content"><table><thead><tr><th>Day</th><th>Plan</th><th>Done</th><th>Notes / Weight / Reps</th></tr></thead><tbody id="workoutRows"></tbody></table></div>
     </details>
 
     <details id="diet" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Protein & Diet Control</h2><p class="hint">Track the minimum nutrition behaviors that support muscle growth.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillDiet">7 protein days</span><button class="icon-btn edit-diet-btn" type="button" title="Edit Diet Plan"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
+      <summary><div class="summary-left"><h2>Nutrition</h2><p class="hint">Track the daily nutrition behaviors you want to keep.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillDiet">7 protein days</span><button class="icon-btn edit-diet-btn" type="button" title="Edit Diet Plan"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
       <div class="content grid grid-3" id="dietRows"></div>
     </details>
 
     <details id="study" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Career & Certification Study</h2><p class="hint">Connect studying to promotion, automation, and cybersecurity direction.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillStudy">14 hours/week minimum</span><button class="icon-btn edit-study-btn" type="button" title="Edit Study Plan"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
+      <summary><div class="summary-left"><h2>Study</h2><p class="hint">Connect studying to the direction you're growing toward.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillStudy">14 hours/week minimum</span><button class="icon-btn edit-study-btn" type="button" title="Edit Study Plan"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
       <div class="content">
         <div id="certSummary" class="cert-summary"></div>
         <table>
@@ -237,7 +242,7 @@
     </details>
 
     <details id="projects" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Project Execution</h2><p class="hint">Commitment: 2 hours/week. Bonus stretch: 3 hours. Research only counts when it creates output.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillProject">2 hrs minimum · 3 bonus</span><button class="icon-btn edit-project-btn" type="button" title="Edit Project Outputs"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
+      <summary><div class="summary-left"><h2>Projects</h2><p class="hint">Hours only count when the work creates output. Research without output is a hobby.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillProject">2 hrs minimum · 3 bonus</span><button class="icon-btn edit-project-btn" type="button" title="Edit Project Outputs"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
       <div class="content grid grid-3">
         <div class="metric"><div class="top"><div><div class="metric-title">Project Hours</div><p class="hint" id="hintProject">Minimum target: 2 hrs</p></div><span class="metric-number"><span id="projectHoursValue">0</span>/<span id="projectTargetValue">2</span></span></div><div class="bar"><div class="bar-fill" id="projectBar"></div></div><label class="label" style="margin-top:14px">Hours completed</label><input id="projectHours" data-save type="number" min="0" step="0.25" value="0"></div>
         <div class="metric"><div class="metric-title">Valid Output</div><div id="projectChecks"></div></div>
@@ -256,16 +261,41 @@
       </div>
     </details>
 
+    <!-- Edit Section Modal (custom sections) -->
+    <div class="modal-backdrop" id="editSectionModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="editSectionTitle" style="max-width: 480px;">
+        <div class="modal-head">
+          <div class="modal-title-wrap">
+            <span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></span>
+            <h3 id="editSectionTitle">Edit Section</h3>
+          </div>
+          <button class="modal-close" id="editSectionClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div id="editSectionBody"></div>
+        <div class="modal-actions">
+          <button id="editSectionCancel" type="button">Cancel</button>
+          <button id="editSectionSave" type="button" class="primary">Save changes</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Edit Day Modal -->
     <div class="modal-backdrop" id="editDayModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="editDayTitle">
-        <h3 id="editDayTitle">Edit Day Checklist</h3>
-        <p class="hint">One task per line. Matching task names keep their completed status. New tasks are added safely.</p>
-        <textarea id="editDayTextarea" spellcheck="false"></textarea>
+      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="editDayTitle" style="max-width: 540px;">
+        <div class="modal-head">
+          <div class="modal-title-wrap">
+            <span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+            <h3 id="editDayTitle">Edit Day Checklist</h3>
+          </div>
+          <button class="modal-close" id="cancelDayEditTopBtn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <p class="hint" style="margin-top:4px;">Name each task and pick which stat it trains — the colored dot shows the stat. Reorder with the arrows.</p>
+        <div class="day-edit-rows" id="editDayRows"></div>
+        <button class="day-edit-add" id="addDayTaskBtn" type="button"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg> Add task</button>
         <div class="modal-actions">
-          <button class="danger" id="resetDayTemplateBtn" type="button">Reset This Day Template</button>
+          <button class="danger" id="resetDayTemplateBtn" type="button">Reset to default</button>
           <button id="cancelDayEditBtn" type="button">Cancel</button>
-          <button id="saveDayTemplateBtn" type="button">Save Checklist</button>
+          <button id="saveDayTemplateBtn" type="button" class="primary">Save Checklist</button>
         </div>
       </div>
     </div>
@@ -283,6 +313,7 @@
 
         <div class="settings-tabs">
           <button class="settings-tab active" data-settings-tab="goals">Targets</button>
+          <button class="settings-tab" data-settings-tab="modules">Sections</button>
           <button class="settings-tab" data-settings-tab="profile">Profile</button>
           <button class="settings-tab" data-settings-tab="appearance">Themes</button>
           <button class="settings-tab" data-settings-tab="data">Data</button>
@@ -319,6 +350,14 @@
             <div class="set-row-text"><span class="set-row-label">Streak rest days</span><span class="set-row-hint">Missed days your day-streak forgives 🛡️</span></div>
             <input type="number" id="cfgStreakFreeze" value="1" min="0" max="3">
           </div>
+        </div>
+
+        <!-- Sections Tab -->
+        <div class="settings-panel" id="settingsModules" data-panel="modules" style="display:none;">
+          <p class="settings-intro">Rename your sections, reorder them, and show or hide the ones you don't use. This is your dashboard — make it yours.</p>
+          <div class="modules-editor" id="modulesEditor"></div>
+          <p class="settings-intro" style="margin-top:22px;">Your stats — rename each and pick its color. The five stats stay; only how they look changes.</p>
+          <div class="stats-editor" id="statsEditor"></div>
         </div>
 
         <!-- Profile Tab -->
@@ -376,46 +415,79 @@
         <p class="cab-section-label">Trophies</p>
         <div class="tro-showcase" id="cabinetTrophies"></div>
 
-        <div class="cab-section-head">
-          <p class="cab-section-label" style="margin:0;">Insignias</p>
-          <span class="badge-count" id="insigniaCount">0 / 0</span>
-        </div>
-        <div class="ins-filters" id="insigniaFilters">
-          <button class="ins-filter on" data-filter="all" type="button">All</button>
-          <button class="ins-filter" data-filter="ascension" type="button">Ascension</button>
-          <button class="ins-filter" data-filter="attributes" type="button">Attributes</button>
-          <button class="ins-filter" data-filter="class" type="button">Classes</button>
-          <button class="ins-filter" data-filter="missions" type="button">Missions</button>
-          <button class="ins-filter" data-filter="consistency" type="button">Consistency</button>
-          <button class="ins-filter" data-filter="boss" type="button">Boss</button>
-          <button class="ins-filter" data-filter="study" type="button">Study</button>
-          <button class="ins-filter" data-filter="volume" type="button">Volume</button>
-        </div>
-        <div class="badge-wall" id="insigniaGrid"></div>
+        <div class="cab-cols">
+          <section class="cab-col cab-col-insignias">
+            <div class="cab-section-head">
+              <p class="cab-section-label" style="margin:0;">Insignias</p>
+              <span class="badge-count" id="insigniaCount">0 / 0</span>
+            </div>
+            <div class="cab-summary" id="cabSummary"></div>
+            <div class="ins-filters" id="insigniaFilters">
+              <button class="ins-filter on" data-filter="all" type="button">All</button>
+              <button class="ins-filter" data-filter="ascension" type="button">Ascension</button>
+              <button class="ins-filter" data-filter="attributes" type="button">Attributes</button>
+              <button class="ins-filter" data-filter="class" type="button">Classes</button>
+              <button class="ins-filter" data-filter="missions" type="button">Missions</button>
+              <button class="ins-filter" data-filter="records" type="button">Records</button>
+              <button class="ins-filter" data-filter="consistency" type="button">Consistency</button>
+              <button class="ins-filter" data-filter="boss" type="button">Boss</button>
+              <button class="ins-filter" data-filter="study" type="button">Study</button>
+              <button class="ins-filter" data-filter="volume" type="button">Volume</button>
+            </div>
+            <div class="badge-wall" id="insigniaGrid"></div>
+          </section>
 
-        <div class="cab-section-head">
-          <p class="cab-section-label" style="margin:0;">Records</p>
-          <span class="cab-section-sub">Real-life wins you log yourself</span>
+          <section class="cab-col cab-col-records">
+            <div class="cab-section-head">
+              <p class="cab-section-label" style="margin:0;">Records</p>
+              <button id="addTrophyBtn" class="rec-add-btn" type="button">+ Add</button>
+            </div>
+            <span class="cab-section-sub" id="recordCount">Real-life wins worth keeping</span>
+            <div class="add-trophy-form" id="addTrophyForm">
+              <input type="hidden" id="trophyEditId" value="">
+              <label class="label">Title</label>
+              <input type="text" id="trophyTitle" placeholder="e.g., AWS Certified · Bench 100kg">
+              <div class="form-row">
+                <div class="form-col">
+                  <label class="label">Category</label>
+                  <select id="trophyCategory">
+                    <option value="certification">Certification</option>
+                    <option value="learning">Learning</option>
+                    <option value="career">Career</option>
+                    <option value="fitness">Fitness PR</option>
+                    <option value="project">Project</option>
+                    <option value="finance">Finance</option>
+                    <option value="personal">Personal</option>
+                  </select>
+                </div>
+                <div class="form-col">
+                  <label class="label">Date</label>
+                  <input type="date" id="trophyDate">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-col">
+                  <label class="label">Value <span class="muted">(optional)</span></label>
+                  <input type="number" id="trophyValue" step="any" placeholder="100">
+                </div>
+                <div class="form-col">
+                  <label class="label">Unit</label>
+                  <input type="text" id="trophyUnit" placeholder="kg · km · $ · %">
+                </div>
+              </div>
+              <label class="label">Tags <span class="muted">(comma separated)</span></label>
+              <input type="text" id="trophyTags" placeholder="bench, strength">
+              <label class="label">Notes <span class="muted">(optional)</span></label>
+              <textarea id="trophyNotes" style="min-height:60px;" placeholder="Any notes about this record..."></textarea>
+              <div class="modal-actions" style="margin-top:12px;">
+                <button id="cancelTrophyBtn" type="button">Cancel</button>
+                <button id="saveTrophyBtn" type="button" class="primary">Save Record</button>
+              </div>
+            </div>
+            <div class="rec-filters" id="recordFilters"></div>
+            <div id="trophyList"></div>
+          </section>
         </div>
-        <div id="trophyList"></div>
-        <div class="add-trophy-form" id="addTrophyForm">
-          <label class="label">Title</label>
-          <input type="text" id="trophyTitle" placeholder="e.g., Certified / Goal achieved">
-          <label class="label">Category</label>
-          <select id="trophyCategory">
-            <option value="certification">🏆 Certification</option>
-            <option value="fitness">💪 Fitness Goal</option>
-            <option value="project">🚀 Project Milestone</option>
-            <option value="personal">⭐ Personal Achievement</option>
-          </select>
-          <label class="label">Notes (optional)</label>
-          <textarea id="trophyNotes" style="min-height:60px;" placeholder="Any notes about this record..."></textarea>
-          <div class="modal-actions" style="margin-top:12px;">
-            <button id="cancelTrophyBtn" type="button">Cancel</button>
-            <button id="saveTrophyBtn" type="button" class="primary">Save Record</button>
-          </div>
-        </div>
-        <button id="addTrophyBtn" class="primary" style="width:100%;margin-top:16px;">+ Add Record</button>
 
         <div class="modal-actions">
           <button id="closeCabinetBtn" type="button">Close</button>
@@ -559,13 +631,37 @@
       </div>
     </div>
 
+    <!-- Calendar Modal -->
+    <div class="modal-backdrop" id="calendarModal" aria-hidden="true">
+      <div class="modal glass cal-modal" role="dialog" aria-modal="true" style="max-width: 680px;">
+        <div class="modal-head">
+          <div class="modal-title-wrap">
+            <span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+            <h3>Calendar</h3>
+          </div>
+          <button class="modal-close" id="calClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="cal-nav">
+          <button class="cal-nav-btn" id="calPrev" type="button" aria-label="Previous month"><svg viewBox="0 0 24 24" class="ic"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <span class="cal-title" id="calTitle">—</span>
+          <button class="cal-nav-btn" id="calNext" type="button" aria-label="Next month"><svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
+          <button class="cal-today-btn" id="calToday" type="button">Today</button>
+        </div>
+        <div class="cal-summary" id="calSummary"></div>
+        <div class="cal-dow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div class="cal-grid" id="calGrid"></div>
+        <p class="hint cal-foot">Color shows that day's completion. Click a day to jump to its week and log it.</p>
+      </div>
+    </div>
+
     <section class="section quote-box glass">Do not make a bad day a bad week. Maintain the structure, stack small wins, and keep moving toward the version of you that can handle bigger responsibilities.</section>
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="game.js?v=12"></script>
-  <script src="fx.js?v=8"></script>
-  <script src="app.js?v=23"></script>
+  <script src="modules.js?v=5"></script>
+  <script src="game.js?v=16"></script>
+  <script src="fx.js?v=9"></script>
+  <script src="app.js?v=37"></script>
   <script src="extras.js?v=1"></script>
 </body>
 </html>
