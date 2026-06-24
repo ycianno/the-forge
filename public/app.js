@@ -595,7 +595,13 @@ function categoryFor(text) {
 // attribute is the link between a daily habit and the section that trains the
 // same stat — e.g. a "Body" task lines up with Training (also Body).
 function taskAttr(text) {
-  return (window.Forge && Forge.dailyAttr) ? Forge.dailyAttr(text, settings.taskAttrs) : "Discipline";
+  // A linked task auto-takes its section's stat; otherwise use the explicit/inferred attr.
+  if (window.Forge) {
+    const lm = Forge.linkModule(taskLink(text), getModules());
+    if (lm && lm.attr) return lm.attr;
+    return Forge.dailyAttr(text, settings.taskAttrs);
+  }
+  return "Discipline";
 }
 function setTaskAttr(text, attr) {
   if (!settings.taskAttrs) settings.taskAttrs = {};
@@ -1219,6 +1225,12 @@ function renderDays() {
       const attr = taskAttr(task);
       const cat = attrCat(attr);
       const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
+      if (linkMod) {
+        // Attach link (section has no checkbox to share): own checkbox, but the stat
+        // is the section's — show its badge instead of the editable attribute dot.
+        group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><span class="link-badge" style="--ac:${attrColor(attr)}" title="Linked to ${escapeHtml(linkMod.name)} — feeds ${escapeHtml(attrName(attr))}"><svg viewBox="0 0 24 24" class="ic"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07L11.5 4.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07L10.5 19.5"/></svg>${escapeHtml(linkMod.name)}</span><span class="q-xp">+${xp}</span></label>`);
+        return;
+      }
       group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><button class="q-attr" type="button" data-task="${escapeHtml(task)}" data-attr="${attr}" style="--ac:${attrColor(attr)}" title="Trains ${escapeHtml(attrName(attr))} · click to change" aria-label="Attribute: ${escapeHtml(attrName(attr))}"></button><span class="q-xp">+${xp}</span></label>`);
     });
     if (!tasks.length) {
@@ -1994,9 +2006,23 @@ function bindEvents() {
       else if (e.target.closest(".de-down") && idx < rows.length - 1) { [rows[idx + 1], rows[idx]] = [rows[idx], rows[idx + 1]]; renderDayEditorRows(rows); }
     });
     dayRows.addEventListener("change", (e) => {
-      if (!e.target.classList.contains("de-attr")) return;
-      const dot = e.target.closest(".day-edit-row").querySelector(".de-dot");
-      if (dot) dot.style.setProperty("--ac", attrColor(e.target.value));
+      const rowEl = e.target.closest(".day-edit-row");
+      if (!rowEl) return;
+      // Picking a link auto-assigns + locks the stat to the linked section's stat.
+      if (e.target.classList.contains("de-link")) {
+        let ref = null;
+        if (e.target.value) { try { ref = JSON.parse(e.target.value); } catch (x) { ref = e.target.value; } }
+        const lm = ref && window.Forge ? Forge.linkModule(ref, getModules()) : null;
+        const attrSel = rowEl.querySelector(".de-attr");
+        const dot = rowEl.querySelector(".de-dot");
+        if (lm && lm.attr) { attrSel.value = lm.attr; attrSel.disabled = true; if (dot) dot.style.setProperty("--ac", attrColor(lm.attr)); }
+        else { attrSel.disabled = false; if (dot) dot.style.setProperty("--ac", attrColor(attrSel.value)); }
+        return;
+      }
+      if (e.target.classList.contains("de-attr")) {
+        const dot = rowEl.querySelector(".de-dot");
+        if (dot) dot.style.setProperty("--ac", attrColor(e.target.value));
+      }
     });
   }
 
@@ -2338,10 +2364,11 @@ function renderDayEditorRows(rows) {
   const attrs = dayEditorAttrs();
   const targets = (window.Forge && Forge.linkTargets) ? Forge.linkTargets(getModules()) : [];
   wrap.innerHTML = rows.map((row) => {
-    const attr = row.attr || "Discipline";
+    const linkedMod = row.link && window.Forge ? Forge.linkModule(row.link, getModules()) : null;
+    const attr = linkedMod ? linkedMod.attr : (row.attr || "Discipline");
     const opts = attrs.map((a) => `<option value="${a}" ${a === attr ? "selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
     const curLink = row.link && window.Forge ? JSON.stringify(Forge.normLink(row.link)) : "";
-    const linkSel = targets.length ? `<select class="de-link" aria-label="Link to section" title="Link to a section so it's one shared checkbox"><option value="">— no link</option>${targets.map((t) => { const v = JSON.stringify(t.ref); return `<option value="${escapeHtml(v)}" ${v === curLink ? "selected" : ""}>↔ ${escapeHtml(t.label)}</option>`; }).join("")}</select>` : "";
+    const linkSel = targets.length ? `<select class="de-link" aria-label="Link to section" title="Link to a section — shared checkbox, or attached by stat"><option value="">— no link</option>${targets.map((t) => { const v = JSON.stringify(t.ref); return `<option value="${escapeHtml(v)}" ${v === curLink ? "selected" : ""}>↔ ${escapeHtml(t.label)}</option>`; }).join("")}</select>` : "";
     return `<div class="day-edit-row">
       <div class="de-move">
         <button class="de-up" type="button" aria-label="Move up"><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
@@ -2349,7 +2376,7 @@ function renderDayEditorRows(rows) {
       </div>
       <span class="de-dot" style="--ac:${attrColor(attr)}"></span>
       <input class="de-text" type="text" value="${escapeHtml(row.text)}" placeholder="Task name" spellcheck="false">
-      <select class="de-attr" aria-label="Stat">${opts}</select>
+      <select class="de-attr" aria-label="Stat" ${linkedMod ? "disabled title='Set by the link'" : ""}>${opts}</select>
       ${linkSel}
       <button class="de-del" type="button" aria-label="Remove task"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>`;

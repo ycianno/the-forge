@@ -67,21 +67,28 @@
     if (!taskLinks) return null;
     return taskLinks[dailyAttrKey(text)] || null;
   }
+  // The shared checkbox id for a link, or null when the section has no checkbox
+  // (counter / hours-table / notes) — those "attach" by attribute instead.
   function linkTargetId(link, modules, dayIndex) {
     const ref = normLink(link); if (!ref) return null;
     const m = (modules || []).find((x) => x.id === ref.m);
     if (!m) return null;
-    if (m.type === "table") return `${m.idPrefix}-${dayIndex}`;       // per-day row
-    if (m.type === "checklist" && ref.item) return checklistId(m.idPrefix, ref.item); // weekly item
-    return null;
+    if (m.type === "table") return `${m.idPrefix}-${dayIndex}`;                              // per-day row
+    if (m.type === "checklist" && ref.item) return checklistId(m.idPrefix, ref.item);        // weekly item
+    if (m.type === "composite" && m.outputs && ref.item) return checklistId(m.outputs.idPrefix, ref.item); // project output
+    return null; // counter / hours-table / notes → attribute attach (no shared checkbox)
   }
-  // Everything a daily task can be linked to (must have a shared checkbox).
+  // Every enabled section a daily task can link to. Sections with a checkbox give
+  // one entry per checkbox (share it); sections without give a single "(stat)"
+  // entry (attach by attribute). Daily can't link to itself.
   function linkTargets(modules) {
     const out = [];
     (modules || []).forEach((m) => {
-      if (m.enabled === false) return;
-      if (m.type === "table") out.push({ ref: { m: m.id }, label: `${m.name} (daily)`, attr: m.attr, kind: "daily" });
-      else if (m.type === "checklist") (m.items || []).forEach((it) => out.push({ ref: { m: m.id, item: it }, label: `${m.name}: ${it} (weekly)`, attr: m.attr, kind: "weekly" }));
+      if (m.enabled === false || m.type === "daily") return;
+      if (m.type === "table") { out.push({ ref: { m: m.id }, label: `${m.name} (daily)`, attr: m.attr, kind: "share" }); return; }
+      if (m.type === "checklist") (m.items || []).forEach((it) => out.push({ ref: { m: m.id, item: it }, label: `${m.name}: ${it} (weekly)`, attr: m.attr, kind: "share" }));
+      else if (m.type === "composite" && m.outputs) (m.outputs.items || []).forEach((it) => out.push({ ref: { m: m.id, item: it }, label: `${m.name}: ${it} (weekly)`, attr: m.attr, kind: "share" }));
+      out.push({ ref: { m: m.id }, label: `${m.name} (stat)`, attr: m.attr, kind: "attach" }); // attach by attribute
     });
     return out;
   }
@@ -207,8 +214,9 @@
       if (m.type === "daily") {
         const bp = m.blueprint || {};
         Object.keys(bp).forEach((day, i) => (bp[day] || []).forEach((t) => {
-          if (taskLinkOf(m.taskLinks, t)) return;   // counted by its linked section instead
-          set.add(taskId(i, t));
+          const link = taskLinkOf(m.taskLinks, t);
+          if (link && linkTargetId(link, modules, i)) return;   // shared checkbox counted by its section
+          set.add(taskId(i, t));                                 // own checkbox (incl. attach links)
         }));
       } else if (m.type === "table") {
         const n = m.checkCount != null ? m.checkCount : (m.rows ? m.rows.length : 0);
@@ -248,9 +256,12 @@
       if (m.type === "daily") {
         const bp = m.blueprint || {};
         Object.keys(bp).forEach((day, i) => (bp[day] || []).forEach((t) => {
-          if (taskLinkOf(m.taskLinks, t)) return;       // XP comes from the linked section
+          const link = taskLinkOf(m.taskLinks, t);
+          if (link && linkTargetId(link, modules, i)) return;   // shared id — its section awards it
           if (checks[taskId(i, t)]) {
-            const attr = dailyAttr(t, m.taskAttrs);     // explicit attribute, else keyword default
+            let attr;
+            if (link) { const lm = (modules || []).find((x) => x.id === normLink(link).m); if (lm) attr = lm.attr; } // attach → section's stat
+            if (!attr) attr = dailyAttr(t, m.taskAttrs);  // explicit attribute, else keyword default
             const c = CAT_OF_ATTR[attr] || "discipline";
             award(c, XP_BY_CAT[c] || XP_BY_CAT.other, m.source);
           }
