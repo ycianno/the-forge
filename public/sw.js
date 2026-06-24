@@ -3,7 +3,7 @@
  * redirects are respected), offline shell fallback. API is never cached —
  * app.js already falls back to localStorage when offline.
  */
-const CACHE = 'forge-v34';
+const CACHE = 'forge-v35';
 const SHELL = '/index.html';
 
 self.addEventListener('install', () => self.skipWaiting());

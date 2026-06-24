@@ -1336,6 +1336,24 @@ function syncCounterDisplays() {
     if (sess) sess.textContent = fromDaily > 0 ? `+ ${fromDaily} from linked daily task${fromDaily === 1 ? "" : "s"} → ${total} total this week` : "";
   });
 }
+// Built-in hours sections (Study, Projects) get a live "+N hours from daily" note.
+function syncSessionNotes() {
+  if (!window.Forge || !Forge.linkedCountDays) return;
+  const wk = getWeekData();
+  const mods = getModules();
+  mods.forEach((m) => {
+    if (m.type !== "hours-table" && m.type !== "composite") return;
+    const sec = document.getElementById(m.id);
+    const content = sec && sec.querySelector(".content");
+    if (!content) return;
+    let note = content.querySelector(".session-note");
+    const n = Forge.linkedCountDays(wk, mods, m.id);
+    if (n > 0) {
+      if (!note) { note = document.createElement("p"); note.className = "hint session-note"; content.appendChild(note); }
+      note.textContent = `+ ${n} hour${n === 1 ? "" : "s"} from linked daily task${n === 1 ? "" : "s"} this week (counts toward your stat & target)`;
+    } else if (note) { note.textContent = ""; }
+  });
+}
 
 function saveWeekField(el) {
   const wk = getWeekData();
@@ -1399,14 +1417,20 @@ function updateProgress() {
     if (bar) bar.style.width = p + "%";
   }
 
-  const studyHours = [...document.querySelectorAll('[data-hours="study"]')].reduce((sum, el) => sum + Number(el.value || 0), 0);
+  // Built-in hours sections include linked daily "sessions" (each completed day = +1 hr).
+  const _wk = getWeekData(), _mods = getModules();
+  const studySessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "study") : 0;
+  const projSessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "projects") : 0;
+
+  const studyHours = [...document.querySelectorAll('[data-hours="study"]')].reduce((sum, el) => sum + Number(el.value || 0), 0) + studySessions;
   setMetric("career-hours", Math.round((studyHours / studyTarget) * 100));
 
-  const projectHours = Number(document.getElementById("projectHours")?.value || 0);
+  const projectHours = Number(document.getElementById("projectHours")?.value || 0) + projSessions;
   document.getElementById("projectHoursValue").textContent = projectHours;
   document.getElementById("projectBar").style.width = Math.min(100, Math.round((projectHours / projectTarget) * 100)) + "%";
   setMetric("projects-hours", Math.round((projectHours / projectTarget) * 100));
   setMetric("projects-bonus", Math.round((projectHours / projectStretch) * 100));
+  syncSessionNotes();
 
   const reviewDone = ["wins", "misses", "changes", "refuseDrop"].filter(id => document.getElementById(id)?.value.trim()).length;
   setMetric("review", percent(reviewDone, 4));
