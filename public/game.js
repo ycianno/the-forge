@@ -302,6 +302,7 @@
         label: (typeof attrName === "function") ? attrName(a.key) : a.key,
         color: (typeof attrColor === "function") ? attrColor(a.key) : a.color,
         xp: attrTotals[a.key], level: al.level,
+        into: al.xpIntoLevel, need: al.xpForNext,
         pct: Math.round((al.xpIntoLevel / al.xpForNext) * 100),
       };
     });
@@ -444,10 +445,13 @@
     const legend = document.getElementById("attrLegend");
     if (legend) legend.innerHTML = p.attrs.map(a =>
       `<div class="attr-row">
-        <span class="attr-dot" style="background:${a.color}"></span>
-        <span class="attr-name">${escapeHtml(a.label || a.key)}</span>
-        <span class="attr-prog"><span class="attr-prog-fill" style="width:${a.pct}%;background:${a.color}"></span></span>
-        <span class="attr-lvl">Lv ${a.level}</span>
+        <div class="attr-row-head">
+          <span class="attr-dot" style="background:${a.color}"></span>
+          <span class="attr-name">${escapeHtml(a.label || a.key)}</span>
+          <span class="attr-lvl" style="color:${a.color}">Lv ${a.level}</span>
+        </div>
+        <div class="attr-prog"><span class="attr-prog-fill" style="width:${a.pct}%;background:${a.color}"></span></div>
+        <div class="attr-sub"><span>${Number(a.into).toLocaleString()} / ${Number(a.need).toLocaleString()} XP</span><span>${Number(a.xp).toLocaleString()} total</span></div>
       </div>`).join("");
 
     // Level-up celebration — prefer the rich FX layer if present

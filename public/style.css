@@ -1591,9 +1591,9 @@ input[type="file"] { display: none; }
 .mission-mini { padding: 14px 18px; }
 .char-actions { align-items: center; }
 .char-actions button { flex: 0 1 auto; min-width: max-content; }
-/* Keep Season + Share Card together as a pair at the right of the row. */
-.share-group { display: inline-flex; gap: 8px; margin-left: auto; }
-@media (max-width: 768px) { .share-group { margin-left: 0; } }
+/* Keep Season + Share Card together as a pair; they flow inline and wrap as a
+   unit (no forced right-align, which orphaned them onto their own line). */
+.share-group { display: inline-flex; gap: 8px; }
 .week-range-tag {
   font-size: 12px; font-weight: 700; color: var(--muted);
   padding: 8px 12px; white-space: nowrap;
@@ -1618,29 +1618,34 @@ input[type="file"] { display: none; }
 .weekly-chip-meta .score-label { font-size: 11px; }
 .weekly-chip-meta .status-line { margin-top: 2px; font-size: 11px; max-width: 120px; line-height: 1.3; }
 .attr-radar { display: grid; place-items: center; padding: 4px 0; }
-.attr-radar-svg { width: 100%; max-width: 250px; height: auto; }
+.attr-radar-svg { width: 100%; max-width: 270px; height: auto; }
 .radar-label {
   font-family: 'Outfit', sans-serif;
   font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
 }
-.attr-legend { display: flex; flex-direction: column; gap: 8px; }
+/* Stat-sheet legend: richer per-attribute rows that fill the panel height. */
+.attr-legend { display: flex; flex-direction: column; gap: 10px; flex: 1; justify-content: space-between; }
 .attr-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px;
-  border-radius: 12px;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 11px 13px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--line);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
-.attr-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.attr-name { width: 74px; flex-shrink: 0; font-weight: 700; font-size: 13px; }
+.attr-row:hover { background: rgba(255, 255, 255, 0.055); border-color: var(--line-strong); }
+.attr-row-head { display: flex; align-items: center; gap: 9px; }
+.attr-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+.attr-name { flex: 1; font-weight: 700; font-size: 14px; }
 .attr-prog {
-  flex: 1; height: 6px; border-radius: 99px;
+  height: 7px; border-radius: 99px;
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
 .attr-prog-fill { display: block; height: 100%; border-radius: inherit; transition: width 0.5s ease; }
-.attr-lvl { min-width: 34px; text-align: right; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; color: var(--muted); }
+.attr-lvl { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; }
+.attr-sub { display: flex; justify-content: space-between; gap: 8px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 600; color: var(--muted); }
 .util-actions { gap: 8px; margin-top: 2px; }
 .util-actions button, .util-actions .file-label {
   flex: 1; font-size: 12px; padding: 8px 10px; opacity: 0.75;
