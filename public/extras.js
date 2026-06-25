@@ -200,7 +200,8 @@
     // identity
     ctx.fillStyle = textc; ctx.font = "800 56px " + FONT; ctx.fillText(trim(ctx, callsign, 540), 300, 200);
     ctx.fillStyle = accent2; ctx.font = "600 30px " + FONT;
-    ctx.fillText(p.rank.name + " · Tier " + p.rank.tier, 300, 246);
+    var ident = (p.heroClass && p.heroClass.name) ? p.heroClass.name : p.rank.name;
+    ctx.fillText(ident + " · Tier " + p.rank.tier, 300, 246);
     ctx.fillStyle = dim; ctx.font = "500 26px " + FONT;
     ctx.fillText(p.lifetimeXp.toLocaleString() + " lifetime XP   ·   🔥 " + (p.dayStreak || 0) + " day streak", 300, 300);
 

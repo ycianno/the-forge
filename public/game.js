@@ -418,7 +418,10 @@
     const p = computeProfile();
 
     setText("lvlNum", p.level);
-    setText("charSubline", p.rank.name + " · Tier " + p.rank.tier);
+    // Merged identity: the class chip is the title; rank now shows only as Tier
+    // + pips (the rank word, e.g. "Initiate", is dropped so it no longer doubles
+    // up with the base class name). p.rank.name still drives the orb frame below.
+    setText("charSubline", "· Tier " + p.rank.tier);
     host.dataset.rank = p.rank.name.toLowerCase();   // drives rank-tiered orb frame + aura
     renderClassChip(p);
     if (!editingCallsign) renderCallsign();
