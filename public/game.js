@@ -114,6 +114,12 @@
     try { addWeekXp(week, null, bs); } catch (e) {}
     return bs;
   }
+  // Per-attribute XP for one week, for the Reports trend lines.
+  function weekXpByAttr(week) {
+    const at = {};
+    try { addWeekXp(week, at); } catch (e) {}
+    return at;
+  }
 
   // Per-week progress for ONE custom pursuit: did the user touch it (active) and
   // did they meet its weekly target (hit)? Type-aware, unit-independent — so a
@@ -1230,5 +1236,5 @@
   // XP earned in a single week (for the trends view)
   function weekXp(week) { return addWeekXp(week, {}); }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
+  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, weekXpByAttr, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
 })();

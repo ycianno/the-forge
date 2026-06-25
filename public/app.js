@@ -1946,19 +1946,51 @@ function trBarBlock(title, items, max) {
   }).join("");
   return `<div class="tr-block"><div class="tr-title">${title}</div><div class="tr-chart">${bars}</div></div>`;
 }
+
+// A tiny sparkline (area + line + last dot) for a series of weekly values.
+function sparkSvg(values, color) {
+  const W = 150, H = 32, pad = 3;
+  const n = values.length;
+  const max = Math.max(1, ...values);
+  const xs = (i) => pad + (n > 1 ? (i / (n - 1)) * (W - 2 * pad) : (W - 2 * pad) / 2);
+  const ys = (v) => H - pad - (v / max) * (H - 2 * pad);
+  const pts = values.map((v, i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(" ");
+  const area = `${xs(0).toFixed(1)},${H - pad} ${pts} ${xs(n - 1).toFixed(1)},${H - pad}`;
+  const lx = xs(n - 1).toFixed(1), ly = ys(values[n - 1] || 0).toFixed(1);
+  return `<svg viewBox="0 0 ${W} ${H}" class="tr-spark-svg" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${area}" fill="${color}" fill-opacity="0.13" stroke="none"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${lx}" cy="${ly}" r="2.3" fill="${color}"/>
+  </svg>`;
+}
+
+// Per-attribute weekly-XP trend lines for the Reports view.
+function trAttrTrends(attrs, last12) {
+  const rows = attrs.map((a) => {
+    const series = last12.map((w) => (w.byAttr && w.byAttr[a.key]) || 0);
+    const peak = Math.max(0, ...series);
+    return `<div class="tr-spark" title="${escapeHtml(a.label || a.key)} — weekly XP, peak ${peak}">
+      <span class="tr-spark-head"><span class="attr-dot" style="background:${a.color}"></span><span class="tr-spark-name">${escapeHtml(a.label || a.key)}</span></span>
+      <span class="tr-spark-chart">${sparkSvg(series, a.color)}</span>
+      <span class="tr-spark-lvl">Lv ${a.level}</span>
+    </div>`;
+  }).join("");
+  return `<div class="tr-block"><div class="tr-title">Attribute trends · weekly XP, last 12 weeks</div><div class="tr-sparks">${rows}</div></div>`;
+}
 function renderTrends() {
   const el = document.getElementById("reportContent");
   if (!el) return;
   const weeks = database.weeks || {};
   const calc = (w) => (window.Game && Game.calcWeekScore) ? Game.calcWeekScore(w) : calculateWeekScoreData(w);
   const wxp = (w) => (window.Game && Game.weekXp) ? Game.weekXp(w) : 0;
+  const wxa = (w) => (window.Game && Game.weekXpByAttr) ? Game.weekXpByAttr(w) : {};
   const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
 
   const cur = getStartOfWeek(new Date());
   const last12 = [];
   for (let i = 11; i >= 0; i--) {
     const d = addDays(cur, -i * 7); const w = weeks[iso(d)];
-    last12.push({ date: d, score: w ? calc(w) : 0, xp: w ? wxp(w) : 0 });
+    last12.push({ date: d, score: w ? calc(w) : 0, xp: w ? wxp(w) : 0, byAttr: w ? wxa(w) : {} });
   }
 
   const blueprint = getDailyBlueprint();
@@ -1991,6 +2023,7 @@ function renderTrends() {
   }
   html += trBarBlock("Weekly completion · last 12 weeks", last12.map((w) => ({ label: fmt(w.date), value: w.score, raw: w.score + "%", grade: true })), 100);
   html += trBarBlock("XP earned · last 12 weeks", last12.map((w) => ({ label: fmt(w.date), value: w.xp, raw: String(w.xp) })), Math.max(1, ...last12.map((w) => w.xp)));
+  if (prof && prof.attrs) html += trAttrTrends(prof.attrs, last12);
   html += trBarBlock("Completion by weekday", weekday.map((v, i) => ({ label: DOW[i], value: v, raw: v + "%", grade: true })), 100);
   if (skipped.length) {
     html += `<div class="tr-block"><div class="tr-title">Most skipped quests</div>` +
