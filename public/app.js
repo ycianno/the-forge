@@ -257,10 +257,10 @@ function saveSectionEditor() {
   renderModulesEditor();
   applyWeekToUI();
 }
-function applyPreset(id) {
+function applyPreset(id, skipConfirm) {
   const p = (window.Forge && Forge.PRESETS) ? Forge.PRESETS[id] : null;
   if (!p) return;
-  if (!confirm(`Load the "${p.name}" preset? It rearranges your sections and may add a few. Your logged data is kept.`)) return;
+  if (!skipConfirm && !confirm(`Load the "${p.name}" preset? It rearranges your sections and may add a few. Your logged data is kept.`)) return;
   settings.hiddenSections = (p.hidden || []).slice();
   settings.moduleNames = Object.assign({}, p.names || {});
   settings.customModules = (p.custom || []).map((spec) => makeCustomModule(spec));
@@ -270,6 +270,58 @@ function applyPreset(id) {
   persistSettings();
   renderModulesEditor();
   applyWeekToUI();
+}
+// ----- First-run onboarding ("Choose your path") -----
+// Shown once, only to a genuinely fresh install (no logged data, no customization).
+// Existing heroes are marked onboarded silently so they never see it.
+const ONBOARD_PATHS = ["operator", "student", "athlete", "reader", "maker", "minimal"];
+function renderOnboardingPaths() {
+  const wrap = document.getElementById("onboardPaths");
+  if (!wrap) return;
+  const presets = (window.Forge && Forge.PRESETS) ? Forge.PRESETS : {};
+  wrap.innerHTML = ONBOARD_PATHS.filter((id) => presets[id]).map((id) => {
+    const p = presets[id];
+    return `<button class="onboard-path" type="button" data-preset="${id}">`
+      + `<span class="op-name">${escapeHtml(p.name)}</span>`
+      + `<span class="op-desc">${escapeHtml(p.desc)}</span></button>`;
+  }).join("");
+}
+function hasLoggedData() {
+  const weeks = (database && database.weeks) || {};
+  return Object.keys(weeks).some((k) => {
+    const w = weeks[k];
+    return w && ((w.checks && Object.keys(w.checks).length) || (w.fields && Object.keys(w.fields).length));
+  });
+}
+function isCustomized() {
+  return !!(settings && ((settings.customModules && settings.customModules.length)
+    || (settings.taskLinks && Object.keys(settings.taskLinks).length)
+    || (settings.moduleNames && Object.keys(settings.moduleNames).length)
+    || (settings.hiddenSections && settings.hiddenSections.length)
+    || settings.callsign));
+}
+function maybeShowOnboarding() {
+  if (!settings || settings.onboarded) return;
+  // Anyone with existing history or a tweaked setup is an established user — don't interrupt them.
+  if (hasLoggedData() || isCustomized()) { settings.onboarded = true; persistSettings(); return; }
+  renderOnboardingPaths();
+  const md = document.getElementById("onboardModal");
+  if (md) { md.classList.add("active"); md.setAttribute("aria-hidden", "false"); }
+}
+function finishOnboarding() {
+  settings.onboarded = true;
+  persistSettings();
+  const md = document.getElementById("onboardModal");
+  if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); }
+  applyWeekToUI();
+  if (window.Game && Game.render) Game.render();
+}
+function chooseOnboardPath(presetId) {
+  const csEl = document.getElementById("onboardCallsign");
+  const cs = csEl ? csEl.value.trim() : "";
+  if (cs) settings.callsign = cs;
+  applyPreset(presetId, true); // fresh install — no confirm needed
+  finishOnboarding();
 }
 function toggleAddFormFields() {
   const t = document.getElementById("newModType");
@@ -1964,6 +2016,12 @@ function bindEvents() {
     saveTimer = setTimeout(() => { persistDatabase(); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
     updateProgress();
   });
+  // First-run onboarding: pick a path or start blank.
+  document.addEventListener("click", e => {
+    const path = e.target.closest && e.target.closest(".onboard-path");
+    if (path) { chooseOnboardPath(path.getAttribute("data-preset")); return; }
+    if (e.target.id === "onboardSkip") finishOnboarding();
+  });
   // Certification target dates (stored in settings.certDates, not week fields)
   document.addEventListener("change", e => {
     if (!e.target.matches("[data-certdate]")) return;
@@ -2593,6 +2651,7 @@ async function init() {
   if (settings.theme) applyTheme(settings.theme);
   renderStatic();
   applyWeekToUI();
+  maybeShowOnboarding();
 }
 
 init();

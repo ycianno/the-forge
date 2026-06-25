@@ -2816,3 +2816,29 @@ html { scroll-padding-top: 84px; }
   border: 1px dashed var(--line);
   border-radius: 14px;
 }
+
+/* ----- First-run onboarding ("Choose your path") ----- */
+.onboard-modal { max-width: 600px; }
+.onboard-hero { text-align: center; margin-bottom: 22px; }
+.onboard-mark { width: 56px; height: 56px; margin: 0 auto 12px; }
+.onboard-mark svg { width: 52px; height: 52px; fill: var(--accent-primary); filter: drop-shadow(0 0 14px var(--score-glow)); }
+.onboard-hero h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+.onboard-sub { color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 46ch; margin: 0 auto; }
+.onboard-field { margin-bottom: 18px; }
+.onboard-field > label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
+#onboardCallsign { width: 100%; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--text); font-size: 15px; font-family: inherit; }
+#onboardCallsign:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--score-glow); }
+.onboard-paths { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.onboard-path {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 14px 16px; text-align: left; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 14px;
+  transition: all 0.18s cubic-bezier(0.4,0,0.2,1); justify-content: flex-start;
+}
+.onboard-path:hover { background: rgba(255,255,255,0.08); border-color: var(--accent-primary); transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,0.35); }
+.onboard-path .op-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.onboard-path .op-desc { font-size: 12px; line-height: 1.4; color: var(--muted); font-weight: 500; }
+.onboard-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+.onboard-skip { background: transparent; border: 1px solid var(--line); }
+.onboard-hint { font-size: 12px; color: var(--muted-2); }
+@media (max-width: 560px) { .onboard-paths { grid-template-columns: 1fr; } .onboard-hero h2 { font-size: 22px; } }
