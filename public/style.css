@@ -1589,14 +1589,17 @@ input[type="file"] { display: none; }
   text-transform: uppercase; color: var(--muted);
 }
 .mission-mini { padding: 14px 18px; }
-.char-actions { align-items: center; }
-.char-actions button { flex: 0 1 auto; min-width: max-content; }
-/* Keep Season + Share Card together as a pair; they flow inline and wrap as a
-   unit (no forced right-align, which orphaned them onto their own line). */
-.share-group { display: inline-flex; gap: 8px; }
+/* Single-line action row that never breaks: buttons keep their size, and the
+   date tag is the only flexible element — it shrinks/ellipsizes if space runs
+   out, so Season + Share Card always sit on the same row as Prev/Next. */
+.char-actions { align-items: center; flex-wrap: nowrap; }
+.char-actions button { flex: 0 0 auto; min-width: max-content; }
+.share-group { display: inline-flex; gap: 12px; flex: 0 0 auto; }
 .week-range-tag {
+  flex: 0 1 auto; min-width: 0;
   font-size: 12px; font-weight: 700; color: var(--muted);
   padding: 8px 12px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
 }
 
 /* --- right panel: attributes --- */
@@ -1696,8 +1699,8 @@ input[type="file"] { display: none; }
   .char-stats { gap: 8px; }
   .cstat { padding: 10px 6px; }
   .cstat-v { font-size: 18px; }
-  .char-actions { gap: 8px; }
-  .week-range-tag { width: 100%; text-align: center; order: 5; }
+  .char-actions { gap: 8px; flex-wrap: wrap; }
+  .week-range-tag { width: 100%; flex-basis: 100%; text-align: center; order: 5; overflow: visible; }
   .attr-radar-svg { max-width: 200px; }
 }
 
