@@ -191,11 +191,13 @@
     // deliberately NOT attributed to any radar attribute: the radar stays an
     // honest picture of which habits were actually trained.
     lifetimeXp += missionXpTotal();
+    lifetimeXp += wqXpTotal();   // weekly-quest bonus tokens (same banking model)
 
     // XP for the currently selected week
     let weeklyXp = 0;
     try { weeklyXp = addWeekXp(weeks[weekKey()], null); } catch (e) {}
     try { weeklyXp += missionXpForWeek(getStartOfWeek(parseYmd(weekKey()) || new Date())); } catch (e) {}
+    try { weeklyXp += wqXpForWeek(getStartOfWeek(parseYmd(weekKey()) || new Date())); } catch (e) {}
 
     const lv = levelFromXp(lifetimeXp);
     const rank = rankFor(lv.level);
@@ -319,6 +321,7 @@
     const host = document.getElementById("charScreen");
     if (!host) return;
     checkMissions();              // bank today's mission XP before the profile is summed
+    checkWeeklyQuests();          // bank cleared weekly quests too (same tick)
     const p = computeProfile();
 
     setText("lvlNum", p.level);
@@ -367,6 +370,7 @@
     checkStreakMilestones(p);
     renderHeroTrophies(p);
     renderMissions();
+    renderWeeklyQuests();
     if (typeof checkAutoRecords === "function") checkAutoRecords(p); // auto-milestone Records (app.js)
   }
 
@@ -1090,8 +1094,136 @@
     host.classList.toggle("all-done", allDone);
   }
 
+  // ===========================================================================
+  // WEEKLY QUESTS — 3 section-aware challenges generated from the user's OWN
+  // pursuits (Training, Scholarship, custom Cardio, …). Targets come from each
+  // module's own weekly target; progress is read from THIS week's data. Clearing
+  // a quest banks real bonus XP as a token in settings.weeklyQuests (folded into
+  // the lifetime pool, exactly like daily missions). Seeded by the current week
+  // so the set is stable Mon–Sun and refreshes each new week.
+  // ===========================================================================
+  const WQ_XP = 120;       // per cleared quest
+  const WQ_BONUS = 250;    // extra when all three clear
+  function wqWeekStart() { return getStartOfWeek(new Date()); }
+  function wqWeekKey() { return iso(wqWeekStart()); }
+  function wqWeekRec() {
+    const db = (typeof database !== "undefined") ? database : null;
+    const wk = (db && db.weeks) ? db.weeks[wqWeekKey()] : null;
+    return { checks: (wk && wk.checks) || {}, fields: (wk && wk.fields) || {} };
+  }
+  // Build the candidate quests from every enabled section that can set a target.
+  function weeklyQuestPool(week, modules) {
+    const F = window.Forge; if (!F) return [];
+    const checks = week.checks || {}, fields = week.fields || {};
+    const out = [];
+    const push = (m, label, done, total) => out.push({
+      id: "wq-" + m.id, moduleId: m.id, label: label, done: done, total: total,
+      attr: m.attr, icon: MISSION_ATTR_ICON[m.attr] || IP.star, xp: WQ_XP,
+    });
+    (modules || []).forEach(m => {
+      if (!m || m.enabled === false) return;
+      const nm = m.name || "Pursuit";
+      if (m.type === "table") {
+        const n = m.checkCount != null ? m.checkCount : (m.rows ? m.rows.length : 7);
+        const tgt = (m.target && m.target.value) ? Number(m.target.value) : n;
+        let done = 0; for (let i = 0; i < n; i++) if (checks[m.idPrefix + "-" + i]) done++;
+        push(m, nm + ": " + tgt + " session" + (tgt === 1 ? "" : "s"), done, tgt);
+      } else if (m.type === "checklist") {
+        const items = m.items || []; if (!items.length) return;
+        let done = 0; items.forEach(it => { if (checks[F.checklistId(m.idPrefix, it)]) done++; });
+        push(m, nm + ": complete all", done, items.length);
+      } else if (m.type === "hours-table" || m.type === "composite") {
+        const tgt = (m.target && m.target.value) ? Number(m.target.value) : 1;
+        push(m, nm + ": " + tgt + " hour" + (tgt === 1 ? "" : "s"), F.moduleCountValue(week, modules, m), tgt);
+      } else if (m.type === "counter") {
+        const tgt = (m.target && m.target.value) ? Number(m.target.value) : 1;
+        const unit = (m.target && m.target.unit) ? " " + m.target.unit : "";
+        push(m, nm + ": reach " + tgt + unit, F.moduleCountValue(week, modules, m), tgt);
+      } else if (m.type === "notes") {
+        const v = fields[m.field || (m.idPrefix + "-notes")];
+        push(m, nm + ": write it", (v && String(v).trim()) ? 1 : 0, 1);
+      } else if (m.type === "review") {
+        const flds = m.fields || [];
+        let done = 0; flds.forEach(f => { if (fields[f] && String(fields[f]).trim()) done++; });
+        push(m, nm + ": fill it out", done, flds.length || 1);
+      }
+    });
+    return out;
+  }
+  // Deterministic 3, seeded by the current week (mirrors dailyMissions' hash).
+  function weeklyQuests() {
+    const key = wqWeekKey();
+    const pool = weeklyQuestPool(wqWeekRec(), modulesNow());
+    let h = 0; for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    const order = pool.map((q, idx) => ({ idx, r: (h ^ ((idx + 1) * 2654435761)) >>> 0 })).sort((a, b) => a.r - b.r);
+    const quests = order.slice(0, Math.min(3, pool.length)).map(o => pool[o.idx]);
+    return { quests, key };
+  }
+  function wqXpTotal() {
+    const s = (typeof settings !== "undefined" && settings) ? settings.weeklyQuests : null;
+    if (!s) return 0;
+    let t = 0; for (const k in s) t += allDayXp(s[k]); return t;   // allDayXp: bonus + Σ cleared
+  }
+  function wqXpForWeek(weekStart) {
+    const s = (typeof settings !== "undefined" && settings) ? settings.weeklyQuests : null;
+    if (!s || !weekStart) return 0;
+    const k = iso(weekStart);
+    return s[k] ? allDayXp(s[k]) : 0;
+  }
+  // Bank cleared quests for the current week. Silent on first ever run.
+  function checkWeeklyQuests() {
+    if (typeof settings === "undefined" || !settings) return;
+    const first = !settings.weeklyQuests;
+    const store = settings.weeklyQuests || {};
+    const { quests, key } = weeklyQuests();
+    const rec = store[key] || { m: {}, bonus: 0 };
+    let changed = false, met = 0;
+    quests.forEach(q => {
+      const ok = q.total > 0 && q.done >= q.total;
+      if (ok) met++;
+      if (ok && !(q.id in rec.m)) {
+        rec.m[q.id] = q.xp; changed = true;
+        if (!first && window.FX && FX.missionComplete) FX.missionComplete(q.label, q.xp);
+      }
+    });
+    if (quests.length > 0 && met >= quests.length && !rec.bonus) {
+      rec.bonus = WQ_BONUS; changed = true;
+      if (!first && window.FX && FX.missionsAllClear) FX.missionsAllClear(allDayXp(rec));
+    }
+    if (changed || first) {
+      store[key] = rec;
+      settings.weeklyQuests = store;
+      if (typeof persistSettings === "function") persistSettings();
+    }
+  }
+  function renderWeeklyQuests() {
+    const host = document.getElementById("weeklyQuests");
+    if (!host) return;
+    const store = (typeof settings !== "undefined" && settings && settings.weeklyQuests) ? settings.weeklyQuests : {};
+    const { quests, key } = weeklyQuests();
+    const rec = store[key] || { m: {}, bonus: 0 };
+    if (!quests.length) { host.innerHTML = ""; host.classList.remove("all-done"); return; }
+    const doneN = quests.filter(q => q.total > 0 && q.done >= q.total).length;
+    const allDone = doneN >= quests.length;
+    const rows = quests.map(q => {
+      const done = q.total > 0 && q.done >= q.total;
+      return `<div class="dm-row ${done ? "done" : ""}">
+        <span class="dm-ic"><svg viewBox="0 0 24 24" class="ic"><path d="${done ? IP.check : q.icon}"/></svg></span>
+        <span class="dm-label">${escapeHtml(q.label)}</span>
+        <span class="dm-xp">${done ? "+" + q.xp + " XP" : Math.min(q.done, q.total) + " / " + q.total}</span>
+      </div>`;
+    }).join("");
+    host.innerHTML = `
+      <div class="dm-head">
+        <span class="dm-title">Weekly Quests</span>
+        <span class="dm-count">${doneN} / ${quests.length}${rec.bonus ? ` · +${WQ_BONUS} bonus` : ""}</span>
+      </div>
+      <div class="dm-list">${rows}</div>`;
+    host.classList.toggle("all-done", allDone);
+  }
+
   // XP earned in a single week (for the trends view)
   function weekXp(week) { return addWeekXp(week, {}); }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, heroClass, weekXp, weekXpBySource, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
+  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, heroClass, weekXp, weekXpBySource, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
 })();
