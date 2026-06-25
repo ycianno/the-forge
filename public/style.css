@@ -1813,11 +1813,15 @@ input[type="file"] { display: none; }
   display: block;
 }
 /* header icon cluster */
-.nav-icon { width: 42px; padding: 9px; }
-.nav-icon .ic { width: 20px; height: 20px; margin: 0 auto; }
+.nav-icon { width: 38px; padding: 8px; }
+.nav-icon .ic { width: 18px; height: 18px; margin: 0 auto; }
 .nav-icon.danger { color: #fca5a5; background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.22); }
 .nav-icon.danger:hover { background: rgba(239,68,68,0.22); color: #fecaca; }
-.nav-divider { width: 1px; height: 26px; background: var(--line-strong); margin: 0 6px; align-self: center; padding: 0; }
+.nav-divider { width: 1px; height: 24px; background: var(--line-strong); margin: 0 3px; align-self: center; padding: 0; }
+/* compact desktop nav text links so longer pursuit names fit on one row */
+.nav { gap: 6px; }
+.nav a.desktop-nav-item { padding: 8px 12px; font-size: 12.5px; }
+@media (max-width: 1180px) { .nav a.desktop-nav-item { padding: 7px 10px; font-size: 12px; } .nav-divider { display: none; } }
 .tab-icon .ic { width: 23px; height: 23px; }
 
 /* editable callsign */
