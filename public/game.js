@@ -115,12 +115,49 @@
     return bs;
   }
 
+  // Per-week progress for ONE custom pursuit: did the user touch it (active) and
+  // did they meet its weekly target (hit)? Type-aware, unit-independent — so a
+  // "Pages" counter and a "Reading" checklist both reduce to active/hit weeks.
+  function customWeekProgress(week, modules, m) {
+    const F = window.Forge; if (!F) return { active: false, hit: false };
+    const checks = (week && week.checks) || {};
+    const fields = (week && week.fields) || {};
+    if (m.type === "checklist") {
+      const items = m.items || [];
+      let done = 0; items.forEach(it => { if (checks[F.checklistId(m.idPrefix, it)]) done++; });
+      return { active: done > 0, hit: items.length > 0 && done >= items.length };
+    }
+    if (m.type === "table") {
+      const n = m.checkCount != null ? m.checkCount : (m.rows ? m.rows.length : 7);
+      let done = 0; for (let i = 0; i < n; i++) if (checks[m.idPrefix + "-" + i]) done++;
+      const tgt = (m.target && m.target.value) ? Number(m.target.value) : n;
+      return { active: done > 0, hit: done >= tgt };
+    }
+    if (m.type === "counter") {
+      const v = F.moduleCountValue(week, modules, m);
+      const tgt = (m.target && m.target.value) ? Number(m.target.value) : 1;
+      return { active: v > 0, hit: v >= tgt };
+    }
+    if (m.type === "notes") {
+      const v = fields[m.field || (m.idPrefix + "-notes")];
+      const filled = !!(v && String(v).trim());
+      return { active: filled, hit: filled };
+    }
+    return { active: false, hit: false };
+  }
+
   function computeProfile() {
     const attrTotals = {};
     ATTRS.forEach(a => attrTotals[a.key] = 0);
 
     const db = (typeof database !== "undefined") ? database : null;
     const weeks = (db && db.weeks) ? db.weeks : {};
+
+    // Lifetime active/target-hit weeks per custom pursuit → drives its insignia chain.
+    const allMods = modulesNow();
+    const customMods = allMods.filter(m => m && m.custom);
+    const cstats = {};
+    customMods.forEach(m => { cstats[m.id] = { id: m.id, name: m.name, attr: m.attr, active: 0, hit: 0 }; });
 
     let lifetimeXp = 0;
     let activeWeeks = 0;
@@ -137,6 +174,11 @@
       }
       if (wk && wk.checks) {
         for (const k in wk.checks) if (wk.checks[k]) lifetimeChecks++;
+      }
+      for (let ci = 0; ci < customMods.length; ci++) {
+        const r = customWeekProgress(wk, allMods, customMods[ci]);
+        if (r.active) cstats[customMods[ci].id].active++;
+        if (r.hit) cstats[customMods[ci].id].hit++;
       }
       if (wk && typeof calculateWeekScoreData === "function") {
         const pct = calculateWeekScoreData(wk);
@@ -177,6 +219,7 @@
       rank, attrs, heroClass: heroClass(attrs),
       lifetimeStudyHours: Math.round(lifetimeStudyHours),
       lifetimeChecks,
+      customStats: Object.keys(cstats).map(k => cstats[k]),
       bestWeekPct, currentStreak: computeStreak(), dayStreak: ds.streak, streakUsed: ds.used,
     };
   }
@@ -718,6 +761,23 @@
     add("myth-legend", "Living Legend", "Reach level 75, or max every attribute", "mythic", "ascension", IP.gem, p.level >= 75 || p.attrs.every(a => a.level >= 20));
     add("myth-year", "Unbroken Year", "Reach a 365-day streak", "mythic", "consistency", IP.flame, p.dayStreak >= 365);
     add("myth-poly", "True Polymath", "Embody the Polymath class", "mythic", "class", IP.star, !!embodied.polymath);
+
+    // Custom pursuits — every user-made pursuit earns its OWN milestone chain,
+    // keyed to its stable module id (renaming the pursuit keeps earned insignias).
+    // Chain rewards weeks you stayed active; capstones reward hitting its target.
+    (p.customStats || []).forEach(cs => {
+      const nm = cs.name || "Pursuit";
+      const aw = cs.active || 0, tw = cs.hit || 0;
+      const ic = attrIcon[cs.attr] || IP.star;
+      const rankName = { 1: nm + ": First Step", 4: nm + " Devotee", 13: nm + " Adept", 26: nm + " Stalwart", 52: nm + " Master" };
+      rungs([1, 4, 13, 26, 52], aw, 52, 1).forEach(N => add(
+        "cust-" + cs.id + "-" + N,
+        rankName[N] || (nm + " Eternal " + roman(Math.floor((N - 52) / 52) + 1)),
+        N === 1 ? ("Log " + nm + " in any week") : ("Stay active in " + nm + " for " + N + " weeks"),
+        gradeByVal(N, 4, 13, 52), "pursuits", ic, aw >= N));
+      add("cust-" + cs.id + "-perfect", nm + " Perfected", "Hit the " + nm + " target in a week", "rare", "pursuits", ic, tw >= 1);
+      add("cust-" + cs.id + "-flawless", nm + " Flawless", "Hit the " + nm + " target in 13 weeks", "epic", "pursuits", ic, tw >= 13);
+    });
 
     return out;
   }
