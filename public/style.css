@@ -1591,6 +1591,9 @@ input[type="file"] { display: none; }
 .mission-mini { padding: 14px 18px; }
 .char-actions { align-items: center; }
 .char-actions button { flex: 0 1 auto; min-width: max-content; }
+/* Keep Season + Share Card together as a pair at the right of the row. */
+.share-group { display: inline-flex; gap: 8px; margin-left: auto; }
+@media (max-width: 768px) { .share-group { margin-left: 0; } }
 .week-range-tag {
   font-size: 12px; font-weight: 700; color: var(--muted);
   padding: 8px 12px; white-space: nowrap;
@@ -2605,6 +2608,14 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .season-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .season-add select, .season-add input { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--text); font-size: 13px; font-family: inherit; }
 .season-add input { width: 90px; }
+/* Year-in-review: XP-by-attribute bars */
+.ya-bars { display: flex; flex-direction: column; gap: 8px; }
+.ya-row { display: flex; align-items: center; gap: 12px; }
+.ya-head { flex: 0 0 30%; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ya-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ya-bar { flex: 1; height: 8px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
+.ya-fill { display: block; height: 100%; border-radius: 99px; }
+.ya-val { flex: 0 0 auto; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 12px; color: var(--muted); min-width: 56px; text-align: right; }
 
 /* Carbon — graphite mono / minimal */
 [data-theme="carbon"] {

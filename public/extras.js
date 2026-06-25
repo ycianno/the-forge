@@ -339,6 +339,81 @@
   }
   window.shareSeasonCard = shareSeasonCard;
 
+  // ---- year-in-review recap card ----
+  function drawYearCard(s) {
+    if (!s) return null;
+    var prof = (window.Game && typeof window.Game.computeProfile === "function") ? window.Game.computeProfile() : null;
+    var callsign = (typeof settings !== "undefined" && settings && settings.callsign) ? settings.callsign : "Player One";
+    var accent = cssVar("--accent-primary", "#8b5cf6"), accent2 = cssVar("--accent-secondary", "#38bdf8");
+    var textc = cssVar("--text", "#f5f5f7"), dim = cssVar("--text-dim", "#9ca3af");
+    var topColor = accent2, topName = s.topAttr || "—";
+    if (prof && s.topAttr) { var ta = prof.attrs.find(function (a) { return a.key === s.topAttr; }); if (ta) { topColor = ta.color || accent2; topName = ta.label || ta.key; } }
+    var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    var W = 1200, H = 630, SC = 2;
+    var c = document.createElement("canvas"); c.width = W * SC; c.height = H * SC;
+    var ctx = c.getContext("2d"); ctx.scale(SC, SC);
+    var g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, "#0b0b12"); g.addColorStop(1, "#050509"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    var rg = ctx.createRadialGradient(W - 180, 120, 40, W - 180, 120, 560); rg.addColorStop(0, hexA(accent, 0.18)); rg.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    var FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
+    ctx.fillStyle = accent; ctx.font = "700 22px " + FONT; ctx.fillText("⚒  THE FORGE — YEAR IN REVIEW", 64, 80);
+    ctx.fillStyle = textc; ctx.font = "800 72px " + FONT; ctx.fillText(String(s.year), 64, 162);
+    ctx.fillStyle = dim; ctx.font = "500 26px " + FONT; ctx.fillText(callsign + (prof ? "   ·   Lv " + prof.level : ""), 64, 202);
+
+    // monthly XP bar strip (best month highlighted)
+    var sx = 64, sy = 234, sw = W - 128, sh = 64, gap = 10;
+    var maxM = Math.max.apply(null, s.monthly.concat([1]));
+    var bw = (sw - gap * 11) / 12;
+    s.monthly.forEach(function (v, i) {
+      var x = sx + i * (bw + gap), bh = Math.max(3, Math.round((v / maxM) * sh));
+      roundRect(ctx, x, sy + sh - bh, bw, bh, 5); ctx.fillStyle = (i === s.bestMonthIndex) ? accent : hexA(accent, 0.45); ctx.fill();
+      ctx.fillStyle = dim; ctx.font = "600 13px " + FONT; ctx.textAlign = "center"; ctx.fillText(MON[i].charAt(0), x + bw / 2, sy + sh + 18); ctx.textAlign = "left";
+    });
+
+    var tiles = [
+      { v: Number(s.xp).toLocaleString(), k: "Total XP", c: accent },
+      { v: cap(topName), k: "Top attribute", c: topColor },
+      { v: (s.bestMonthIndex >= 0 ? MON[s.bestMonthIndex] : "—"), k: "Best month", c: textc },
+      { v: String(s.monthsActive), k: "Active months", c: textc },
+      { v: String(s.trophies), k: "Trophies", c: "#fbbf24" },
+      { v: String(s.insignias), k: "Insignias", c: accent2 },
+    ];
+    var gx = 64, gy = 340, gw = W - 128, tg = 20, tw = (gw - tg * 2) / 3, th = 100;
+    tiles.forEach(function (t, i) {
+      var x = gx + (i % 3) * (tw + tg), y = gy + Math.floor(i / 3) * (th + tg);
+      roundRect(ctx, x, y, tw, th, 16); ctx.fillStyle = "rgba(255,255,255,0.04)"; ctx.fill();
+      roundRect(ctx, x, y, tw, th, 16); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.stroke();
+      ctx.fillStyle = t.c; ctx.font = "800 40px " + FONT; ctx.fillText(trim(ctx, String(t.v), tw - 40), x + 22, y + 56);
+      ctx.fillStyle = dim; ctx.font = "600 18px " + FONT; ctx.fillText(t.k, x + 22, y + 86);
+    });
+    ctx.fillStyle = dim; ctx.font = "500 18px " + FONT; ctx.textAlign = "right"; ctx.fillText("github.com/ycianno/the-forge", W - 64, H - 32); ctx.textAlign = "left";
+    return c;
+
+    function cap(x) { return String(x).charAt(0).toUpperCase() + String(x).slice(1); }
+    function trim(ctx, str, max) { str = String(str); while (ctx.measureText(str).width > max && str.length > 1) str = str.slice(0, -1); return str; }
+  }
+  function downloadYear(canvas) {
+    var a = document.createElement("a"); a.href = canvas.toDataURL("image/png"); a.download = "forge-year.png";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function shareYearCard(s) {
+    var canvas = drawYearCard(s);
+    if (!canvas) { alert("Year data isn't ready yet."); return; }
+    if (navigator.canShare && typeof navigator.share === "function") {
+      canvas.toBlob(function (blob) {
+        if (!blob) return downloadYear(canvas);
+        var file = new File([blob], "forge-year.png", { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: "The Forge", text: "My Forge year in review." }).catch(function () { downloadYear(canvas); });
+        } else { downloadYear(canvas); }
+      }, "image/png");
+      return;
+    }
+    downloadYear(canvas);
+  }
+  window.shareYearCard = shareYearCard;
+
   // ---- wire up ----
   function wire() {
     var sb = document.getElementById("loadSampleBtn"); if (sb) sb.onclick = loadSampleData;

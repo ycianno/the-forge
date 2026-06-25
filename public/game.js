@@ -167,6 +167,46 @@
     return { label, monthStart: mStart, xp, byAttr, topAttr, topAttrXp: Math.max(0, topVal), weeksActive, bestWeek, trophies, insignias, isCurrent };
   }
 
+  // ----- Year in review: aggregate a whole year, with a per-month breakdown. --
+  function yearSummary(year) {
+    const y = year || new Date().getFullYear();
+    const yStart = new Date(y, 0, 1), yEnd = new Date(y + 1, 0, 1);
+    const inYear = (d) => d && d >= yStart && d < yEnd;
+    const weeks = (typeof database !== "undefined" && database && database.weeks) ? database.weeks : {};
+    const mods = modulesNow();
+    let xp = 0, weeksActive = 0, bestWeek = 0;
+    const byAttr = {}, monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (const key in weeks) {
+      const ws = (typeof parseYmd === "function") ? parseYmd(key) : null;
+      if (!inYear(ws)) continue;
+      const wk = weeks[key];
+      let r = { xp: 0, byAttr: {} };
+      try { r = window.Forge ? Forge.weekXp(wk, mods) : r; } catch (e) {}
+      if (r.xp > 0) weeksActive++;
+      xp += r.xp; monthly[ws.getMonth()] += r.xp;
+      for (const a in r.byAttr) byAttr[a] = (byAttr[a] || 0) + r.byAttr[a];
+      let pct = 0; try { pct = (typeof calculateWeekScoreData === "function") ? calculateWeekScoreData(wk) : 0; } catch (e) {}
+      if (pct > bestWeek) bestWeek = pct;
+    }
+    const dm = (typeof settings !== "undefined" && settings && settings.dailyMissions) ? settings.dailyMissions : {};
+    for (const k in dm) { const d = parseYmd(k); if (inYear(d)) { const v = allDayXp(dm[k]); xp += v; monthly[d.getMonth()] += v; } }
+    const wq = (typeof settings !== "undefined" && settings && settings.weeklyQuests) ? settings.weeklyQuests : {};
+    for (const k in wq) { const d = parseYmd(k); if (inYear(d)) { const v = allDayXp(wq[k]); xp += v; monthly[d.getMonth()] += v; } }
+    let topAttr = null, topVal = -1;
+    for (const a in byAttr) if (byAttr[a] > topVal) { topVal = byAttr[a]; topAttr = a; }
+    let bestMonthIndex = -1, bestMonthXp = 0;
+    monthly.forEach((v, i) => { if (v > bestMonthXp) { bestMonthXp = v; bestMonthIndex = i; } });
+    const monthsActive = monthly.filter(v => v > 0).length;
+    let trophies = 0;
+    const T = (typeof settings !== "undefined" && settings && settings.trophies) ? settings.trophies : {};
+    ["bronze", "silver", "gold", "platinum"].forEach(g => { const o = T[g] || {}; for (const k in o) { if (inYear(parseYmd(String(o[k]).slice(0, 10)))) trophies++; } });
+    let insignias = 0;
+    const I = (typeof settings !== "undefined" && settings && settings.insignias) ? settings.insignias : {};
+    for (const k in I) { if (inYear(parseYmd(String(I[k]).slice(0, 10)))) insignias++; }
+    const now = new Date();
+    return { year: y, xp, byAttr, topAttr, topAttrXp: Math.max(0, topVal), monthly, bestMonthIndex, bestMonthXp, monthsActive, weeksActive, bestWeek, trophies, insignias, isCurrent: y === now.getFullYear() };
+  }
+
   // Per-week progress for ONE custom pursuit: did the user touch it (active) and
   // did they meet its weekly target (hit)? Type-aware, unit-independent — so a
   // "Pages" counter and a "Reading" checklist both reduce to active/hit weeks.
@@ -1282,5 +1322,5 @@
   // XP earned in a single week (for the trends view)
   function weekXp(week) { return addWeekXp(week, {}); }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, weekXpByAttr, seasonSummary, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
+  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, weekXpByAttr, seasonSummary, yearSummary, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
 })();

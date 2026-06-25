@@ -1957,6 +1957,42 @@ function removeSeasonGoal(id) {
   renderSeason();
 }
 
+// ===== YEAR IN REVIEW =====
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+let yearOffset = 0; // years back from current (0 = this year)
+function curYear() { return new Date().getFullYear() - yearOffset; }
+function curYearSummary() { return (window.Game && Game.yearSummary) ? Game.yearSummary(curYear()) : null; }
+function renderYear() {
+  const s = curYearSummary(); if (!s) return;
+  const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+  const lbl = document.getElementById("yearLabel"); if (lbl) lbl.textContent = s.year + (s.isCurrent ? " · in progress" : "");
+  const next = document.getElementById("yearNext"); if (next) next.disabled = yearOffset <= 0;
+  const body = document.getElementById("yearBody"); if (!body) return;
+  const topName = s.topAttr ? attrName(s.topAttr) : "—";
+  const topColor = s.topAttr ? attrColor(s.topAttr) : "var(--muted)";
+  const bestMonth = s.bestMonthIndex >= 0 ? MONTHS_SHORT[s.bestMonthIndex] : "—";
+  const stats = [
+    { v: s.xp.toLocaleString(), k: "Total XP" },
+    { v: `<span style="color:${topColor}">${escapeHtml(topName)}</span>`, k: "Top attribute" },
+    { v: bestMonth, k: "Best month" },
+    { v: s.monthsActive, k: "Active months" },
+    { v: s.trophies, k: "Trophies" },
+    { v: s.insignias, k: "Insignias" },
+  ];
+  const statsHtml = `<div class="season-stats">${stats.map(x => `<div class="season-stat"><span class="ss-v">${x.v}</span><span class="ss-k">${x.k}</span></div>`).join("")}</div>`;
+  const monthly = trBarBlock("XP by month", s.monthly.map((v, i) => ({ label: MONTHS_SHORT[i], value: v, raw: String(v) })), Math.max(1, ...s.monthly));
+  const attrs = prof ? prof.attrs : [];
+  const maxAttr = Math.max(1, ...attrs.map(a => s.byAttr[a.key] || 0));
+  const attrBars = attrs.map(a => {
+    const v = s.byAttr[a.key] || 0; const pct = Math.round(v / maxAttr * 100);
+    return `<div class="ya-row"><span class="ya-head"><span class="attr-dot" style="background:${a.color}"></span><span class="ya-name">${escapeHtml(a.label || a.key)}</span></span><span class="ya-bar"><span class="ya-fill" style="width:${pct}%;background:${a.color}"></span></span><span class="ya-val">${v.toLocaleString()}</span></div>`;
+  }).join("");
+  const attrBlock = attrs.length ? `<div class="tr-block"><div class="tr-title">XP by attribute</div><div class="ya-bars">${attrBars}</div></div>` : "";
+  body.innerHTML = statsHtml + monthly + attrBlock;
+}
+function openYear() { yearOffset = 0; renderYear(); const md = document.getElementById("yearModal"); if (md) { md.classList.add("active"); md.setAttribute("aria-hidden", "false"); } }
+function closeYear() { const md = document.getElementById("yearModal"); if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); } }
+
 // ===== FOCUS TIMER =====
 let focusState = null;
 function openFocus() {
@@ -2517,6 +2553,22 @@ function bindEvents() {
       if (e.target.id === "sgAdd") return addSeasonGoalFromForm();
     });
   }
+
+  // ----- Year in Review modal -----
+  const openYearBtn = document.getElementById("openYearBtn");
+  if (openYearBtn) openYearBtn.onclick = openYear;
+  const yearClose = document.getElementById("yearClose");
+  if (yearClose) yearClose.onclick = closeYear;
+  const yearCloseBtn = document.getElementById("yearCloseBtn");
+  if (yearCloseBtn) yearCloseBtn.onclick = closeYear;
+  const yearPrev = document.getElementById("yearPrev");
+  if (yearPrev) yearPrev.onclick = () => { if (yearOffset < 30) yearOffset++; renderYear(); };
+  const yearNext = document.getElementById("yearNext");
+  if (yearNext) yearNext.onclick = () => { if (yearOffset > 0) yearOffset--; renderYear(); };
+  const yearShareBtn = document.getElementById("yearShareBtn");
+  if (yearShareBtn) yearShareBtn.onclick = () => { if (window.shareYearCard) window.shareYearCard(curYearSummary()); };
+  const yearModal = document.getElementById("yearModal");
+  if (yearModal) yearModal.addEventListener("click", (e) => { if (e.target === yearModal) closeYear(); });
 
   const genReport = (weeksBack) => {
     let currentWeekStart = getStartOfWeek(new Date());
