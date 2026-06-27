@@ -6,6 +6,10 @@
 #
 # or, from inside a cloned repo:   ./install.sh
 #
+# Options:
+#   --service        install + enable a systemd service so it runs on boot (Linux)
+#   <target-dir>     install location (default: ~/the-forge)
+#
 set -euo pipefail
 
 REPO="https://github.com/ycianno/the-forge.git"
@@ -25,6 +29,46 @@ die()  { printf '%s✗ %s%s\n' "$Y" "$1" "$R" >&2; exit 1; }
 TTY="/dev/tty"
 [ -e "$TTY" ] || TTY=""
 
+# ---- 0. parse args ----
+WANT_SERVICE=0
+DIR_ARG=""
+for arg in "$@"; do
+  case "$arg" in
+    --service) WANT_SERVICE=1 ;;
+    -h|--help) printf 'Usage: install.sh [--service] [target-dir]\n'; exit 0 ;;
+    -*) die "Unknown option: $arg" ;;
+    *)  DIR_ARG="$arg" ;;
+  esac
+done
+
+# ---- install + enable a systemd unit so The Forge runs on boot ----
+install_service() {
+  command -v systemctl >/dev/null 2>&1 || die "--service needs systemd (Linux); systemctl not found."
+  [ -f .env ] || die "No .env found in ${DIR} — set a password first, then re-run."
+  NODE_BIN="$(command -v node)"
+  SVC_USER="${SUDO_USER:-$(id -un)}"
+  step "Installing systemd service ${C}the-forge.service${R} (user: ${SVC_USER})"
+  sudo tee /etc/systemd/system/the-forge.service >/dev/null <<EOF
+[Unit]
+Description=The Forge
+After=network.target
+
+[Service]
+WorkingDirectory=${DIR}
+ExecStart=${NODE_BIN} server.js
+Restart=always
+User=${SVC_USER}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now the-forge
+  ok "Service enabled and started"
+  printf '  %sStatus:%s  sudo systemctl status the-forge\n' "$B" "$R"
+  printf '  %sLogs:%s    journalctl -u the-forge -f\n' "$B" "$R"
+}
+
 printf '\n'
 printf '%s   ⚒  T H E   F O R G E%s\n' "$A" "$R"
 printf '%s   ─────────────────────────────────────%s\n' "$D" "$R"
@@ -43,7 +87,7 @@ if [ -f package.json ] && grep -q '"name": "the-forge"' package.json 2>/dev/null
   step "Installing in the current directory"
 else
   command -v git >/dev/null 2>&1 || die "git is required to download The Forge."
-  DIR="${1:-$DEFAULT_DIR}"
+  DIR="${DIR_ARG:-$DEFAULT_DIR}"
   if [ -d "$DIR/.git" ]; then
     step "Updating existing install at ${C}${DIR}${R}"
     git -C "$DIR" pull --ff-only --quiet
@@ -53,6 +97,7 @@ else
   fi
   cd "$DIR"
 fi
+DIR="$(pwd -P)"   # normalize to an absolute path for the systemd unit
 
 # ---- 3. dependencies ----
 step "Installing dependencies (compiles a small native module, ~1 min)…"
@@ -76,11 +121,20 @@ else
   printf '%s⚠  No terminal for input — set a password in %s/.env before exposing this.%s\n' "$Y" "$DIR" "$R"
 fi
 
-# ---- 5. done ----
+# ---- 5. optional: run on boot via systemd ----
+if [ "$WANT_SERVICE" -eq 1 ]; then
+  printf '\n'
+  install_service
+  printf '\n%s✓ The Forge is installed and running on boot.%s\n' "$G" "$R"
+  printf '  %sThen open:%s  %shttp://localhost:3007%s\n\n' "$B" "$R" "$C" "$R"
+  exit 0
+fi
+
+# ---- 6. done ----
 printf '\n%s✓ The Forge is installed.%s\n\n' "$G" "$R"
 printf '  %sStart it:%s   cd %s && npm start\n' "$B" "$R" "$DIR"
 printf '  %sThen open:%s  %shttp://localhost:3007%s\n' "$B" "$R" "$C" "$R"
-printf '  %sOn boot:%s    see the systemd example in the README\n\n' "$B" "$R"
+printf '  %sOn boot:%s    re-run with %s--service%s, or see the systemd example in the README\n\n' "$B" "$R" "$C" "$R"
 
 if [ -n "$TTY" ]; then
   printf '  Start The Forge now? [Y/n] '

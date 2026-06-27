@@ -59,11 +59,36 @@ It's opinionated and built for one person: you. Self-host it, set a password, an
 
 ## Install
 
-There are **two ways** to run The Forge — pick whichever you're comfortable with. Both run the exact same app on the same port; Docker just wraps it in a container. It's built to live on your own hardware: a Raspberry Pi, a NAS, a Proxmox VM, an old laptop, or a cheap VPS.
+> **New to self-hosting? Read this first.**
+> You do **not** need a "server", a cloud account, or any networking know-how to try The Forge. A "server" is just *a computer that stays on* — and your own laptop or desktop counts. The Forge is a single small program that runs on your machine and opens at **http://localhost:3007** in your browser, like any local app.
+>
+> - **Just want to try it?** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac/Linux), run the one command in **Option A**, and open the link. Nothing is exposed to the internet; everything stays on your computer. Close it when you're done.
+> - **Want it running 24/7?** Leave it on any always-on machine — an old laptop, a Raspberry Pi, a NAS, or a cheap VPS — and reach it from your phone (see [Accessing it](#accessing-it-from-your-phone--outside-home)). But that's a *later* step, not a requirement to start.
+
+### Which option is right for me?
+
+| You are… | Pick | Why |
+|---|---|---|
+| Running a home-server dashboard (**CasaOS, Umbrel, Unraid, Portainer**) | **Option 0 — One-click** | Install from your dashboard's UI. No terminal. |
+| Comfortable installing one app (**Docker Desktop**) | **Option A — Docker** | One command, nothing to build or compile. **Easiest for most people.** |
+| A developer / want no Docker at all | **Option B — Bare metal** | Plain Node.js. More setup, full control. |
+
+All three run the **exact same app** on the same port. You can change your mind later — your data is just one file.
+
+### Option 0 — One-click app stores (no terminal)
+
+If you already run a self-hosted dashboard, this is the easiest path — install from the UI in one click. Ready-made manifests live in [`deploy/`](deploy/).
+
+- **CasaOS** — App Store → *Custom Install* (the `+`) → paste the contents of [`deploy/casaos/the-forge.yml`](deploy/casaos/the-forge.yml).
+- **Portainer** — *Stacks → Add stack*, name it `forge`, paste the project's [`docker-compose.yml`](docker-compose.yml) (or point it at this repo), set `APP_PASSWORD`, then *Deploy*.
+- **Umbrel** — add as a Community App Store app; see [`deploy/umbrel/`](deploy/umbrel/).
+- **Unraid / Dockge / Coolify / Yacht** — *Add Container* with image `ghcr.io/ycianno/the-forge:latest`, port `3007`, volume `/app/data`, env `APP_PASSWORD`.
+
+See [`deploy/README.md`](deploy/README.md) for full details. Remember to set `APP_PASSWORD` in each.
 
 ### Option A — Docker (recommended)
 
-**Fastest — prebuilt image, nothing to build.** A multi-arch image (amd64 **+ arm64**, so it runs on a Raspberry Pi) is published to GitHub's Container Registry:
+**Fastest — prebuilt image, nothing to build.** A multi-arch image (amd64 **+ arm64**, so it runs on a Raspberry Pi) is published to GitHub's Container Registry. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) first (or Docker Engine on Linux), then:
 
 ```bash
 docker run -d --name forge \
@@ -72,6 +97,8 @@ docker run -d --name forge \
   -v "$PWD/data:/app/data" \
   ghcr.io/ycianno/the-forge:latest
 ```
+
+Then open **http://localhost:3007**. That's it — to update later: `docker pull ghcr.io/ycianno/the-forge:latest && docker rm -f forge` and re-run the command.
 
 **Or from source, with Compose:**
 
@@ -86,7 +113,25 @@ docker compose up -d
 
 ### Option B — Bare metal (Node, no Docker)
 
-**One-line installer.** It checks for Node, downloads The Forge, installs it, asks you to set a password, and offers to start it right away:
+This runs The Forge directly with Node.js. It needs **Node.js 20+** and, on first install, a few build tools — `better-sqlite3` compiles a small native module. Set those up **first**, or `npm install` will fail with a `node-gyp` error.
+
+**1. Install Node.js 20+ and build tools:**
+
+```bash
+# Debian / Ubuntu / Raspberry Pi OS
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs build-essential python3
+
+# Fedora / RHEL
+sudo dnf install -y nodejs gcc-c++ make python3
+
+# macOS (Homebrew) — Xcode tools provide the compiler
+xcode-select --install 2>/dev/null; brew install node
+```
+
+(No package manager? Grab an installer from [nodejs.org](https://nodejs.org).)
+
+**2. Install The Forge — one-line installer.** It checks Node, downloads The Forge, installs it, asks you to set a password, and offers to start it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ycianno/the-forge/main/install.sh | bash
@@ -102,9 +147,13 @@ echo "APP_PASSWORD=your-password" > .env    # or: export APP_PASSWORD=your-passw
 npm start
 ```
 
-Requires **Node.js 20+**. `better-sqlite3` compiles a small native module, so on first install you'll need build tools (`python3`, `make`, `g++` on Linux; the Xcode Command Line Tools on macOS).
+**Keep it running on boot (Linux / systemd).** Docker restarts the app for you; on bare metal a small service unit does the same. The easiest way is to let the installer do it — re-run with `--service`:
 
-**Keep it running on boot (Linux / systemd).** Docker restarts the app for you; on bare metal a small service unit does the same. Create `/etc/systemd/system/the-forge.service`:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ycianno/the-forge/main/install.sh | bash -s -- --service
+```
+
+That writes and enables the unit for you. To do it by hand instead, create `/etc/systemd/system/the-forge.service`:
 
 ```ini
 [Unit]
@@ -123,9 +172,30 @@ WantedBy=multi-user.target
 
 Then `sudo systemctl enable --now the-forge`. (On macOS, `pm2 start server.js --name the-forge` is the easy equivalent. The service reads your password from the `.env` file in `WorkingDirectory`.)
 
+### On Windows
+
+The Forge runs great on Windows — pick one:
+
+- **Docker Desktop (easiest):** install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/), open PowerShell, and run the **Option A** `docker run` command (it works as-is). Open **http://localhost:3007**.
+- **WSL2 (for the bare-metal path):** the `install.sh` script and the Linux commands above need a Linux shell. Install WSL with `wsl --install` in an admin PowerShell, reboot, open **Ubuntu**, then follow **Option B** exactly as written.
+
+Plain Windows (no Docker, no WSL) isn't supported directly because `better-sqlite3` needs a build toolchain — Docker or WSL is the smooth path.
+
 ---
 
 **However you start it:** open **http://localhost:3007** (or `http://<server-ip>:3007` from another device on your network), log in, and on first launch **load sample data** to explore — or start fresh. All your data lives in one SQLite file at `data/database.sqlite`.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| **`npm install` fails with a `node-gyp` / compiler error** | You're missing build tools. Install them (see [Option B, step 1](#option-b--bare-metal-node-no-docker)) — `build-essential python3` on Debian/Ubuntu, Xcode Command Line Tools on macOS — then re-run `npm install`. |
+| **"Node.js 20+ required" (or a very old Node)** | Your system Node is too old. Install 20+ via the NodeSource line above, or use [nvm](https://github.com/nvm-sh/nvm): `nvm install 20 && nvm use 20`. |
+| **Port 3007 already in use** | Something else is on that port. Pick another: set `PORT=8080` (in `.env`, or `-e PORT=8080 -p 8080:8080` for Docker) and open that port instead. |
+| **Page won't load at localhost** | Give it a few seconds on first start (it creates the database). Check it's running: `docker logs forge` (Docker) or look at the terminal output (bare metal). `/healthz` should return `{"status":"ok"}`. |
+| **Can't reach it from my phone** | Use your machine's LAN IP, not `localhost`: `http://<server-ip>:3007`. Both devices must be on the same Wi-Fi, and the host firewall must allow port 3007. For outside-home access, see [Accessing it](#accessing-it-from-your-phone--outside-home). |
+| **I forgot my password / want to change it** | Edit `APP_PASSWORD` in `.env` (bare metal / Compose) or the `-e APP_PASSWORD=` flag (plain `docker run`), then restart. |
+| **How do I update?** | **Docker:** `docker pull …:latest` then recreate the container (your `data/` volume is kept). **Bare metal:** `git pull && npm install &&` restart. Your database is never touched by updates. |
 
 ## Configuration
 
