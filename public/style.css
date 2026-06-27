@@ -2370,7 +2370,16 @@ input[type="file"] { display: none; }
 .hm-legend .hm-cell { cursor: default; }
 
 @media (max-width: 768px) {
-  .hero-heatmap { --hm-cell: 10px; }
+  .hero-heatmap { --hm-cell: 11px; }
+  /* Drop the month labels on phones — they overflow/stack and break the strip. */
+  .hm-months { display: none; }
+  .hm-days { padding-top: 0; }
+  /* Hard-cap the strip to exactly the 7 day-rows so it can NEVER scroll
+     vertically, regardless of how the grid renders. Horizontal scroll only. */
+  .heatmap-scroll {
+    max-height: calc(7 * var(--hm-cell) + 6 * var(--hm-gap) + 2px);
+    overflow-y: hidden;
+  }
 }
 
 /* Forge brand mark (topbar) */
