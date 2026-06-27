@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=52" />
+  <link rel="stylesheet" href="style.css?v=56" />
 </head>
 <body>
   <main class="shell">
@@ -195,12 +195,37 @@
     <section class="section boss-card glass" id="boss">
       <div class="boss-emoji" id="bossEmoji">🪨</div>
       <div class="boss-body">
-        <div class="boss-top"><span class="boss-kicker">⚔️ Weekly Boss</span><span class="boss-status" id="bossStatus">—</span></div>
+        <div class="boss-top">
+          <span class="boss-kicker">⚔️ Weekly Boss<span class="boss-nemesis-badge" id="bossNemesisBadge" style="display:none;">NEMESIS</span></span>
+          <span class="boss-top-right">
+            <button class="boss-log-btn" id="bossLogBtn" type="button" aria-label="Boss log &amp; stats">⚔ Log</button>
+            <span class="boss-status" id="bossStatus">—</span>
+          </span>
+        </div>
         <div class="boss-name" id="bossName">—</div>
         <div class="boss-hp"><div class="boss-hp-fill" id="bossHpFill"></div></div>
         <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
+        <div class="boss-stats" id="bossStats"></div>
       </div>
     </section>
+
+    <!-- Boss Log Modal -->
+    <div class="modal-backdrop" id="bossLogModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" style="max-width: 560px;">
+        <div class="modal-head">
+          <div class="modal-title-wrap">
+            <span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M14.5 6.5 18 3h3v3l-3.5 3.5"/></svg></span>
+            <h3>Boss Log</h3>
+          </div>
+          <button class="modal-close" id="closeBossLogTopBtn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="bosslog-stats" id="bossLogStats"></div>
+        <div class="bosslog-list" id="bossLogList"></div>
+        <div class="modal-actions">
+          <button id="closeBossLogBtn" type="button">Close</button>
+        </div>
+      </div>
+    </div>
 
     <details id="scoreboard" class="section section-card glass" open>
       <summary><div class="summary-left"><h2>Quest Log</h2><p class="hint">Commitments are separated from bonus targets so the system stays honest.</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-metrics-btn" type="button" title="Edit Metrics"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
@@ -329,6 +354,7 @@
 
         <div class="settings-tabs">
           <button class="settings-tab active" data-settings-tab="goals">Targets</button>
+          <button class="settings-tab" data-settings-tab="game">Game</button>
           <button class="settings-tab" data-settings-tab="modules">Pursuits</button>
           <button class="settings-tab" data-settings-tab="profile">Profile</button>
           <button class="settings-tab" data-settings-tab="appearance">Themes</button>
@@ -354,8 +380,13 @@
             <div class="set-row-text"><span class="set-row-label">Project hours / week</span><span class="set-row-hint">Minimum output-producing work</span></div>
             <input type="number" id="cfgProjectTarget" data-cfg="true" value="2" min="0">
           </div>
+        </div>
+
+        <!-- Game Tab — rules of the RPG layer + device feel -->
+        <div class="settings-panel" id="settingsGame" data-panel="game" style="display:none;">
+          <p class="settings-intro">The rules of the game — how fast you level, what keeps a streak alive, and how the weekly boss behaves.</p>
           <div class="set-row">
-            <div class="set-row-text"><span class="set-row-label">Difficulty</span><span class="set-row-hint">How fast you level up</span></div>
+            <div class="set-row-text"><span class="set-row-label">Leveling pace</span><span class="set-row-hint">How much XP each level demands</span></div>
             <select id="cfgDifficulty" style="width:150px;"><option value="70">Relaxed</option><option value="100">Standard</option><option value="140">Hardcore</option></select>
           </div>
           <div class="set-row">
@@ -366,6 +397,19 @@
             <div class="set-row-text"><span class="set-row-label">Streak rest days</span><span class="set-row-hint">Missed days your day-streak forgives 🛡️</span></div>
             <input type="number" id="cfgStreakFreeze" value="1" min="0" max="3">
           </div>
+          <div class="set-divider">Weekly Boss</div>
+          <div class="set-row">
+            <div class="set-row-text"><span class="set-row-label">Boss difficulty</span><span class="set-row-hint">How hard the boss hits — also scales with your level</span></div>
+            <select id="cfgBossDifficulty" style="width:150px;"><option value="story">Story</option><option value="normal">Normal</option><option value="hard">Hard</option><option value="brutal">Brutal</option></select>
+          </div>
+          <div class="set-row">
+            <div class="set-row-text"><span class="set-row-label">Nemesis months</span><span class="set-row-hint">A tougher recurring boss that escalates each time you win 👹</span></div>
+            <select id="cfgNemesisFreq" style="width:150px;"><option value="off">Off</option><option value="biannual">Twice a year</option><option value="quarterly">Quarterly</option></select>
+          </div>
+          <div class="set-divider">This device</div>
+          <label class="check set-check" style="margin:2px 0;"><input type="checkbox" id="cfgSound"><span>Sound effects</span></label>
+          <label class="check set-check" style="margin:2px 0;"><input type="checkbox" id="cfgHaptics"><span>Haptics &amp; vibration (mobile)</span></label>
+          <p class="hint" style="margin-top:6px;">Sound &amp; haptics are saved per-device, not synced.</p>
         </div>
 
         <!-- Sections Tab -->
@@ -385,7 +429,7 @@
           <div class="section-toggles" id="sectionToggles"></div>
 
           <label class="label" style="margin-top:18px;">Reminders (phone push)</label>
-          <label class="check" style="margin:0 0 4px;"><input type="checkbox" id="cfgRemindEnable"><span>Enable push reminders on this device</span></label>
+          <label class="check set-check" style="margin:0 0 4px;"><input type="checkbox" id="cfgRemindEnable"><span>Enable push reminders on this device</span></label>
           <div class="set-row"><div class="set-row-text"><span class="set-row-label">Morning ping</span><span class="set-row-hint">Quests waiting today</span></div><input type="time" id="cfgRemindMorning" value="08:00" style="width:120px;"></div>
           <div class="set-row"><div class="set-row-text"><span class="set-row-label">Evening nudge</span><span class="set-row-hint">Only if the day isn't done</span></div><input type="time" id="cfgRemindEvening" value="19:00" style="width:120px;"></div>
           <p class="hint" style="margin-top:8px;">On iPhone: add Forge to your Home Screen first, then enable.</p>
@@ -723,9 +767,9 @@
   </main>
 
   <script src="modules.js?v=9"></script>
-  <script src="game.js?v=24"></script>
-  <script src="fx.js?v=9"></script>
-  <script src="app.js?v=47"></script>
+  <script src="game.js?v=25"></script>
+  <script src="fx.js?v=10"></script>
+  <script src="app.js?v=50"></script>
   <script src="extras.js?v=4"></script>
 </body>
 </html>

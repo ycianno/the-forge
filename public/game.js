@@ -822,6 +822,10 @@
     add("boss-1", "Giant Slayer", "Defeat a weekly boss", "rare", "boss", IP.boss, boss >= 1);
     const bossName = { 5: "Dragonsbane", 25: "Worldbreaker" };
     rungs([5, 25], boss, 25, 1).forEach(N => add("boss-" + N, bossName[N] || ("Worldbreaker " + roman(Math.floor((N - 25) / 25) + 1)), "Defeat " + N + " weekly bosses", gradeByVal(N, 5, 25, 75), "boss", IP.boss, boss >= N));
+    // Nemesis — the twice-a-year gauntlet. Escalates each time you conquer it.
+    const nem = (settings && Array.isArray(settings.bossHistory)) ? settings.bossHistory.filter(r => r && r.nemesis && r.defeated).length : 0;
+    add("nemesis-1", "Shadowbreaker", "Defeat the Nemesis", "epic", "boss", IP.boss, nem >= 1);
+    rungs([3, 6], nem, 6, 1).forEach(N => add("nemesis-" + N, N >= 6 ? "Nemesis Undone" : "Shadowbreaker " + roman(N - 1), "Conquer " + N + " Nemesis months", gradeByVal(N, 3, 6, 12), "boss", IP.boss, nem >= N));
 
     // Study & focus (hour-based)
     const shName = { 10: "Apprentice Scholar", 50: "Dedicated", 100: "Centurion of Study", 250: "Erudite", 500: "Master Scholar", 1000: "Living Library" };
@@ -1066,7 +1070,7 @@
 
   // ===========================================================================
   // DAILY MISSIONS — 3 challenges chosen deterministically from today's date
-  // (mirrors bossForWeek's hash). Conditions derive from today's data; clearing
+  // (a date-seeded hash, like the weekly boss). Conditions derive from today's data; clearing
   // a mission banks REAL bonus XP as a token in settings.dailyMissions, which
   // computeProfile folds into the lifetime pool. Auto-resets at midnight (the
   // seed is the date) and never evaluates a past day.

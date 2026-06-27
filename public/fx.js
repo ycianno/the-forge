@@ -55,7 +55,10 @@
   function playLevelUp() { arp([523.25, 659.25, 783.99, 1046.5], 80, "sine", 0.17); }
 
   // ----- Haptics -----------------------------------------------------------
+  function hapticsOn() { return localStorage.getItem("lcc.haptics") !== "off"; }
+  function setHaptics(on) { localStorage.setItem("lcc.haptics", on ? "on" : "off"); }
   function vibrate(pattern) {
+    if (!hapticsOn()) return;
     if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch (e) {} }
   }
 
@@ -422,5 +425,5 @@
     clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
   }
 
-  window.FX = { levelUp, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, classUp, missionComplete, missionsAllClear, record, xpPop, playCheck, setSfx, sfxOn };
+  window.FX = { levelUp, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, classUp, missionComplete, missionsAllClear, record, xpPop, playCheck, setSfx, sfxOn, setHaptics, hapticsOn };
 })();

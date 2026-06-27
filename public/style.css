@@ -2211,6 +2211,9 @@ input[type="file"] { display: none; }
 .modal-close:hover { transform: none; box-shadow: none; color: var(--text); background: rgba(255,255,255,0.1); }
 
 .settings-intro { font-size: 13px; color: var(--muted); margin: 0 0 6px; line-height: 1.5; }
+.set-divider { margin: 16px 0 2px; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+/* Settings toggles are preferences, not checklist items — never strike through when on. */
+.set-check input:checked + span { color: var(--text); text-decoration: none; opacity: 1; }
 
 /* target rows */
 .set-row {
@@ -2687,7 +2690,38 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .boss-card.defeated .boss-status { color: var(--gradient-success-text); }
 .boss-card.defeated .boss-hp-fill { background: linear-gradient(90deg, #22c55e, #4ade80); box-shadow: 0 0 12px var(--glow-green); }
 .boss-card.defeated .boss-emoji { filter: grayscale(0.5) drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
-@media (max-width: 768px) { .boss-taunt { display: none; } .boss-emoji { font-size: 36px; } }
+.boss-top-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.boss-log-btn { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; padding: 3px 9px; border-radius: 99px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--muted); cursor: pointer; line-height: 1.4; transition: background 0.15s, color 0.15s; }
+.boss-log-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.boss-stats { margin-top: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; color: var(--muted); }
+.boss-stats:empty { display: none; }
+
+/* Nemesis week — the twice-a-year gauntlet gets a distinct, threatening look */
+.boss-nemesis-badge { margin-left: 8px; font-size: 9px; font-weight: 900; letter-spacing: 0.14em; padding: 2px 6px; border-radius: 4px; background: linear-gradient(135deg, #a855f7, #ec4899); color: #fff; vertical-align: middle; box-shadow: 0 0 10px rgba(168,85,247,0.5); }
+.boss-card.nemesis { border-color: rgba(168,85,247,0.4); box-shadow: 0 0 0 1px rgba(168,85,247,0.3), 0 12px 40px rgba(168,85,247,0.18); }
+.boss-card.nemesis .boss-hp-fill { background: linear-gradient(90deg, #a855f7, #ec4899); box-shadow: 0 0 12px rgba(168,85,247,0.6); }
+.boss-card.nemesis .boss-status { color: #f0abfc; }
+.boss-card.nemesis .boss-emoji { animation: bossPulse 2.4s ease-in-out infinite; }
+@keyframes bossPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+
+/* Boss Log modal */
+.bosslog-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 16px; }
+.bosslog-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+.bosslog-tile-v { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 22px; line-height: 1; }
+.bosslog-tile-k { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.bosslog-list { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.bosslog-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); }
+.bosslog-row.nem { border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.07); }
+.bosslog-emoji { font-size: 22px; flex-shrink: 0; }
+.bosslog-name { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 1; min-width: 0; font-weight: 700; font-size: 14px; }
+.bosslog-name-line { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.bosslog-week { font-size: 11px; font-weight: 600; color: var(--muted); }
+.bosslog-nem { flex-shrink: 0; font-size: 8px; font-weight: 900; letter-spacing: 0.1em; padding: 2px 5px; border-radius: 4px; background: linear-gradient(135deg, #a855f7, #ec4899); color: #fff; }
+.bosslog-dmg { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.bosslog-res { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+.bosslog-res.win { color: var(--gradient-success-text); background: var(--glow-green); }
+.bosslog-res.loss { color: #fca5a5; background: rgba(239,68,68,0.12); }
+@media (max-width: 768px) { .boss-taunt { display: none; } .boss-emoji { font-size: 36px; } .bosslog-dmg { display: none; } }
 
 /* ===========================================================================
  * MOBILE UX POLISH PASS  (added 2026-06)

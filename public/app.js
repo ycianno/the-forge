@@ -1796,6 +1796,10 @@ function openSettings() {
   const dif = document.getElementById("cfgDifficulty"); if (dif) dif.value = String(settings.gameBase || 100);
   const sg = document.getElementById("cfgStreakGrade"); if (sg) sg.value = settings.streakGrade || 75;
   const sf = document.getElementById("cfgStreakFreeze"); if (sf) sf.value = (settings.streakFreeze != null ? settings.streakFreeze : 1);
+  const bd = document.getElementById("cfgBossDifficulty"); if (bd) bd.value = settings.bossDifficulty || "normal";
+  const nf = document.getElementById("cfgNemesisFreq"); if (nf) nf.value = settings.nemesisFreq || "biannual";
+  const snd = document.getElementById("cfgSound"); if (snd) snd.checked = !(window.FX && FX.sfxOn) || FX.sfxOn();
+  const hap = document.getElementById("cfgHaptics"); if (hap) hap.checked = !(window.FX && FX.hapticsOn) || FX.hapticsOn();
   const cs = document.getElementById("cfgCallsign"); if (cs) cs.value = settings.callsign || "";
   renderSectionToggles();
   renderModulesEditor();
@@ -1817,65 +1821,246 @@ function closeCabinet() { document.getElementById("cabinetModal").classList.remo
 
 // ===== EVENT BINDING =====
 // ===== WEEKLY BOSS =====
+// A boss each week. Four mechanics layer on top of plain weekly completion:
+//   1. Difficulty is decoupled from the streak grade — it has its own setting
+//      and scales with your level + current win streak.
+//   2. Selection is a shuffle-bag: every boss in the roster appears once before
+//      any repeat (deterministic per week, reshuffled each full round).
+//   3. Weakness is adaptive — it targets YOUR weakest trained stat, so the 2×
+//      bonus always points at the thing you've been neglecting.
+//   4. On a configurable cadence (settings.nemesisFreq) a recurring Nemesis
+//      takes over the whole month and escalates each time you've beaten it.
+// Every week's outcome is logged to settings.bossHistory for analytics.
 const BOSSES = [
-  { name: "Inertia", emoji: "🪨", weak: "training", taunt: "You won't even start. Prove me wrong." },
-  { name: "The Procrastinator", emoji: "🦥", weak: "discipline", taunt: "Tomorrow, right? That's what you always say." },
-  { name: "Brain Fog", emoji: "🌫️", weak: "study", taunt: "Why study? You'll just forget it." },
-  { name: "The Glutton", emoji: "🍔", weak: "protein", taunt: "One more cheat day won't hurt…" },
-  { name: "The Drifter", emoji: "🌀", weak: "project", taunt: "Busywork feels like progress, doesn't it?" },
-  { name: "Lord Snooze", emoji: "😴", weak: "discipline", taunt: "Five more minutes. Every single morning." },
-  { name: "Doomscroll Hydra", emoji: "🐍", weak: "study", taunt: "Just one more scroll…" },
-  { name: "The Couch Wraith", emoji: "👻", weak: "training", taunt: "Skip the workout. Stay cozy." },
+  { name: "Inertia", emoji: "🪨", taunt: "You won't even start. Prove me wrong." },
+  { name: "The Procrastinator", emoji: "🦥", taunt: "Tomorrow, right? That's what you always say." },
+  { name: "Brain Fog", emoji: "🌫️", taunt: "Why bother? You'll just forget it." },
+  { name: "The Glutton", emoji: "🍔", taunt: "One more cheat day won't hurt…" },
+  { name: "The Drifter", emoji: "🌀", taunt: "Busywork feels like progress, doesn't it?" },
+  { name: "Lord Snooze", emoji: "😴", taunt: "Five more minutes. Every single morning." },
+  { name: "Doomscroll Hydra", emoji: "🐍", taunt: "Just one more scroll…" },
+  { name: "The Couch Wraith", emoji: "👻", taunt: "Skip it. Stay cozy." },
+  { name: "Sir Excuses", emoji: "🛡️", taunt: "You had a reason. You always have a reason." },
+  { name: "The Flake", emoji: "❄️", taunt: "You'll do it next week. Sure you will." },
+  { name: "Burnout", emoji: "🥀", taunt: "You're tired. Quit while it still hurts." },
+  { name: "The Comfort Zone", emoji: "🛋️", taunt: "Why grow? It's nice in here." },
 ];
+const NEMESIS = {
+  name: "The Forgemaster's Shadow", emoji: "👹", nemesis: true,
+  taunts: [
+    "I am every excuse you've ever made — and I've come to collect.",
+    "You beat me once. I came back stronger. Did you?",
+    "Each time you fall, I rise. Show me you've risen further.",
+    "This is the month that breaks the soft. Are you soft?",
+  ],
+};
+// Nemesis cadence is configurable (settings.nemesisFreq). Months are 0-indexed.
+const NEMESIS_SCHEDULES = {
+  off: [],
+  biannual: [0, 6],            // January & July
+  quarterly: [0, 3, 6, 9],     // Jan / Apr / Jul / Oct
+};
+function nemesisMonths() { return NEMESIS_SCHEDULES[settings.nemesisFreq] || NEMESIS_SCHEDULES.biannual; }
 const BOSS_ATTR = { discipline: "Discipline", training: "Body", study: "Mind", protein: "Vitality", project: "Craft" };
-function bossForWeek(key) {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return BOSSES[h % BOSSES.length];
+const BOSS_CAT_OF_ATTR = (window.Forge && Forge.CAT_OF_ATTR) || { Discipline: "discipline", Body: "training", Mind: "study", Vitality: "protein", Craft: "project" };
+const BOSS_DIFFICULTY = { story: 60, normal: 72, hard: 82, brutal: 92 };
+
+function bossWeekDate(key) {
+  const a = String(key || weekKey()).split("-").map(Number);
+  return new Date(a[0], (a[1] || 1) - 1, a[2] || 1);
 }
-function computeBossDamage() {
-  const boss = bossForWeek(weekKey());
+function isNemesisWeek(key) { return nemesisMonths().includes(bossWeekDate(key).getMonth()); }
+// Small deterministic PRNG so the shuffle-bag is stable across reloads/devices.
+function bossRng(seed) {
+  let a = seed >>> 0;
+  return function () { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+// Whole weeks since a fixed anchor — the index into the shuffle-bag.
+function bossWeekIndex(key) {
+  const d = bossWeekDate(key);
+  const EPOCH = Date.UTC(2024, 0, 7); // a fixed Sunday
+  return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - EPOCH) / 6048e5);
+}
+// Shuffle-bag: each round of BOSSES.length weeks is a fresh permutation, so a
+// boss never repeats until the whole roster has been seen.
+function bossForWeek(key) {
+  if (isNemesisWeek(key)) return NEMESIS;
+  const n = BOSSES.length;
+  const wi = bossWeekIndex(key);
+  const round = Math.floor(wi / n);
+  const bag = [...Array(n).keys()];
+  const rnd = bossRng((round + 1000) * 2654435761);
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = bag[i]; bag[i] = bag[j]; bag[j] = t; }
+  return BOSSES[bag[((wi % n) + n) % n]];
+}
+
+// Categories that actually appear in the current blueprint (so we never make a
+// boss "weak to" a stat the player has no quests for).
+function bossPresentCats() {
+  const bp = getDailyBlueprint(); const set = new Set();
+  Object.keys(bp).forEach(d => (bp[d] || []).forEach(t => set.add(categoryFor(t))));
+  set.add("training"); // the workout row is always in play
+  return set;
+}
+// The player's weakest trained stat → the boss's adaptive weakness.
+function bossWeakFor(prof) {
+  const present = bossPresentCats();
+  const ranked = (prof && prof.attrs ? prof.attrs.slice() : []).sort((a, b) => a.level - b.level || a.xp - b.xp);
+  for (const a of ranked) { const c = BOSS_CAT_OF_ATTR[a.key]; if (present.has(c)) return c; }
+  return "discipline";
+}
+
+// Consecutive past wins (current week excluded so it can't feed back into the
+// difficulty that decides the current week).
+function bossWinStreak(excludeKey) {
+  const h = (settings.bossHistory || []).filter(r => r.week !== excludeKey).sort((a, b) => a.week < b.week ? 1 : -1);
+  let s = 0; for (const r of h) { if (r.defeated) s++; else break; } return s;
+}
+// How many Nemesis months you've already conquered → its escalation tier (1-based).
+function nemesisLevel(excludeKey) {
+  let n = 0; for (const r of (settings.bossHistory || [])) if (r.nemesis && r.defeated && r.week !== excludeKey) n++;
+  return n + 1;
+}
+function bossTarget(prof, isNem, key) {
+  const base = BOSS_DIFFICULTY[settings.bossDifficulty] || BOSS_DIFFICULTY.normal;
+  const lv = prof ? prof.level : 1;
+  let t = base + Math.min(12, Math.floor(lv / 8) * 2) + Math.min(8, bossWinStreak(key));
+  if (isNem) t += 6 + (nemesisLevel(key) - 1) * 4; // escalates each conquered Nemesis
+  return Math.max(40, Math.min(98, Math.round(t)));
+}
+function computeBossDamage(weak) {
   const checks = getWeekData().checks || {};
   const blueprint = getDailyBlueprint();
   const names = Object.keys(blueprint);
   let totW = 0, doneW = 0;
   for (let i = 0; i < 7; i++) {
     (blueprint[names[i]] || []).forEach((t) => {
-      const w = categoryFor(t) === boss.weak ? 2 : 1;
+      const w = categoryFor(t) === weak ? 2 : 1;
       totW += w; if (checks[taskId(i, t)]) doneW += w;
     });
-    const ww = boss.weak === "training" ? 2 : 1;
+    const ww = weak === "training" ? 2 : 1;
     totW += ww; if (checks["workout-" + i]) doneW += ww;
   }
-  return { boss, dmg: totW ? Math.round(doneW / totW * 100) : 0 };
+  return totW ? Math.round(doneW / totW * 100) : 0;
 }
+
+// Upsert this week's outcome into the persisted log. Returns true if a brand-new
+// week entry was created (used to decide whether a server write is warranted).
+function recordBossHistory(key, rec) {
+  if (!Array.isArray(settings.bossHistory)) settings.bossHistory = [];
+  const h = settings.bossHistory;
+  let row = h.find(r => r.week === key);
+  const isNew = !row;
+  if (!row) { row = { week: key }; h.push(row); }
+  Object.assign(row, rec, { week: key });
+  // Keep the log bounded — two years of weeks is plenty for analytics.
+  if (h.length > 120) { h.sort((a, b) => a.week < b.week ? 1 : -1); h.length = 120; }
+  return isNew;
+}
+
 function renderBoss() {
   const panel = document.getElementById("boss");
   if (!panel) return;
-  const { boss, dmg } = computeBossDamage();
-  const grade = settings.streakGrade || 75;
-  const defeated = dmg >= grade;
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set("bossEmoji", boss.emoji);
-  set("bossName", boss.name);
-  set("bossWeak", "Weak to " + (BOSS_ATTR[boss.weak] || boss.weak) + " · those quests hit 2×");
-  set("bossStatus", defeated ? "DEFEATED" : Math.max(0, grade - dmg) + "% to defeat");
-  set("bossTaunt", defeated ? "Defeated. Next week, a new challenger." : boss.taunt);
-  const fill = document.getElementById("bossHpFill");
-  if (fill) { const hp = Math.max(0, Math.round((1 - dmg / grade) * 100)); fill.style.width = (defeated ? 100 : hp) + "%"; }
-  panel.classList.toggle("defeated", defeated);
-
-  // Defeat celebration — once per week; silent backfill on first ever run
   const key = weekKey();
+  const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+  const boss = bossForWeek(key);
+  const isNem = !!boss.nemesis;
+  const weak = bossWeakFor(prof);
+  const dmg = computeBossDamage(weak);
+  const target = bossTarget(prof, isNem, key);
+  const defeated = dmg >= target;
+  const nemLv = isNem ? nemesisLevel(key) : 0;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+  set("bossEmoji", boss.emoji);
+  set("bossName", isNem ? boss.name + " · Lv " + nemLv : boss.name);
+  set("bossWeak", "Weak to " + (BOSS_ATTR[weak] || weak) + " · those quests hit 2×");
+  set("bossStatus", defeated ? "DEFEATED" : Math.max(0, target - dmg) + "% to defeat");
+  const taunt = isNem ? boss.taunts[(nemLv - 1) % boss.taunts.length] : boss.taunt;
+  set("bossTaunt", defeated ? "Defeated. Next week, a new challenger." : taunt);
+  const fill = document.getElementById("bossHpFill");
+  if (fill) { const hp = Math.max(0, Math.round((1 - dmg / target) * 100)); fill.style.width = (defeated ? 100 : hp) + "%"; }
+  panel.classList.toggle("defeated", defeated);
+  panel.classList.toggle("nemesis", isNem && !defeated);
+  const badge = document.getElementById("bossNemesisBadge");
+  if (badge) badge.style.display = isNem ? "" : "none";
+
+  // Defeat celebration — once per week; silent backfill on first ever run.
   const first = !settings.bossDefeated;
   if (!settings.bossDefeated) settings.bossDefeated = {};
-  if (defeated && !settings.bossDefeated[key]) {
-    settings.bossDefeated[key] = boss.name;
+  const newlyDefeated = defeated && !settings.bossDefeated[key];
+  if (newlyDefeated) settings.bossDefeated[key] = boss.name;
+  const isNewWeek = recordBossHistory(key, { name: boss.name, emoji: boss.emoji, weak, dmg, target, defeated, nemesis: isNem });
+  renderBossStats(prof);
+
+  if (newlyDefeated) {
     if (typeof persistSettings === "function") persistSettings();
-    if (!first && window.FX && FX.bossDefeated) FX.bossDefeated(boss.name);
-  } else if (first) {
+    if (!first && window.FX && FX.bossDefeated) FX.bossDefeated(isNem ? boss.name + " — Nemesis felled ⚔️" : boss.name);
+  } else if (first || isNewWeek) {
     if (typeof persistSettings === "function") persistSettings();
+  } else if (typeof persistSettingsSoon === "function") {
+    persistSettingsSoon(); // debounced — keeps live dmg fresh without write spam
   }
+}
+
+// Compact analytics line under the HP bar + the Boss Log modal contents.
+function bossAnalytics() {
+  const h = (settings.bossHistory || []).filter(r => r.target != null);
+  const faced = h.length;
+  const wins = h.filter(r => r.defeated).length;
+  const sorted = h.slice().sort((a, b) => a.week < b.week ? 1 : -1);
+  let cur = 0, best = 0, run = 0;
+  for (const r of sorted) { if (r.defeated) { run++; best = Math.max(best, run); } else run = 0; }
+  for (const r of sorted) { if (r.defeated) cur++; else break; }
+  const nemWins = h.filter(r => r.nemesis && r.defeated).length;
+  return { faced, wins, rate: faced ? Math.round(wins / faced * 100) : 0, cur, best, nemWins, nemLevel: nemWins + 1, rows: sorted };
+}
+function renderBossStats() {
+  const el = document.getElementById("bossStats");
+  if (!el) return;
+  const a = bossAnalytics();
+  if (!a.faced) { el.textContent = ""; return; }
+  const bits = [`Win rate ${a.rate}%`, `Streak ${a.cur}`];
+  if (a.nemWins) bits.push(`Nemesis Lv ${a.nemLevel}`);
+  el.textContent = bits.join(" · ");
+}
+function renderBossLog() {
+  const a = bossAnalytics();
+  const tiles = [
+    ["Faced", a.faced], ["Defeated", a.wins], ["Win rate", a.rate + "%"],
+    ["Current streak", a.cur], ["Best streak", a.best], ["Nemesis", a.nemWins ? "Lv " + a.nemLevel : "—"],
+  ];
+  const statsEl = document.getElementById("bossLogStats");
+  if (statsEl) statsEl.innerHTML = tiles.map(([k, v]) =>
+    `<div class="bosslog-tile"><span class="bosslog-tile-v">${v}</span><span class="bosslog-tile-k">${k}</span></div>`).join("");
+
+  const listEl = document.getElementById("bossLogList");
+  if (!listEl) return;
+  if (!a.rows.length) { listEl.innerHTML = `<p class="hint" style="text-align:center;padding:20px 0;">No bosses faced yet — finish a week to start your log.</p>`; return; }
+  listEl.innerHTML = a.rows.slice(0, 40).map(r => {
+    const d = bossWeekDate(r.week);
+    const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const res = r.defeated
+      ? `<span class="bosslog-res win">Defeated</span>`
+      : `<span class="bosslog-res loss">Survived</span>`;
+    const nem = r.nemesis ? `<span class="bosslog-nem">Nemesis</span>` : "";
+    const pct = r.target != null ? `${r.dmg}/${r.target}%` : "";
+    return `<div class="bosslog-row${r.nemesis ? " nem" : ""}">
+      <span class="bosslog-emoji">${r.emoji || "👾"}</span>
+      <span class="bosslog-name"><span class="bosslog-name-line">${r.name || "—"}${nem}</span><span class="bosslog-week">Week of ${label}</span></span>
+      <span class="bosslog-dmg">${pct}</span>${res}
+    </div>`;
+  }).join("");
+}
+function openBossLog() {
+  renderBossLog();
+  const m = document.getElementById("bossLogModal");
+  if (m) m.classList.add("active");
+}
+function closeBossLog() {
+  const m = document.getElementById("bossLogModal");
+  if (m) m.classList.remove("active");
+  window.dispatchEvent(new Event("scroll"));
 }
 
 // ===== SEASONS (monthly goals + shareable recap) =====
@@ -2309,6 +2494,10 @@ function bindEvents() {
       const dif = document.getElementById("cfgDifficulty"); if (dif) settings.gameBase = Number(dif.value) || 100;
       const sg = document.getElementById("cfgStreakGrade"); if (sg) settings.streakGrade = Math.min(100, Math.max(1, Number(sg.value) || 75));
       const sf = document.getElementById("cfgStreakFreeze"); if (sf) settings.streakFreeze = Math.min(3, Math.max(0, Number(sf.value) || 0));
+      const bd = document.getElementById("cfgBossDifficulty"); if (bd && BOSS_DIFFICULTY[bd.value]) settings.bossDifficulty = bd.value;
+      const nf = document.getElementById("cfgNemesisFreq"); if (nf && NEMESIS_SCHEDULES[nf.value]) settings.nemesisFreq = nf.value;
+      const snd = document.getElementById("cfgSound"); if (snd && window.FX && FX.setSfx) FX.setSfx(snd.checked);
+      const hap = document.getElementById("cfgHaptics"); if (hap && window.FX && FX.setHaptics) FX.setHaptics(hap.checked);
       const cs = document.getElementById("cfgCallsign"); if (cs && cs.value.trim()) settings.callsign = cs.value.trim();
       settings.hiddenSections = [...document.querySelectorAll('#sectionToggles input[data-section]')].filter(c => !c.checked).map(c => c.dataset.section);
       const reEnable = document.getElementById("cfgRemindEnable");
@@ -2377,6 +2566,17 @@ function bindEvents() {
   if (closeCabinetTopBtn) closeCabinetTopBtn.onclick = closeCabinet;
   document.getElementById("cabinetModal")?.addEventListener("click", e => {
     if (e.target.id === "cabinetModal") closeCabinet();
+  });
+
+  // Boss Log modal
+  const bossLogBtn = document.getElementById("bossLogBtn");
+  if (bossLogBtn) bossLogBtn.onclick = openBossLog;
+  const closeBossLogTopBtn = document.getElementById("closeBossLogTopBtn");
+  if (closeBossLogTopBtn) closeBossLogTopBtn.onclick = closeBossLog;
+  const closeBossLogBtn = document.getElementById("closeBossLogBtn");
+  if (closeBossLogBtn) closeBossLogBtn.onclick = closeBossLog;
+  document.getElementById("bossLogModal")?.addEventListener("click", e => {
+    if (e.target.id === "bossLogModal") closeBossLog();
   });
 
   // Records form (add + edit)
