@@ -139,22 +139,18 @@
     return "discipline";
   }
 
-  // ----- default seed data (mirrors app.js defaults; "Operator" preset) ----
+  // ----- default seed data (mirrors app.js defaults; light generic starter) --
+  const STARTER_DAY = ["Make the bed", "Drink water", "Move your body (walk or workout)", "Eat something healthy", "Read or learn for 20 min", "Tidy one thing", "Plan tomorrow", "Lights out on time"];
   const DEFAULT_BLUEPRINT = {
-    Sunday: ["Wake up by 6:00 AM", "Morning cardio or movement", "Shower", "Brush teeth", "Work prep / plan the day", "Work / main responsibility", "Weights or active recovery", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
-    Monday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Tuesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Wednesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Thursday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Friday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Saturday: ["Wake up by 6:00 AM", "Workout or recovery", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
+    Sunday: STARTER_DAY.slice(), Monday: STARTER_DAY.slice(), Tuesday: STARTER_DAY.slice(),
+    Wednesday: STARTER_DAY.slice(), Thursday: STARTER_DAY.slice(), Friday: STARTER_DAY.slice(), Saturday: STARTER_DAY.slice(),
   };
   const DEFAULT_WORKOUTS = [
     ["Monday", "Upper Body / Push-Pull"], ["Tuesday", "Lower Body + Core"], ["Wednesday", "Cardio + Mobility"],
     ["Thursday", "Upper Body"], ["Friday", "Lower Body + Full Body"], ["Saturday", "Optional Cardio / Recovery"], ["Sunday", "Reset / Light Cardio"],
   ];
-  const DEFAULT_DIET = ["Protein backup ready for the week", "Weekend protein option planned", "Protein groceries available", "Hydration handled most days", "No full junk mode", "At least one protein meal prepped"];
-  const DEFAULT_PROJECT_CHECKS = ["Code, workflow, documentation, or plan created", "Progress documented", "Next action is clear"];
+  const DEFAULT_DIET = ["Eat a healthy breakfast", "Hit your protein target", "Stay hydrated", "Eat fruit or vegetables", "Cook instead of takeout", "Plan tomorrow's meals"];
+  const DEFAULT_PROJECT_CHECKS = ["Made progress on a project", "Documented what you did", "Decided the next step"];
   const DEFAULT_STUDY_AREAS = ["Certification / Course", "Language Learning", "Reading List", "Skill Practice"];
   const DEFAULT_REVIEW = ["Wins this week", "Missed habits / friction", "What needs to change next week?", "One thing I refuse to drop"];
 

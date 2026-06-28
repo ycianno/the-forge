@@ -15,17 +15,13 @@
   function iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function startOfWeek(d) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - x.getDay()); return x; }
 
+  var STARTER_DAY = ["Make the bed", "Drink water", "Move your body (walk or workout)", "Eat something healthy", "Read or learn for 20 min", "Tidy one thing", "Plan tomorrow", "Lights out on time"];
   var BLUEPRINT = {
-    Sunday: ["Wake up by 6:00 AM", "Morning cardio or movement", "Shower", "Brush teeth", "Work prep / plan the day", "Work / main responsibility", "Weights or active recovery", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
-    Monday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Tuesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Wednesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Thursday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Friday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    Saturday: ["Wake up by 6:00 AM", "Workout or recovery", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Read", "Sleep by 12:00 AM"]
+    Sunday: STARTER_DAY.slice(), Monday: STARTER_DAY.slice(), Tuesday: STARTER_DAY.slice(),
+    Wednesday: STARTER_DAY.slice(), Thursday: STARTER_DAY.slice(), Friday: STARTER_DAY.slice(), Saturday: STARTER_DAY.slice()
   };
-  var DIET = ["Protein backup ready for the week", "Weekend protein option planned", "Protein groceries available", "Hydration handled most days", "No full junk mode", "At least one protein meal prepped"];
-  var PROJECT = ["Code, workflow, documentation, or plan created", "Progress documented", "Next action is clear"];
+  var DIET = ["Eat a healthy breakfast", "Hit your protein target", "Stay hydrated", "Eat fruit or vegetables", "Cook instead of takeout", "Plan tomorrow's meals"];
+  var PROJECT = ["Made progress on a project", "Documented what you did", "Decided the next step"];
   var DAYS = Object.keys(BLUEPRINT);
 
   function buildSampleData() {
@@ -44,8 +40,8 @@
       PROJECT.forEach(function (p) { if (Math.random() < ramp) checks[projId(p)] = true; });
       for (var s = 0; s < 3; s++) fields["hours-study-" + s] = +(Math.random() * 1.5 + 0.5).toFixed(2);
       fields.projectHours = +(Math.random() * 4 + 1).toFixed(1);
-      fields.mission = "Finish the certification module and ship the side-project MVP";
-      fields.wins = "Stayed consistent on the core routine.";
+      fields.mission = "Keep the daily routine going and make steady progress.";
+      fields.wins = "Stayed consistent on the core habits.";
       fields.misses = "A couple of late nights.";
       fields.changes = "Protect the morning block.";
       fields.grade = ramp > 0.8 ? "A" : ramp > 0.65 ? "B" : "C";
@@ -53,7 +49,7 @@
     }
     var now = Date.now();
     var settings = {
-      version: 3, dayTemplates: null, callsign: "Player One", gameBase: 100,
+      version: 3, onboarded: true, dayTemplates: null, callsign: "Player One", gameBase: 100,
       streakGrade: 75, streakFreeze: 1,
       studyAreas: ["Certification / Course", "Language Learning", "Reading List", "Skill Practice"],
       badges: { "first-steps": now, "disciplined": now, "bookworm": now, "on-fire": now, "iron-body": now, "scholar": now, "maker": now }
@@ -86,7 +82,7 @@
     }
   }
 
-  // ---- injected styles for banner + welcome ----
+  // ---- injected styles for the default-password banner ----
   function injectStyles() {
     if (document.getElementById("forge-extras-style")) return;
     var s = document.createElement("style");
@@ -96,15 +92,7 @@
       "padding:10px 16px;background:linear-gradient(90deg,rgba(245,158,11,.18),rgba(239,68,68,.18));" +
       "border-bottom:1px solid rgba(245,158,11,.4);color:var(--text,#e5e7eb);font-size:14px;font-weight:600;}" +
       "#forgePwBanner button{margin-left:8px;padding:4px 10px;font-size:12px;border-radius:8px;cursor:pointer;" +
-      "background:transparent;border:1px solid var(--muted,#444);color:var(--text-dim,#9ca3af);}" +
-      ".forge-welcome-backdrop{position:fixed;inset:0;z-index:200;display:grid;place-items:center;" +
-      "background:rgba(0,0,0,.72);backdrop-filter:blur(4px);}" +
-      ".forge-welcome{width:min(440px,92vw);padding:32px;border-radius:18px;text-align:center;" +
-      "background:var(--glass,rgba(20,20,26,.9));border:1px solid var(--muted,#2a2a33);box-shadow:0 30px 80px rgba(0,0,0,.6);}" +
-      ".forge-welcome h2{margin:0 0 8px;font-size:24px;color:var(--text,#fff);}" +
-      ".forge-welcome p{margin:0 0 22px;color:var(--text-dim,#9ca3af);font-size:15px;line-height:1.5;}" +
-      ".forge-welcome .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}" +
-      ".forge-welcome button{padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;}";
+      "background:transparent;border:1px solid var(--muted,#444);color:var(--text-dim,#9ca3af);}";
     document.head.appendChild(s);
   }
 
@@ -120,28 +108,6 @@
         "<button type='button'>Dismiss</button>";
       bar.querySelector("button").onclick = function () { bar.remove(); };
       document.body.insertBefore(bar, document.body.firstChild);
-    } catch (e) { /* ignore */ }
-  }
-
-  async function maybeShowWelcome() {
-    try {
-      var db = await (await fetch("/api/database")).json();
-      var empty = !db || !db.weeks || Object.keys(db.weeks).length === 0;
-      if (!empty) return;
-      injectStyles();
-      var back = document.createElement("div");
-      back.className = "forge-welcome-backdrop";
-      back.innerHTML =
-        "<div class='forge-welcome glass'>" +
-        "<h2>Welcome to The Forge</h2>" +
-        "<p>Turn your goals into an RPG. Want to explore with example progress first, or start from a clean slate?</p>" +
-        "<div class='row'>" +
-        "<button class='primary' id='forgeWelcomeSample'>Load sample data</button>" +
-        "<button id='forgeWelcomeFresh'>Start fresh</button>" +
-        "</div></div>";
-      document.body.appendChild(back);
-      back.querySelector("#forgeWelcomeFresh").onclick = function () { back.remove(); };
-      back.querySelector("#forgeWelcomeSample").onclick = function () { back.remove(); loadSampleData(); };
     } catch (e) { /* ignore */ }
   }
 
@@ -419,8 +385,14 @@
   function wire() {
     var sb = document.getElementById("loadSampleBtn"); if (sb) sb.onclick = loadSampleData;
     var sc = document.getElementById("shareCardBtn"); if (sc) sc.onclick = shareCard;
+    // "Load sample data" inside the first-run "Choose your path" onboarding.
+    var ob = document.getElementById("onboardSample");
+    if (ob) ob.onclick = function () {
+      var md = document.getElementById("onboardModal");
+      if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); }
+      loadSampleData();
+    };
     showDefaultPasswordBanner();
-    setTimeout(maybeShowWelcome, 400); // let app.js render first
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wire);
   else wire();

@@ -323,6 +323,25 @@ function chooseOnboardPath(presetId) {
   applyPreset(presetId, true); // fresh install — no confirm needed
   finishOnboarding();
 }
+// "Start blank" — a genuinely empty slate: clear every section's items so the
+// light starter defaults don't appear. The user builds everything themselves.
+// Reloads after saving (like sample-data load) so the module list rebuilds clean.
+async function startBlank() {
+  const csEl = document.getElementById("onboardCallsign");
+  const cs = csEl ? csEl.value.trim() : "";
+  if (cs) settings.callsign = cs;
+  const emptyDays = {};
+  dayNames().forEach((d) => { emptyDays[d] = []; });
+  settings.dayTemplates = emptyDays;
+  settings.dietItems = [];
+  settings.studyAreas = [];
+  settings.projectChecks = [];
+  settings.workouts = [];
+  settings.reviewPrompts = [];
+  settings.onboarded = true;
+  await persistSettings();
+  location.reload();
+}
 function toggleAddFormFields() {
   const t = document.getElementById("newModType");
   if (!t) return;
@@ -473,14 +492,17 @@ function getTodayDayIndex() {
 }
 
 // ===== DATE UTILITIES =====
+// A light, generic starter routine — the same simple habits every day. Meant to
+// be edited: a fresh install should feel welcoming, not like someone else's life.
+const STARTER_DAY = ["Make the bed", "Drink water", "Move your body (walk or workout)", "Eat something healthy", "Read or learn for 20 min", "Tidy one thing", "Plan tomorrow", "Lights out on time"];
 const defaultDailyBlueprint = {
-  Sunday: ["Wake up by 6:00 AM", "Morning cardio or movement", "Shower", "Brush teeth", "Work prep / plan the day", "Work / main responsibility", "Weights or active recovery", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
-  Monday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Tuesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Wednesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Thursday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Friday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Saturday: ["Wake up by 6:00 AM", "Workout or recovery", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Read", "Sleep by 12:00 AM"]
+  Sunday: [...STARTER_DAY],
+  Monday: [...STARTER_DAY],
+  Tuesday: [...STARTER_DAY],
+  Wednesday: [...STARTER_DAY],
+  Thursday: [...STARTER_DAY],
+  Friday: [...STARTER_DAY],
+  Saturday: [...STARTER_DAY]
 };
 
 const defaultWorkouts = [
@@ -1161,12 +1183,12 @@ function slugify(text) {
 }
 
 const defaultDietItems = [
-  "Protein backup ready for the week",
-  "Weekend protein option planned",
-  "Protein groceries available",
-  "Hydration handled most days",
-  "No full junk mode",
-  "At least one protein meal prepped"
+  "Eat a healthy breakfast",
+  "Hit your protein target",
+  "Stay hydrated",
+  "Eat fruit or vegetables",
+  "Cook instead of takeout",
+  "Plan tomorrow's meals"
 ];
 function getDietItems() { return settings.dietItems || defaultDietItems; }
 function dietId(text) { return `diet-${slugify(text)}`; }
@@ -1181,9 +1203,9 @@ function renderDiet() {
 }
 
 const defaultProjectChecks = [
-  "Code, workflow, documentation, or plan created",
-  "Progress documented",
-  "Next action is clear"
+  "Made progress on a project",
+  "Documented what you did",
+  "Decided the next step"
 ];
 function getProjectChecks() { return settings.projectChecks || defaultProjectChecks; }
 function projId(text) { return `project-${slugify(text)}`; }
@@ -2168,7 +2190,7 @@ function bindEvents() {
   document.addEventListener("click", e => {
     const path = e.target.closest && e.target.closest(".onboard-path");
     if (path) { chooseOnboardPath(path.getAttribute("data-preset")); return; }
-    if (e.target.id === "onboardSkip") finishOnboarding();
+    if (e.target.id === "onboardSkip") startBlank();
   });
   // Certification target dates (stored in settings.certDates, not week fields)
   document.addEventListener("change", e => {
