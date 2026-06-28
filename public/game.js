@@ -822,6 +822,10 @@
     add("boss-1", "Giant Slayer", "Defeat a weekly boss", "rare", "boss", IP.boss, boss >= 1);
     const bossName = { 5: "Dragonsbane", 25: "Worldbreaker" };
     rungs([5, 25], boss, 25, 1).forEach(N => add("boss-" + N, bossName[N] || ("Worldbreaker " + roman(Math.floor((N - 25) / 25) + 1)), "Defeat " + N + " weekly bosses", gradeByVal(N, 5, 25, 75), "boss", IP.boss, boss >= N));
+    // Nemesis — the twice-a-year gauntlet. Escalates each time you conquer it.
+    const nem = (settings && Array.isArray(settings.bossHistory)) ? settings.bossHistory.filter(r => r && r.nemesis && r.defeated).length : 0;
+    add("nemesis-1", "Shadowbreaker", "Defeat the Nemesis", "epic", "boss", IP.boss, nem >= 1);
+    rungs([3, 6], nem, 6, 1).forEach(N => add("nemesis-" + N, N >= 6 ? "Nemesis Undone" : "Shadowbreaker " + roman(N - 1), "Conquer " + N + " Nemesis months", gradeByVal(N, 3, 6, 12), "boss", IP.boss, nem >= N));
 
     // Study & focus (hour-based)
     const shName = { 10: "Apprentice Scholar", 50: "Dedicated", 100: "Centurion of Study", 250: "Erudite", 500: "Master Scholar", 1000: "Living Library" };
@@ -1066,7 +1070,7 @@
 
   // ===========================================================================
   // DAILY MISSIONS — 3 challenges chosen deterministically from today's date
-  // (mirrors bossForWeek's hash). Conditions derive from today's data; clearing
+  // (a date-seeded hash, like the weekly boss). Conditions derive from today's data; clearing
   // a mission banks REAL bonus XP as a token in settings.dailyMissions, which
   // computeProfile folds into the lifetime pool. Auto-resets at midnight (the
   // seed is the date) and never evaluates a past day.
@@ -1142,6 +1146,10 @@
   // bonus XP shows the same render tick. Silent on the very first ever run.
   function checkMissions() {
     if (typeof settings === "undefined" || !settings) return;
+    // Feature off: stop banking NEW mission XP. Already-earned tokens in
+    // settings.dailyMissions are intentionally left untouched so lifetime XP
+    // (and any unlocked insignias) never silently drop.
+    if (settings.missionsOff) return;
     const first = !settings.dailyMissions;
     const store = settings.dailyMissions || {};
     const key = iso(new Date());
@@ -1196,16 +1204,19 @@
   function renderQuests() {
     const host = document.getElementById("questsHub");
     if (!host) return;
+    const missionsOff = !!(typeof settings !== "undefined" && settings && settings.missionsOff);
+    if (missionsOff && questTab === "daily") questTab = "weekly"; // Daily tab is hidden when off
     const d = questData(questTab);
     const rows = d.items.map(it => `<div class="dm-row ${it.done ? "done" : ""}">
         <span class="dm-ic"><svg viewBox="0 0 24 24" class="ic"><path d="${it.done ? IP.check : it.icon}"/></svg></span>
         <span class="dm-label">${escapeHtml(it.label)}</span>
         <span class="dm-xp">${escapeHtml(it.right)}</span>
       </div>`).join("");
+    const dailyTab = missionsOff ? "" : `<button class="qh-tab ${questTab === "daily" ? "on" : ""}" data-qtab="daily" type="button" role="tab">Daily</button>`;
     host.innerHTML = `
       <div class="dm-head">
         <div class="qh-tabs" role="tablist">
-          <button class="qh-tab ${questTab === "daily" ? "on" : ""}" data-qtab="daily" type="button" role="tab">Daily</button>
+          ${dailyTab}
           <button class="qh-tab ${questTab === "weekly" ? "on" : ""}" data-qtab="weekly" type="button" role="tab">Weekly</button>
         </div>
         <span class="dm-count">${d.doneN} / ${d.total}${d.bonus}</span>
