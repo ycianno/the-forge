@@ -174,12 +174,33 @@ Then `sudo systemctl enable --now the-forge`. (On macOS, `pm2 start server.js --
 
 ### On Windows
 
-The Forge runs great on Windows — pick one:
+The Forge runs natively on Windows — **no Docker, no WSL, no Visual Studio required.** `better-sqlite3` ships prebuilt binaries for the current Node LTS on Windows x64, so `npm install` just downloads them (no compiler).
 
-- **Docker Desktop (easiest):** install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/), open PowerShell, and run the **Option A** `docker run` command (it works as-is). Open **http://localhost:3007**.
-- **WSL2 (for the bare-metal path):** the `install.sh` script and the Linux commands above need a Linux shell. Install WSL with `wsl --install` in an admin PowerShell, reboot, open **Ubuntu**, then follow **Option B** exactly as written.
+**One-line installer (recommended).** In **PowerShell**, run:
 
-Plain Windows (no Docker, no WSL) isn't supported directly because `better-sqlite3` needs a build toolchain — Docker or WSL is the smooth path.
+```powershell
+irm https://raw.githubusercontent.com/ycianno/the-forge/main/install.ps1 | iex
+```
+
+It installs Node LTS via `winget` if needed, downloads The Forge, asks for a password, and creates a **Start Menu shortcut**. To also start it automatically at logon, download and run it with the `-Service` flag instead:
+
+```powershell
+irm https://raw.githubusercontent.com/ycianno/the-forge/main/install.ps1 -OutFile install.ps1; .\install.ps1 -Service
+```
+
+**Or by hand:** install [Node.js LTS for Windows](https://nodejs.org), then in PowerShell:
+
+```powershell
+git clone https://github.com/ycianno/the-forge.git
+cd the-forge
+npm install
+"APP_PASSWORD=your-password`nPORT=3007" | Set-Content .env -Encoding ascii
+npm start
+```
+
+Then open **http://localhost:3007**.
+
+> **Alternatives:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (run the **Option A** `docker run` command as-is) or **WSL2** (`wsl --install`, then follow **Option B** inside Ubuntu) both work too. They're only needed for edge cases like Windows-on-ARM, where a prebuilt binary may be missing.
 
 ---
 
