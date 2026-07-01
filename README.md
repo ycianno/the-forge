@@ -174,15 +174,17 @@ Then `sudo systemctl enable --now the-forge`. (On macOS, `pm2 start server.js --
 
 ### On Windows
 
-The Forge runs natively on Windows — **no Docker, no WSL, no Visual Studio required.** `better-sqlite3` ships prebuilt binaries for the current Node LTS on Windows x64, so `npm install` just downloads them (no compiler).
+The Forge runs natively on Windows — **no Docker, no WSL, no Visual Studio required** on a normal x64 PC. `better-sqlite3` ships prebuilt binaries for the current Node LTS on Windows x64, so `npm install` just downloads them (no compiler).
 
-**One-line installer (recommended).** In **PowerShell**, run:
+**Easiest (double-click, recommended for non-developers).** Download **[`install.bat`](https://raw.githubusercontent.com/ycianno/the-forge/main/install.bat)** (right-click → *Save link as…*) and **double-click it**. This wrapper keeps the window open no matter what and bypasses PowerShell's execution policy, so if anything goes wrong you can actually *read* the error instead of it flashing shut. It installs Node LTS via `winget` if needed, downloads The Forge, asks for a password, and creates a **Start Menu shortcut**.
+
+**One-line installer (PowerShell).** In **PowerShell**, run:
 
 ```powershell
 irm https://raw.githubusercontent.com/ycianno/the-forge/main/install.ps1 | iex
 ```
 
-It installs Node LTS via `winget` if needed, downloads The Forge, asks for a password, and creates a **Start Menu shortcut**. To also start it automatically at logon, download and run it with the `-Service` flag instead:
+Every run writes a full log to `%TEMP%\the-forge-install_*.log`, and the installer pauses at the end (success *or* failure) so nothing scrolls away. To also start it automatically at logon, download and run it with the `-Service` flag instead:
 
 ```powershell
 irm https://raw.githubusercontent.com/ycianno/the-forge/main/install.ps1 -OutFile install.ps1; .\install.ps1 -Service
@@ -210,7 +212,9 @@ Then open **http://localhost:3007**.
 
 | Symptom | Fix |
 |---|---|
-| **`npm install` fails with a `node-gyp` / compiler error** | You're missing build tools. Install them (see [Option B, step 1](#option-b--bare-metal-node-no-docker)) — `build-essential python3` on Debian/Ubuntu, Xcode Command Line Tools on macOS — then re-run `npm install`. |
+| **(Windows) The install window flashes an error and closes instantly** | Use **[`install.bat`](https://raw.githubusercontent.com/ycianno/the-forge/main/install.bat)** (double-click) instead of *"Run with PowerShell"* — it keeps the window open. Either way, the full error is saved to a log file at `%TEMP%\the-forge-install_*.log`: press <kbd>Win</kbd>+<kbd>R</kbd>, type `%TEMP%`, and open the newest `the-forge-install_…log`. |
+| **(Windows) Install fails at the database step / "better-sqlite3 will not load"** | Your Node is a **non-LTS** (odd-numbered: 21, 23, 25…) version with no prebuilt binary. Uninstall it, install the **LTS** (even-numbered) build from [nodejs.org](https://nodejs.org), and re-run the installer. On an **ARM64** PC use Docker Desktop or WSL2 instead. |
+| **`npm install` fails with a `node-gyp` / compiler error** | You're missing build tools. Install them (see [Option B, step 1](#option-b--bare-metal-node-no-docker)) — `build-essential python3` on Debian/Ubuntu, Xcode Command Line Tools on macOS — then re-run `npm install`. On Windows, this usually means Node isn't LTS (see the row above). |
 | **"Node.js 20+ required" (or a very old Node)** | Your system Node is too old. Install 20+ via the NodeSource line above, or use [nvm](https://github.com/nvm-sh/nvm): `nvm install 20 && nvm use 20`. |
 | **Port 3007 already in use** | Something else is on that port. Pick another: set `PORT=8080` (in `.env`, or `-e PORT=8080 -p 8080:8080` for Docker) and open that port instead. |
 | **Page won't load at localhost** | Give it a few seconds on first start (it creates the database). Check it's running: `docker logs forge` (Docker) or look at the terminal output (bare metal). `/healthz` should return `{"status":"ok"}`. |
