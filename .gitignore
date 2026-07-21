@@ -7,3 +7,4 @@ data/
 # Hermes agent runtime files (keep secrets/state local)
 agent/config.json
 agent/hermes_state.json
+.env.sync
