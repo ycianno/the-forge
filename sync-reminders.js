@@ -87,12 +87,28 @@ function getReminders() {
     catch(e) { list = app.List({ name: "The Forge" }); app.lists.push(list); }
 
     const reminders = list.reminders();
-    const result = reminders.map(r => ({
-      id: r.id(),
-      name: r.name(),
-      body: r.body() || "",
-      completed: r.completed()
-    }));
+    const result = reminders.map(r => {
+      let dueTime = "";
+      try {
+        const d = r.dueDate();
+        if (d) {
+          const dt = new Date(d);
+          const h = dt.getHours();
+          const m = dt.getMinutes();
+          if (h !== 0 || m !== 0) {
+            dueTime = (h < 10 ? '0' + h : '' + h) + ':' + (m < 10 ? '0' + m : '' + m);
+          }
+        }
+      } catch(e) {}
+
+      return {
+        id: r.id(),
+        name: r.name(),
+        body: r.body() || "",
+        completed: r.completed(),
+        dueTime: dueTime
+      };
+    });
     JSON.stringify(result);
   `;
   const res = runJxa(script);
@@ -123,6 +139,24 @@ function createReminder(name, body, dueTime) {
       ${dueField}
     });
     list.reminders.push(rem);
+  `;
+  runJxa(script);
+}
+
+function updateReminderTimeAndBody(id, dueTime, body) {
+  let timeSetup = '';
+  if (dueTime && /^\d{1,2}:\d{2}$/.test(dueTime)) {
+    const [h, m] = dueTime.split(':').map(Number);
+    timeSetup = `const d = new Date(); d.setHours(${h}, ${m}, 0, 0); rem.dueDate = d;`;
+  } else {
+    timeSetup = `const d = new Date(); d.setHours(0, 0, 0, 0); rem.alldayDueDate = d;`;
+  }
+
+  const script = `
+    const app = Application("Reminders");
+    const rem = app.reminders.byId(${JSON.stringify(id)});
+    ${timeSetup}
+    if (${JSON.stringify(body)}) rem.body = ${JSON.stringify(body)};
   `;
   runJxa(script);
 }
@@ -236,6 +270,13 @@ async function sync() {
           syncedCount++;
         }
       } else {
+        // Reminder exists: check if dueTime needs updating
+        if (q.dueTime !== reminder.dueTime) {
+          console.log(`  ✎ Updating Reminder time for ${q.title}: ${reminder.dueTime || 'all-day'} -> ${q.dueTime || 'all-day'}`);
+          updateReminderTimeAndBody(reminder.id, q.dueTime, q.attr || 'Discipline');
+          syncedCount++;
+        }
+
         if (reminder.completed && !q.isCompleted) {
           // Completed in Reminders but not in Forge → mark done in Forge
           console.log(`  ← Forge complete: ${q.title}`);
