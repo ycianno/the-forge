@@ -1980,6 +1980,7 @@ function openQuestEditor(opts) {
   const selectedAttr = q ? q.attr : areaId ? contextAttr(areaId) : (opts.attr || "Discipline");
   document.getElementById("questAttr").innerHTML = attrs.map((a) => `<option value="${a}"${selectedAttr === a ? " selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
   renderQuestWeekdays(q ? q.repeatDays : (opts.days || []));
+  document.getElementById("questDueTime").value = q ? (q.dueTime || "") : (opts.dueTime || "");
   document.getElementById("deleteQuestBtn").style.display = q ? "" : "none";
   syncQuestScheduleFields();
   syncQuestAttrToSource();
@@ -2010,6 +2011,7 @@ async function saveQuestEditor() {
   const scheduleType = document.getElementById("questScheduleType").value;
   const scheduledDate = document.getElementById("questDate").value;
   const repeatDays = [...document.querySelectorAll("#questWeekdays input:checked")].map((el) => Number(el.value));
+  const dueTime = document.getElementById("questDueTime").value || "";
   if (!title) { document.getElementById("questTitle").focus(); return; }
   if (scheduleType === "once" && !scheduledDate) { document.getElementById("questDate").focus(); return; }
   if (scheduleType === "weekly" && !repeatDays.length) { alert("Choose at least one day for this weekly routine."); return; }
@@ -2019,7 +2021,7 @@ async function saveQuestEditor() {
   const old = current ? Object.assign({}, current) : null;
   const siblingCount = getUnifiedQuests().filter((q) => q.areaId === ctx.areaId && q.goalId === ctx.goalId).length;
   const next = current || { id: forgeId("q"), createdAt: new Date().toISOString(), order: siblingCount };
-  Object.assign(next, { title, scheduleType, scheduledDate: scheduleType === "once" ? scheduledDate : "", repeatDays: scheduleType === "weekly" ? repeatDays : [], areaId: ctx.areaId, goalId: ctx.goalId, attr, category: attrCat(attr), updatedAt: new Date().toISOString() });
+  Object.assign(next, { title, scheduleType, scheduledDate: scheduleType === "once" ? scheduledDate : "", repeatDays: scheduleType === "weekly" ? repeatDays : [], areaId: ctx.areaId, goalId: ctx.goalId, attr, category: attrCat(attr), dueTime, updatedAt: new Date().toISOString() });
   if (!current) settings.quests.push(next);
   const carried = new Map(), carriedNotes = new Map(), touched = new Set();
   if (old) {

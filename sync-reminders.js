@@ -98,21 +98,25 @@ function getReminders() {
   return res ? JSON.parse(res) : [];
 }
 
-function createReminder(name, body) {
+function createReminder(name, body, dueTime) {
   // Escape any quotes in name/body for JXA string literals
   const safeName = name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const safeBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // If dueTime is set (e.g. "06:00"), use it; otherwise use midnight (all-day)
+  const timeSetup = dueTime
+    ? `const d = new Date(); const [h,m] = "${dueTime}".split(":"); d.setHours(parseInt(h),parseInt(m),0,0);`
+    : `const d = new Date(); d.setHours(0,0,0,0);`;
+  const dueField = dueTime ? 'dueDate: d' : 'alldayDueDate: d';
   const script = `
     const app = Application("Reminders");
     let list;
     try { list = app.lists.byName("The Forge"); list.name(); }
     catch(e) { list = app.List({ name: "The Forge" }); app.lists.push(list); }
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    ${timeSetup}
     const rem = app.Reminder({
       name: "${safeName}",
       body: "${safeBody}",
-      alldayDueDate: today
+      ${dueField}
     });
     list.reminders.push(rem);
   `;
@@ -198,6 +202,8 @@ async function sync() {
       if (checkId) {
         activeQuests[checkId] = {
           title: q.title,
+          attr: q.attr || 'Discipline',
+          dueTime: q.dueTime || '',
           checkId,
           isCompleted: !!checks[checkId]
         };
@@ -216,7 +222,8 @@ async function sync() {
         // Quest not in Reminders yet — create it (unless already completed in Forge)
         if (!q.isCompleted) {
           console.log(`  + Creating Reminder: ${q.title}`);
-          createReminder('🗡️ ' + q.title, 'forge:' + checkId);
+          const notes = q.attr + '\nforge:' + checkId;
+          createReminder('🗡️ ' + q.title, notes, q.dueTime);
           syncedCount++;
         }
       } else {
