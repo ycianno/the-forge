@@ -66,14 +66,15 @@ async function fetchApi(endpoint, method = 'GET', body = null) {
 
 // 3. JXA Apple Reminders Helpers
 function runJxa(script) {
+  const tmpFile = path.join(require('os').tmpdir(), `forge-sync-${Date.now()}-${Math.random().toString(36).slice(2)}.js`);
   try {
-    // Use a temp file to avoid shell quoting issues with osascript
-    const tmpFile = path.join(require('os').tmpdir(), 'forge-sync-jxa.js');
     fs.writeFileSync(tmpFile, script, 'utf8');
     const output = execSync(`osascript -l JavaScript "${tmpFile}"`, { encoding: 'utf8' });
+    try { fs.unlinkSync(tmpFile); } catch (_) {}
     return output.trim();
   } catch (error) {
     console.error("JXA Execution Error:", error.message);
+    try { fs.unlinkSync(tmpFile); } catch (_) {}
     return null;
   }
 }
@@ -99,14 +100,17 @@ function getReminders() {
 }
 
 function createReminder(name, body, dueTime) {
-  // Escape any quotes in name/body for JXA string literals
-  const safeName = name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  const safeBody = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  // If dueTime is set (e.g. "06:00"), use it; otherwise use midnight (all-day)
-  const timeSetup = dueTime
-    ? `const d = new Date(); const [h,m] = "${dueTime}".split(":"); d.setHours(parseInt(h),parseInt(m),0,0);`
-    : `const d = new Date(); d.setHours(0,0,0,0);`;
-  const dueField = dueTime ? 'dueDate: d' : 'alldayDueDate: d';
+  let timeSetup = '';
+  let dueField = '';
+  if (dueTime && /^\d{1,2}:\d{2}$/.test(dueTime)) {
+    const [h, m] = dueTime.split(':').map(Number);
+    timeSetup = `const d = new Date(); d.setHours(${h}, ${m}, 0, 0);`;
+    dueField = `dueDate: d`;
+  } else {
+    timeSetup = `const d = new Date(); d.setHours(0, 0, 0, 0);`;
+    dueField = `alldayDueDate: d`;
+  }
+
   const script = `
     const app = Application("Reminders");
     let list;
@@ -114,8 +118,8 @@ function createReminder(name, body, dueTime) {
     catch(e) { list = app.List({ name: "The Forge" }); app.lists.push(list); }
     ${timeSetup}
     const rem = app.Reminder({
-      name: "${safeName}",
-      body: "${safeBody}",
+      name: ${JSON.stringify(name)},
+      body: ${JSON.stringify(body)},
       ${dueField}
     });
     list.reminders.push(rem);
@@ -124,20 +128,18 @@ function createReminder(name, body, dueTime) {
 }
 
 function markReminderCompleted(id) {
-  const safeId = id.replace(/"/g, '\\"');
   const script = `
     const app = Application("Reminders");
-    const rem = app.reminders.byId("${safeId}");
+    const rem = app.reminders.byId(${JSON.stringify(id)});
     rem.completed = true;
   `;
   runJxa(script);
 }
 
 function deleteReminder(id) {
-  const safeId = id.replace(/"/g, '\\"');
   const script = `
     const app = Application("Reminders");
-    const rem = app.reminders.byId("${safeId}");
+    const rem = app.reminders.byId(${JSON.stringify(id)});
     rem.delete();
   `;
   runJxa(script);
