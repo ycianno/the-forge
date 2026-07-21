@@ -170,6 +170,11 @@ function attrCat(attr) {
   return map[attr] || 'discipline';
 }
 
+// Clean title helper (strips 🗡️ prefix if present)
+function cleanTitle(str) {
+  return String(str || '').replace(/^🗡️\s*/, '').trim();
+}
+
 // 6. Main Sync Logic
 async function sync() {
   const ts = new Date().toISOString().slice(11, 19);
@@ -218,14 +223,16 @@ async function sync() {
     // Reconcile Forge <-> Reminders
     for (const checkId in activeQuests) {
       const q = activeQuests[checkId];
-      const reminder = reminders.find(r => r.body.includes('forge:' + checkId));
+      // Match by title (clean) OR checkId in body for backwards compatibility
+      const reminder = reminders.find(r => 
+        cleanTitle(r.name) === q.title.trim() || r.body.includes('forge:' + checkId)
+      );
 
       if (!reminder) {
         // Quest not in Reminders yet — create it (unless already completed in Forge)
         if (!q.isCompleted) {
-          console.log(`  + Creating Reminder: ${q.title}`);
-          const notes = q.attr + '\nforge:' + checkId;
-          createReminder('🗡️ ' + q.title, notes, q.dueTime);
+          console.log(`  + Creating Reminder: ${q.title} (${q.dueTime || 'all-day'})`);
+          createReminder('🗡️ ' + q.title, q.attr || 'Discipline', q.dueTime);
           syncedCount++;
         }
       } else {
@@ -246,14 +253,15 @@ async function sync() {
 
     // Cleanup stale/orphaned Reminders (quests no longer active today)
     for (const r of reminders) {
-      const match = r.body.match(/forge:(quest-[\w-]+(-d\d+)?)/);
-      if (match) {
-        const checkId = match[1];
-        if (!activeQuests[checkId] && !r.completed) {
-          console.log(`  ✕ Removing stale: ${r.name}`);
-          deleteReminder(r.id);
-          syncedCount++;
-        }
+      const rName = cleanTitle(r.name);
+      const isForgeReminder = (r.name || '').includes('🗡️') || (r.body || '').includes('forge:');
+      if (!isForgeReminder) continue;
+
+      const matchQuest = Object.values(activeQuests).find(q => q.title.trim() === rName);
+      if (!matchQuest && !r.completed) {
+        console.log(`  ✕ Removing stale: ${r.name}`);
+        deleteReminder(r.id);
+        syncedCount++;
       }
     }
 

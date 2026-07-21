@@ -2164,7 +2164,8 @@ function renderDays() {
       const sourceTitle = context ? `${context} · trains ${attrName(attr)}` : `Daily task · trains ${attrName(attr)}`;
       const contextBadge = `<span class="quest-source-badge daily-source" title="${escapeHtml(sourceTitle)}"><span class="source-dot"></span><span class="source-label">${escapeHtml(sourceLabel)}</span></span>`;
       const scheduleBadge = q.scheduleType === "weekly" ? `<span class="task-kind-badge" title="Repeats every week"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>Weekly</span>` : "";
-      const taskMeta = `<span class="task-meta">${contextBadge}${scheduleBadge}</span>`;
+      const timeBadge = q.dueTime ? `<span class="task-kind-badge task-time-badge" title="Scheduled time"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${escapeHtml(q.dueTime)}</span>` : "";
+      const taskMeta = `<span class="task-meta">${contextBadge}${scheduleBadge}${timeBadge}</span>`;
       const repeatTitle = q.scheduleType === "weekly" ? "Weekly routine" : "One-time task";
       group.insertAdjacentHTML("beforeend", `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}" title="${repeatTitle}" style="--ac:${attrColor(attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="q-xp">+${xp}</span></label>`);
     });
