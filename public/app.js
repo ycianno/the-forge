@@ -704,6 +704,14 @@ function getStartOfWeek(date) {
 function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
 function fmt(date) { return date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 function iso(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+function fmtTime12(timeStr) {
+  if (!timeStr || !/^\d{1,2}:\d{2}$/.test(timeStr)) return timeStr || "";
+  const [hStr, mStr] = timeStr.split(":");
+  let h = Number(hStr);
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${mStr} ${ampm}`;
+}
 function weekKey() { return iso(selectedWeekStart); }
 function dayNames() { return Object.keys(defaultDailyBlueprint); }
 
@@ -1435,6 +1443,7 @@ function migrateQuestModelIfNeeded() {
     if (!q.scheduleType) { q.scheduleType = "once"; changed = true; }
     if (q.scheduleType === "once" && !q.scheduledDate) { q.scheduledDate = iso(new Date()); changed = true; }
     if (!Array.isArray(q.repeatDays)) { q.repeatDays = []; changed = true; }
+    if (q.dueTime === undefined) { q.dueTime = ""; changed = true; }
     if (q.areaId === undefined) {
       q.areaId = q.sourceType === "study" ? "study" : q.sourceType === "project" ? "projects" : "";
       q.goalId = (q.sourceType === "study" || q.sourceType === "project") ? (q.sourceId || "") : "";
@@ -2164,7 +2173,7 @@ function renderDays() {
       const sourceTitle = context ? `${context} · trains ${attrName(attr)}` : `Daily task · trains ${attrName(attr)}`;
       const contextBadge = `<span class="quest-source-badge daily-source" title="${escapeHtml(sourceTitle)}"><span class="source-dot"></span><span class="source-label">${escapeHtml(sourceLabel)}</span></span>`;
       const scheduleBadge = q.scheduleType === "weekly" ? `<span class="task-kind-badge" title="Repeats every week"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>Weekly</span>` : "";
-      const timeBadge = q.dueTime ? `<span class="task-kind-badge task-time-badge" title="Scheduled time"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${escapeHtml(q.dueTime)}</span>` : "";
+      const timeBadge = q.dueTime ? `<span class="task-kind-badge task-time-badge" title="Scheduled time"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${escapeHtml(fmtTime12(q.dueTime))}</span>` : "";
       const taskMeta = `<span class="task-meta">${contextBadge}${scheduleBadge}${timeBadge}</span>`;
       const repeatTitle = q.scheduleType === "weekly" ? "Weekly routine" : "One-time task";
       group.insertAdjacentHTML("beforeend", `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}" title="${repeatTitle}" style="--ac:${attrColor(attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="q-xp">+${xp}</span></label>`);
