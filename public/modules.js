@@ -41,6 +41,50 @@
   }
   function taskId(dayIndex, taskText) { return `day-${dayIndex}-${slug(taskText, 58, "task")}`; }
   function checklistId(prefix, text) { return `${prefix}-${slug(text, 48, "item")}`; }
+  function questCheckId(q, occurrence) {
+    const base = `quest-${q.category || CAT_OF_ATTR[q.attr] || "discipline"}-${q.id}`;
+    if (q.scheduleType !== "weekly") return base;
+    const dayIndex = typeof occurrence === "number" ? occurrence : (occurrence && typeof occurrence.getDay === "function") ? occurrence.getDay() : null;
+    return dayIndex == null ? base : `${base}-d${dayIndex}`;
+  }
+  function localIso(date) {
+    const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, "0"), d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  function questOccurrenceRows(quests, weekStart, areaId) {
+    const start = weekStart instanceof Date ? new Date(weekStart) : new Date(String(weekStart) + "T00:00:00");
+    start.setHours(0, 0, 0, 0);
+    return (quests || []).filter((q) => q && !q.archived && (!areaId || q.areaId === areaId)).flatMap((q) => {
+      if (q.scheduleType === "weekly") {
+        return (q.repeatDays || []).slice().sort((a, b) => a - b).map((dayIndex) => {
+          const date = new Date(start); date.setDate(start.getDate() + dayIndex);
+          return { q, date, dayIndex, id: questCheckId(q, dayIndex) };
+        });
+      }
+      if (!q.scheduledDate) return [];
+      const date = new Date(q.scheduledDate + "T00:00:00");
+      const ownStart = new Date(date); ownStart.setDate(date.getDate() - date.getDay()); ownStart.setHours(0, 0, 0, 0);
+      return localIso(ownStart) === localIso(start) ? [{ q, date, dayIndex: date.getDay(), id: questCheckId(q, date.getDay()) }] : [];
+    });
+  }
+  function questWeekStats(week, quests, weekStart, areaId) {
+    const rows = questOccurrenceRows(quests, weekStart, areaId);
+    const checks = (week && week.checks) || {};
+    const done = rows.filter((row) => !!checks[row.id]).length;
+    return { rows, done, total: rows.length, pct: rows.length ? Math.round(done / rows.length * 100) : 0 };
+  }
+  function nutritionWeekStats(week, quests, weekStart, floorPct) {
+    const stats = questWeekStats(week, quests, weekStart, "diet");
+    const checks = (week && week.checks) || {};
+    const floor = Math.min(100, Math.max(1, Number(floorPct) || 60));
+    const days = Array.from({ length: 7 }, (_, dayIndex) => {
+      const rows = stats.rows.filter((row) => row.dayIndex === dayIndex);
+      const done = rows.filter((row) => !!checks[row.id]).length;
+      const pct = rows.length ? Math.round(done / rows.length * 100) : 0;
+      return { dayIndex, done, total: rows.length, met: rows.length > 0 && pct >= floor };
+    });
+    return Object.assign(stats, { floor, days, daysMet: days.filter((day) => day.met).length });
+  }
 
   // A daily task's attribute. Explicit override (settings.taskAttrs, keyed by the
   // task's slug so the same habit shares one attribute across days) wins; default
@@ -118,6 +162,24 @@
     }));
     return days;
   }
+  // Days a section's OWN scheduled tasks (unified quests with areaId === moduleId)
+  // were completed this week — the new-model equivalent of a "session". Lets a
+  // counter's number move when you tick its scheduled task in Daily Quests.
+  // XP is NOT taken from here (the quest itself already awards via the daily
+  // branch of weekXp), so this feeds display/progress only — no double count.
+  function questSessionDays(week, modules, moduleId) {
+    if (!week || !week.checks || !moduleId) return 0;
+    const dm = (modules || []).find((x) => x.type === "daily");
+    if (!dm || !dm.quests) return 0;
+    const checks = week.checks;
+    let n = 0;
+    (dm.quests || []).forEach((q) => {
+      if (!q || q.archived || q.areaId !== moduleId) return;
+      if (q.scheduleType === "weekly") (q.repeatDays || []).forEach((d) => { if (checks[questCheckId(q, d)]) n++; });
+      else if (q.scheduledDate && checks[questCheckId(q)]) n++;
+    });
+    return n;
+  }
   // The number a section already tracks (counter value / total hours), before
   // adding the linked-day "sessions".
   function moduleCountBase(week, m) {
@@ -166,9 +228,9 @@
       { id: "daily", type: "daily", name: "Daily Quests", icon: "check", source: "daily",
         countScore: true, attr: null, category: null, enabled: true, order: 1,
         blueprint: settings.dayTemplates || clone(DEFAULT_BLUEPRINT), taskAttrs: settings.taskAttrs || {},
-        taskLinks: settings.taskLinks || {} },
+        taskLinks: settings.taskLinks || {}, quests: settings.quests || [] },
       { id: "workout", type: "table", name: "Training", icon: "dumbbell", source: "training",
-        countScore: true, attr: "Body", category: "training", enabled: true, order: 2,
+        countScore: Number(settings.taskModelVersion || 0) < 3, attr: "Body", category: "training", enabled: true, order: 2,
         idPrefix: "workout", checkCount: 7, rows: settings.workouts || clone(DEFAULT_WORKOUTS),
         noteField: true, xpPer: XP_BY_CAT.training, target: { kind: "count", value: num(settings.workoutMin, 5) } },
       { id: "diet", type: "checklist", name: "Provisions", icon: "leaf", source: "nutrition",
@@ -177,7 +239,7 @@
         target: { kind: "days", value: num(settings.proteinMin, 7) } },
       { id: "study", type: "hours-table", name: "Scholarship", icon: "book", source: "study",
         countScore: false, attr: "Mind", category: "study", enabled: true, order: 4,
-        rows: settings.studyAreas || clone(DEFAULT_STUDY_AREAS), hoursPrefix: "hours-study",
+        rows: Array.isArray(settings.studyGoals) ? settings.studyGoals.map((g) => g.title) : (settings.studyAreas || clone(DEFAULT_STUDY_AREAS)), hoursPrefix: "hours-study",
         xpPerHour: STUDY_HOUR_XP, target: { kind: "hours", value: num(settings.studyTarget, 14) } },
       { id: "projects", type: "composite", name: "Workshop", icon: "cube", source: "projects",
         countScore: false, attr: "Craft", category: "project", enabled: true, order: 5,
@@ -249,6 +311,7 @@
           if (link && linkConsumesDaily(link, modules, i)) return;  // shared/counted by its section
           set.add(taskId(i, t));                                     // own checkbox (incl. stat links)
         }));
+        Object.keys(checks).forEach((id) => { if (id.indexOf("quest-") === 0) set.add(id); });
       } else if (m.type === "table") {
         const n = m.checkCount != null ? m.checkCount : (m.rows ? m.rows.length : 0);
         for (let i = 0; i < n; i++) set.add(`${m.idPrefix}-${i}`);
@@ -297,6 +360,15 @@
             award(c, XP_BY_CAT[c] || XP_BY_CAT.other, m.source);
           }
         }));
+        Object.keys(checks).forEach((id) => {
+          if (id.indexOf("quest-") !== 0 || !checks[id]) return;
+          const match = id.match(/^quest-([a-z]+)-/);
+          const q = (m.quests || []).find((item) => { const base = questCheckId(item); return id === base || id.indexOf(base + "-d") === 0; });
+          const cat = (q && q.category) || (match && match[1]) || "discipline";
+          const area = q && q.areaId ? (modules || []).find((item) => item.id === q.areaId) : null;
+          const source = area ? area.source : q && q.sourceType === "study" ? "study" : q && q.sourceType === "project" ? "projects" : m.source;
+          award(cat, XP_BY_CAT[cat] || XP_BY_CAT.other, source);
+        });
       } else if (m.type === "table") {
         const n = m.checkCount != null ? m.checkCount : (m.rows ? m.rows.length : 0);
         for (let i = 0; i < n; i++) if (checks[`${m.idPrefix}-${i}`]) award(m.category, m.xpPer, m.source);
@@ -378,6 +450,6 @@
   return {
     XP_BY_CAT, ATTR_OF_CAT, CAT_OF_ATTR, ATTR_LIST, ATTR_COLOR, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
-    slug, taskId, checklistId, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
+    slug, taskId, checklistId, questCheckId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });

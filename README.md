@@ -31,13 +31,14 @@ It's opinionated and built for one person: you. Self-host it, set a password, an
 | | |
 |---|---|
 | 🎮 **Game engine** | Lifetime XP, leveling curve, Initiate→Forgemaster ranks, and 5 independently-leveling attributes (Discipline, Body, Mind, Vitality, Craft) — all derived from the checks you already make. |
-| ✅ **Daily quests** | A per-day checklist where each task awards XP. Combos, haptics, and a "Day Cleared" celebration when you finish the day. |
+| ✅ **Daily quests** | One agenda for one-time tasks and weekly routines from every pursuit. The same task shares one completion and one XP award in every view. |
 | 🔥 **Streaks & freeze** | Daily and weekly streaks with milestone rewards (7 / 30 / 100 / 365 days) and a configurable "freeze" grace day so one bad day doesn't reset everything. |
 | 🏆 **Trophy Cabinet** | A dedicated showcase: trophy grades, a filterable wall of auto-unlocking **insignias** (Ascension, Attributes, Consistency, Boss, Study, Volume) across rarities, and manually-logged **Records** for real-world wins (certifications, PRs, goals). |
 | 👹 **Weekly boss** | A deterministic boss each week whose HP drains as you complete your week — with double damage to its weak attribute. Defeat it for an insignia and a victory celebration. |
 | ⏱️ **Focus timer** | A built-in Pomodoro/focus timer that logs elapsed hours straight into your study/project goals. |
 | 📊 **Analytics** | Weekly completion & XP trends, by-weekday breakdowns, and your most-skipped quests. |
-| 📅 **Goal tracking** | Certifications & study goals with deadline countdowns and pacing, weekly project-output tracking, diet/protein checklists, and a structured weekly review. |
+| 🧭 **Unified pursuits** | A pursuit's plan is made of the same scheduled tasks shown in Daily Quests. Assign them to Training, Provisions, Scholarship goals, Workshop projects, War Council, or a custom pursuit; the pursuit supplies its attribute automatically. |
+| 📅 **Goal tracking** | Certification and project cards with outcomes, status, deadlines, weekly pacing, and ordered task plans that flow directly into Daily Quests. |
 | 🎨 **10 themes** | A full palette of distinct dark themes (True Black, Crimson, Deep Forest, Synthwave, Nord, Carbon, and more). |
 | 📱 **PWA + push** | Installable on iOS/Android, works offline, and supports optional web-push reminders. |
 | 🪪 **Shareable card** | Export your level, rank, and attributes as a PNG to share — and load **sample data** in one click so a fresh install looks alive. |

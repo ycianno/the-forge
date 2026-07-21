@@ -1,11 +1,16 @@
 const APP_DB_KEY = "lifeControlCenter.v2.database";
 const APP_SETTINGS_KEY = "lifeControlCenter.v2.settings";
+const APP_PENDING_KEY = "lifeControlCenter.v2.pendingWrites";
+const APP_PRE_MIGRATION_KEY = "lifeControlCenter.v2.preMigrationBackup";
 const LEGACY_KEY = "nonNegotiablesDashboardV1";
 
 let selectedWeekStart = getStartOfWeek(new Date());
 let database = { version: 2, weeks: {} };
 let settings = { version: 3, dayTemplates: null };
 let achievements = [];
+const writeChains = new Map();
+let activeWrites = 0;
+let pendingRetryTimer = null;
 
 // The module engine (modules.js) is the single source of truth for ids, score
 // and XP. Built fresh from the current settings each call so in-place edits to
@@ -19,7 +24,8 @@ function getModules() {
 
 // Fill in any missing fields on a stored custom module (defensive).
 function normalizeCustomModule(m) {
-  const cm = Object.assign({ custom: true, enabled: true, countScore: false, icon: "star" }, m);
+  const cm = Object.assign({ custom: true, enabled: true, countScore: false }, m);
+  cm.icon = cm.icon || inferModuleIcon(cm.name, cm.type);
   cm.idPrefix = cm.idPrefix || cm.id;
   cm.source = cm.source || cm.id;
   cm.category = cm.category || (window.Forge && Forge.CAT_OF_ATTR[cm.attr]) || "discipline";
@@ -29,18 +35,86 @@ function normalizeCustomModule(m) {
   return cm;
 }
 
+// ----- section icons — feather-style stroke paths keyed by module.icon -------
+// Gives every pursuit a distinct glyph in its header (see applyModuleLayout).
+const MODULE_ICONS = {
+  check:     "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
+  dumbbell:  "M6.5 6.5v11M3.5 9v5M17.5 6.5v11M20.5 9v5M6.5 12h11",
+  leaf:      "M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10zM2 21c0-3 1.85-5.36 5.08-6",
+  book:      "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
+  cube:      "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.27 6.96 12 12.01l8.73-5.05M12 22.08V12",
+  clipboard: "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z",
+  star:      "M12 2l3 7h7l-5.5 4 2 7L12 17l-6.5 3 2-7L2 9h7z",
+  activity:  "M22 12h-4l-3 9L9 3l-3 9H2",
+  moon:      "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z",
+  rocket:    "M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09zM12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2zM9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5",
+  pencil:    "M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
+  target:    "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  clock:     "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2",
+  flame:     "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z",
+  heart:     "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z",
+};
+function moduleIconSvg(name) {
+  return `<svg viewBox="0 0 24 24" class="ic"><path d="${MODULE_ICONS[name] || MODULE_ICONS.star}"/></svg>`;
+}
+// Guess a fitting icon from a custom section's name/type so presets look distinct
+// without the user picking one. Falls back to a type default, then star.
+function inferModuleIcon(name, type) {
+  const t = String(name || "").toLowerCase();
+  const has = (...w) => w.some((x) => t.includes(x));
+  if (has("cardio", "run", "walk", "step", "move")) return "activity";
+  if (has("sleep", "rest", "bed")) return "moon";
+  if (has("read", "book", "page", "study", "learn")) return "book";
+  if (has("ship", "launch", "deploy", "release")) return "rocket";
+  if (has("gym", "lift", "workout", "train", "strength")) return "dumbbell";
+  if (has("water", "hydrate", "diet", "meal", "eat", "nutrition")) return "leaf";
+  if (has("meditat", "mind", "journal", "reflect", "gratitude")) return "pencil";
+  if (has("code", "build", "make", "craft")) return "cube";
+  if (has("streak", "habit", "focus", "deep")) return "flame";
+  if (type === "counter") return "target";
+  if (type === "notes") return "pencil";
+  if (type === "checklist") return "check";
+  return "star";
+}
+
 // Build a fresh custom-module definition from the Add Section form. The "daily"
 // form type produces a per-day `table` module (a checkbox each day) — these are
 // linkable to daily tasks exactly like the built-in Training section.
 function makeCustomModule({ name, type, attr, items, targetValue, unit, xpPer }) {
   const id = "custom-" + (slugify(name).slice(0, 20) || "section") + "-" + Math.random().toString(36).slice(2, 6);
   const cat = (window.Forge && Forge.CAT_OF_ATTR[attr]) || "discipline";
-  const m = { id, idPrefix: id, source: id, name: name || "New Section", type, attr, category: cat, icon: "star", enabled: true, countScore: false, custom: true };
-  if (type === "checklist") { m.items = (items && items.length) ? items : ["First item"]; m.xpPer = Number(xpPer) || 10; }
+  const m = { id, idPrefix: id, source: id, name: name || "New Section", type, attr, category: cat, icon: inferModuleIcon(name, type), enabled: true, countScore: false, custom: true };
+  if (type === "checklist") { m.items = (items && items.length) ? items : ["First item"]; m.xpPer = Number(xpPer) || 10; m.planOnly = true; m.countScore = false; }
   else if (type === "counter") { m.field = `${id}-count`; m.target = { kind: /hour|hr|min/i.test(unit || "") ? "hours" : "count", value: Number(targetValue) || 1, unit: unit || "" }; m.xpPer = Number(xpPer) || 5; }
   else if (type === "notes") { m.field = `${id}-notes`; m.xpPer = Number(xpPer) || 10; }
-  else if (type === "daily") { m.type = "table"; m.checkCount = 7; m.xpPer = Number(xpPer) || 15; m.countScore = true; }
+  else if (type === "daily") { m.type = "table"; m.checkCount = 7; m.xpPer = Number(xpPer) || 15; m.planOnly = true; m.countScore = false; }
   return m;
+}
+
+// Give a new/preset section a starter plan so EVERY section type — and every
+// preset — schedules into Daily Quests out of the box (not just plan-only ones).
+// counter → one weekly "session" task (spread across N days for small count
+// targets, else daily); notes → one weekly reflection task.
+function seedCustomPlanTasks(m) {
+  const seedable = m && (m.planOnly || m.type === "counter" || m.type === "notes");
+  if (!seedable || (settings.quests || []).some((q) => q.areaId === m.id)) return;
+  const attr = m.attr || "Discipline", category = attrCat(attr);
+  const all = [0,1,2,3,4,5,6];
+  let titles, days;
+  if (m.type === "checklist") { titles = (m.items || []); days = [0]; }
+  else if (m.type === "table") { titles = [m.name]; days = all.slice(); }
+  else if (m.type === "counter") {
+    titles = [m.name];
+    const tgt = Math.max(1, Math.round((m.target && m.target.value) || 1));
+    const kind = (m.target && m.target.kind) || "count";
+    days = (kind === "count" && tgt < 7) ? all.slice(0, tgt) : all.slice();
+  } else { titles = [m.name]; days = [0]; } // notes (and any other) → weekly reflection
+  titles.forEach((title, order) => settings.quests.push({
+    id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "",
+    repeatDays: days.slice(),
+    areaId: m.id, goalId: "", attr, category, order,
+    createdAt: new Date().toISOString(), migratedFrom: `${m.idPrefix || m.id}-${order}`
+  }));
 }
 
 // Drive the section DOM from the module list: apply each module's editable name
@@ -50,27 +124,41 @@ function makeCustomModule({ name, type, attr, items, targetValue, unit, xpPer })
 // same ids the engine reads.
 function applyModuleLayout() {
   const mods = getModules();
-  const anchor = document.getElementById("editDayModal"); // sits right after the last section
+  const anchor = document.getElementById("settingsModal");
   mods.forEach((m) => {
     const sec = document.getElementById(m.id);
     if (!sec) return;
     const h2 = sec.querySelector(".summary-left h2");
     if (h2 && m.name) h2.textContent = m.name;
     sec.style.display = (m.enabled === false) ? "none" : "";
-    // Attribute badge in the header — makes "what stat this section feeds" obvious.
-    // (Daily has no single attr — its tasks carry per-task dots instead.)
-    const summary = sec.querySelector("summary");
-    if (summary && m.attr) {
-      let badge = summary.querySelector(".attr-badge");
-      if (!badge) {
-        badge = document.createElement("span");
-        badge.className = "attr-badge";
-        const chev = summary.querySelector(".chev");
-        if (chev && chev.parentNode) chev.parentNode.insertBefore(badge, chev);
-        else summary.appendChild(badge);
+    // Per-pursuit identity: an attribute-color accent on the whole card and a
+    // matching icon chip in the header. Daily has no single stat → neutral accent.
+    sec.classList.add("has-accent");
+    sec.style.setProperty("--ac", m.attr ? attrColor(m.attr) : "#8b93a7");
+    const summary = sec.querySelector(":scope > summary");
+    if (summary) {
+      let ico = summary.querySelector(":scope > .sec-icon");
+      if (!ico) {
+        ico = document.createElement("span");
+        ico.className = "sec-icon";
+        ico.setAttribute("aria-hidden", "true");
+        summary.insertBefore(ico, summary.firstChild);
       }
-      badge.textContent = attrName(m.attr);
-      badge.style.setProperty("--ac", attrColor(m.attr));
+      ico.innerHTML = moduleIconSvg(m.icon);
+      // Attribute badge — makes "what stat this section feeds" obvious.
+      // (Daily has no single attr — its tasks carry per-task dots instead.)
+      if (m.attr) {
+        let badge = summary.querySelector(".attr-badge");
+        if (!badge) {
+          badge = document.createElement("span");
+          badge.className = "attr-badge";
+          const chev = summary.querySelector(".chev");
+          if (chev && chev.parentNode) chev.parentNode.insertBefore(badge, chev);
+          else summary.appendChild(badge);
+        }
+        badge.textContent = attrName(m.attr);
+        badge.style.setProperty("--ac", attrColor(m.attr));
+      }
     }
     if (anchor && anchor.parentNode === sec.parentNode) anchor.parentNode.insertBefore(sec, anchor);
   });
@@ -78,16 +166,19 @@ function applyModuleLayout() {
 
 // ===== GENERIC CUSTOM-SECTION RENDERER =====
 function customHint(m) {
+  if (m.planOnly) return "Scheduled task plan shared with Daily Quests.";
   if (m.type === "checklist") return `Each item is worth +${m.xpPer} XP.`;
   if (m.type === "counter") { const u = m.target && m.target.unit ? ` ${m.target.unit}` : ""; return `Target: ${(m.target && m.target.value) || 1}${u} per week · +${m.xpPer} XP each.`; }
   if (m.type === "notes") return `Free-form notes · +${m.xpPer} XP when filled.`;
-  if (m.type === "table") return `A checkbox for each day · +${m.xpPer} XP each · linkable to a daily task.`;
+  if (m.type === "table") return `A checkbox for each day · +${m.xpPer} XP each.`;
   return "";
 }
 function customSectionHtml(m) {
   const head = `<summary><div class="summary-left"><h2>${escapeHtml(m.name)}</h2><p class="hint">${escapeHtml(customHint(m))}</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-section-btn" type="button" data-module-id="${m.id}" title="Edit pursuit"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>`;
   let body = "";
-  if (m.type === "checklist") {
+  if (m.planOnly) {
+    body = `<div class="content"></div>`;
+  } else if (m.type === "checklist") {
     body = `<div class="content"><div class="grid grid-3">` + (m.items || []).map((it) =>
       `<label class="check quest"><input id="${Forge.checklistId(m.idPrefix, it)}" type="checkbox" data-cat="${escapeHtml(m.category)}" data-save><span class="q-text">${escapeHtml(it)}</span><span class="q-xp">+${m.xpPer}</span></label>`
     ).join("") + `</div></div>`;
@@ -111,7 +202,7 @@ function customSectionHtml(m) {
 function renderCustomSections() {
   if (!window.Forge) return;
   const mods = getModules().filter((m) => m.custom);
-  const anchor = document.getElementById("editDayModal");
+  const anchor = document.getElementById("settingsModal");
   const present = new Set();
   mods.forEach((m) => {
     present.add(m.id);
@@ -137,26 +228,74 @@ function persistSettingsSoon() {
   clearTimeout(modPersistTimer);
   modPersistTimer = setTimeout(persistSettings, 350);
 }
+// Per-pursuit weekly target — reads/writes the right place for each pursuit type.
+// null → this pursuit has no single numeric weekly target (review/checklist/notes/daily).
+function pursuitTargetSpec(m) {
+  if (m.id === "workout")   return { get: () => settings.workoutMin != null ? settings.workoutMin : 5,   set: (v) => settings.workoutMin = v,   unit: "sessions/wk", min: 0, max: 30 };
+  if (m.id === "diet")      return { get: () => settings.proteinMin != null ? settings.proteinMin : 7,   set: (v) => settings.proteinMin = v,   unit: "days/wk",     min: 0, max: 7 };
+  if (m.id === "study")     return { get: () => settings.studyTarget != null ? settings.studyTarget : 14, set: (v) => settings.studyTarget = v,  unit: "hrs/wk",      min: 0, max: 100 };
+  if (m.id === "projects")  return { get: () => settings.projectTarget != null ? settings.projectTarget : 2, set: (v) => settings.projectTarget = v, unit: "hrs/wk",   min: 0, max: 100 };
+  if (m.type === "counter") return { get: () => (m.target && m.target.value) || 1, set: (v) => { const cm = (settings.customModules || []).find((x) => x.id === m.id); if (cm) { cm.target = cm.target || {}; cm.target.value = v; } }, unit: `${(m.target && m.target.unit) || "count"}/wk`, min: 0, max: 9999 };
+  return null;
+}
+function setPursuitTarget(id, value) {
+  const m = getModules().find((x) => x.id === id); if (!m) return;
+  const spec = pursuitTargetSpec(m); if (!spec) return;
+  spec.set(Math.max(spec.min || 0, Number(value) || 0));
+  persistSettingsSoon();
+  updateProgress();            // refresh the section's pill/bar live
+  renderModulesEditor();       // refresh the "N/target" readout
+}
+// Completed vs scheduled tasks THIS week for a pursuit — connects the target to
+// the actual plan so the number no longer feels disconnected.
+function pursuitWeekProgress(m) {
+  const all = getUnifiedQuests().filter((q) => !q.archived && q.areaId === m.id);
+  const wk = getWeekData();
+  let done = 0, total = 0;
+  all.forEach((q) => questOccurrencesInWeek(q).forEach((d) => { total++; if (wk.checks[questCheckId(q, d)]) done++; }));
+  return { done, total };
+}
 function renderModulesEditor() {
   const wrap = document.getElementById("modulesEditor");
   if (!wrap) return;
   const mods = getModules();
   const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : ["Discipline", "Body", "Mind", "Vitality", "Craft"];
   const rows = mods.map((m, i) => {
-    const row = `
-    <div class="mod-row" data-id="${m.id}">
-      <div class="mod-reorder">
-        <button class="mod-up" type="button" title="Move up" aria-label="Move up" ${i === 0 ? "disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
-        <button class="mod-down" type="button" title="Move down" aria-label="Move down" ${i === mods.length - 1 ? "disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M6 9l6 6 6-6"/></svg></button>
-      </div>
-      <input class="mod-name" type="text" value="${escapeHtml(m.name)}" maxlength="28" aria-label="Section name" spellcheck="false">
-      <label class="mod-show"><input type="checkbox" class="mod-enabled" ${m.enabled ? "checked" : ""}><span>Show</span></label>
-      ${m.custom
-        ? `<button class="mod-edit" type="button" title="Edit pursuit" aria-label="Edit pursuit"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+    const accent = m.attr ? attrColor(m.attr) : "#8b93a7";
+    const spec = pursuitTargetSpec(m);
+    const prog = m.id === "daily" ? null : pursuitWeekProgress(m);
+    const targetHtml = spec
+      ? `<label class="pursuit-target"><span>Weekly target</span><input type="number" class="pursuit-target-input" value="${spec.get()}" min="${spec.min || 0}"${spec.max ? ` max="${spec.max}"` : ""} step="1" aria-label="Weekly target for ${escapeHtml(m.name)}"><em>${escapeHtml(spec.unit)}</em></label>`
+      : "";
+    const progHtml = prog && prog.total
+      ? `<span class="pursuit-progress" title="Scheduled tasks completed this week">${prog.done}/${prog.total} done this week</span>`
+      : "";
+    const feeds = m.id === "daily"
+      ? `<span class="pursuit-feeds muted">Your daily agenda — every pursuit's tasks land here</span>`
+      : (m.attr ? `<span class="pursuit-feeds">Feeds ${escapeHtml(attrName(m.attr))}</span>` : "");
+    const customTools = m.custom
+      ? `<button class="mod-edit" type="button" title="Edit pursuit" aria-label="Edit pursuit"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
            <button class="mod-del" type="button" title="Delete pursuit" aria-label="Delete pursuit"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`
-        : `<span class="mod-builtin" title="Built-in pursuit (edit its content from the pursuit itself)"><svg viewBox="0 0 24 24" class="ic"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 11 4.5-2.5 8-6 8-11V5l-8-3z"/></svg></span>`}
+      : "";
+    return `
+    <div class="pursuit-card" data-id="${m.id}" style="--ac:${accent}">
+      <div class="pursuit-card-top">
+        <span class="pursuit-card-ico" aria-hidden="true">${moduleIconSvg(m.icon)}</span>
+        <input class="mod-name pursuit-card-name" type="text" value="${escapeHtml(m.name)}" maxlength="28" aria-label="Pursuit name" spellcheck="false">
+        <div class="pursuit-card-tools">
+          <button class="mod-up" type="button" title="Move up" aria-label="Move up" ${i === 0 ? "disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
+          <button class="mod-down" type="button" title="Move down" aria-label="Move down" ${i === mods.length - 1 ? "disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M6 9l6 6 6-6"/></svg></button>
+          <label class="mod-show"><input type="checkbox" class="mod-enabled" ${m.enabled ? "checked" : ""}><span>Show</span></label>
+          ${customTools}
+        </div>
+      </div>
+      <div class="pursuit-card-sub">
+        ${feeds}
+        ${targetHtml}
+        ${progHtml}
+        <button class="pursuit-plan-link" type="button" title="Open this pursuit to edit its plan">Edit plan →</button>
+      </div>
     </div>`;
-    return row;
   }).join("");
   const form = `
     <div class="mod-add">
@@ -167,8 +306,8 @@ function renderModulesEditor() {
         <div class="form-row">
           <div class="form-col"><label class="label">Type</label>
             <select id="newModType">
-              <option value="daily">Daily checkbox (one per day · linkable)</option>
-              <option value="checklist">Checklist (weekly items)</option>
+              <option value="daily">Daily task plan</option>
+              <option value="checklist">Weekly task plan</option>
               <option value="counter">Counter (number / hours)</option>
               <option value="notes">Notes</option>
             </select></div>
@@ -185,8 +324,9 @@ function renderModulesEditor() {
             <div class="form-col"><label class="label">Unit</label><input type="text" id="newModUnit" placeholder="pages · min · km"></div>
           </div>
         </div>
-        <label class="label">XP per item/unit</label>
-        <input type="number" id="newModXp" min="0" step="1" value="10">
+        <p class="hint" id="newModTaskHint">Plan items become scheduled tasks and automatically appear in Daily Quests.</p>
+        <div id="newModXpFields"><label class="label">XP per item/unit</label>
+        <input type="number" id="newModXp" min="0" step="1" value="10"></div>
         <div class="modal-actions" style="margin-top:12px;">
           <button type="button" id="newModCancel">Cancel</button>
           <button type="button" class="primary" id="newModSave">Add Pursuit</button>
@@ -207,18 +347,19 @@ function sectionEditBodyHtml(m) {
   const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
   const attrOpts = attrs.map((a) => `<option value="${a}" ${a === m.attr ? "selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
   let typeFields = "";
-  if (m.type === "checklist") {
+  if (m.type === "checklist" && !m.planOnly) {
     typeFields = `<label class="label">Items (one per line)</label><textarea class="es-items">${escapeHtml((m.items || []).join("\n"))}</textarea>`;
   } else if (m.type === "counter") {
     typeFields = `<div class="form-row"><div class="form-col"><label class="label">Weekly target (your limit)</label><input type="number" class="es-target" min="0" step="any" value="${(m.target && m.target.value) || 0}"></div><div class="form-col"><label class="label">Unit</label><input type="text" class="es-unit" value="${escapeHtml((m.target && m.target.unit) || "")}"></div></div>`;
   }
+  const economyFields = m.planOnly ? `<p class="hint">This pursuit's plan is edited task by task on its page. Each task carries its own schedule and uses this pursuit's attribute.</p>` : `<div class="form-col"><label class="label">XP per ${m.type === "counter" ? "unit" : m.type === "table" ? "day" : "item"}</label><input type="number" class="es-xp" min="0" step="1" value="${m.xpPer || 0}"></div>`;
   return `<label class="label">Name</label><input type="text" class="es-name" value="${escapeHtml(m.name)}" maxlength="28" spellcheck="false">
     <div class="form-row">
       <div class="form-col"><label class="label">Feeds stat</label><select class="es-attr">${attrOpts}</select></div>
-      <div class="form-col"><label class="label">XP per ${m.type === "counter" ? "unit" : m.type === "table" ? "day" : "item"}</label><input type="number" class="es-xp" min="0" step="1" value="${m.xpPer || 0}"></div>
+      ${economyFields}
     </div>
     ${typeFields}
-    <label class="me-score" style="margin-top:12px;"><input type="checkbox" class="es-countscore" ${m.countScore ? "checked" : ""}><span>Count toward weekly score</span></label>`;
+    ${m.planOnly ? "" : `<label class="me-score" style="margin-top:12px;"><input type="checkbox" class="es-countscore" ${m.countScore ? "checked" : ""}><span>Count toward weekly score</span></label>`}`;
 }
 function openSectionEditor(id) {
   const m = (settings.customModules || []).find((x) => x.id === id);
@@ -241,11 +382,26 @@ function saveSectionEditor() {
   const name = (body.querySelector(".es-name").value || "").trim();
   if (name) { m.name = name; if (settings.moduleNames) delete settings.moduleNames[m.id]; }
   const attr = body.querySelector(".es-attr").value;
+  const assignedTasks = (settings.quests || []).filter((q) => q.areaId === m.id).map((q) => ({ q, oldBase: questCheckId(q) }));
   m.attr = attr;
   m.category = (window.Forge && Forge.CAT_OF_ATTR[attr]) || "discipline";
-  m.xpPer = Number(body.querySelector(".es-xp").value) || 0;
-  m.countScore = body.querySelector(".es-countscore").checked;
-  if (m.type === "checklist") {
+  const touchedWeeks = new Set();
+  assignedTasks.forEach(({ q, oldBase }) => {
+    q.attr = attr; q.category = m.category;
+    const nextBase = questCheckId(q);
+    if (oldBase === nextBase) return;
+    Object.entries(database.weeks || {}).forEach(([key, week]) => {
+      Object.keys((week && week.checks) || {}).forEach((checkId) => {
+        if (checkId !== oldBase && checkId.indexOf(oldBase + "-d") !== 0) return;
+        const suffix = checkId.slice(oldBase.length);
+        week.checks[nextBase + suffix] = week.checks[checkId]; delete week.checks[checkId]; touchedWeeks.add(key);
+      });
+    });
+  });
+  const xpInput = body.querySelector(".es-xp"), scoreInput = body.querySelector(".es-countscore");
+  if (xpInput) m.xpPer = Number(xpInput.value) || 0;
+  if (scoreInput) m.countScore = scoreInput.checked;
+  if (m.type === "checklist" && !m.planOnly) {
     const items = (body.querySelector(".es-items").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
     m.items = items.length ? items : ["First item"];
   } else if (m.type === "counter") {
@@ -253,6 +409,7 @@ function saveSectionEditor() {
     m.target = { kind: /hour|hr|min/i.test(unit) ? "hours" : "count", value: Number(body.querySelector(".es-target").value) || 1, unit };
   }
   persistSettings();
+  touchedWeeks.forEach(persistWeekByKey);
   closeSectionEditor();
   renderModulesEditor();
   applyWeekToUI();
@@ -263,7 +420,15 @@ function applyPreset(id, skipConfirm) {
   if (!skipConfirm && !confirm(`Load the "${p.name}" preset? It rearranges your sections and may add a few. Your logged data is kept.`)) return;
   settings.hiddenSections = (p.hidden || []).slice();
   settings.moduleNames = Object.assign({}, p.names || {});
+  const previousCustom = new Map((settings.customModules || []).map((m) => [m.id, m.name]));
   settings.customModules = (p.custom || []).map((spec) => makeCustomModule(spec));
+  const nextByName = new Map(settings.customModules.map((m) => [String(m.name).trim().toLowerCase(), m.id]));
+  (settings.quests || []).forEach((q) => {
+    if (!previousCustom.has(q.areaId)) return;
+    q.areaId = nextByName.get(String(previousCustom.get(q.areaId)).trim().toLowerCase()) || "";
+    if (!q.areaId) q.goalId = "";
+  });
+  settings.customModules.forEach(seedCustomPlanTasks);
   settings.taskLinks = Object.assign({}, p.links || {});
   const order = (p.order && p.order.length) ? p.order.slice() : (window.Forge ? Forge.BUILTIN_ORDER.slice() : []);
   settings.moduleOrder = order.concat(settings.customModules.map((m) => m.id));
@@ -335,6 +500,9 @@ async function startBlank() {
   settings.dayTemplates = emptyDays;
   settings.dietItems = [];
   settings.studyAreas = [];
+  settings.studyGoals = [];
+  settings.projectGoals = [];
+  settings.quests = [];
   settings.projectChecks = [];
   settings.workouts = [];
   settings.reviewPrompts = [];
@@ -347,8 +515,13 @@ function toggleAddFormFields() {
   if (!t) return;
   const cl = document.getElementById("newModChecklist");
   const co = document.getElementById("newModCounter");
+  const taskHint = document.getElementById("newModTaskHint");
+  const xpFields = document.getElementById("newModXpFields");
+  const isTaskPlan = t.value === "checklist" || t.value === "daily";
   if (cl) cl.style.display = t.value === "checklist" ? "" : "none";
   if (co) co.style.display = t.value === "counter" ? "" : "none";
+  if (taskHint) taskHint.style.display = isTaskPlan ? "" : "none";
+  if (xpFields) xpFields.style.display = isTaskPlan ? "none" : "";
 }
 function addCustomModuleFromForm() {
   const name = (document.getElementById("newModName").value || "").trim();
@@ -364,6 +537,7 @@ function addCustomModuleFromForm() {
   });
   if (!settings.customModules) settings.customModules = [];
   settings.customModules.push(m);
+  seedCustomPlanTasks(m);
   settings.moduleOrder = getModules().map((x) => x.id); // keep new section at the end, stably
   persistSettings();
   renderModulesEditor();
@@ -375,6 +549,7 @@ function deleteCustomModule(id) {
   if (Array.isArray(settings.moduleOrder)) settings.moduleOrder = settings.moduleOrder.filter((x) => x !== id);
   if (settings.moduleNames) delete settings.moduleNames[id];
   if (Array.isArray(settings.hiddenSections)) settings.hiddenSections = settings.hiddenSections.filter((x) => x !== id);
+  (settings.quests || []).forEach((q) => { if (q.areaId === id) { q.areaId = ""; q.goalId = ""; } });
   persistSettings();
   renderModulesEditor();
   applyWeekToUI();
@@ -412,20 +587,25 @@ function wireModulesEditor() {
     if (e.target.closest("#modAddToggle")) { const f = document.getElementById("modAddForm"); if (f) { f.style.display = ""; toggleAddFormFields(); } return; }
     if (e.target.closest("#newModCancel")) { const f = document.getElementById("modAddForm"); if (f) f.style.display = "none"; return; }
     if (e.target.closest("#newModSave")) { addCustomModuleFromForm(); return; }
-    const row = e.target.closest(".mod-row"); if (!row) return;
+    const row = e.target.closest(".pursuit-card"); if (!row) return;
     if (e.target.closest(".mod-up")) moveModule(row.dataset.id, -1);
     else if (e.target.closest(".mod-down")) moveModule(row.dataset.id, 1);
     else if (e.target.closest(".mod-edit")) openSectionEditor(row.dataset.id);
     else if (e.target.closest(".mod-del")) deleteCustomModule(row.dataset.id);
+    else if (e.target.closest(".pursuit-plan-link")) {
+      document.getElementById("settingsModal").classList.remove("active");
+      scrollToSection(row.dataset.id);
+    }
   });
   wrap.addEventListener("input", (e) => {
     if (!e.target.classList.contains("mod-name")) return;
-    const row = e.target.closest(".mod-row"); if (row) renameModule(row.dataset.id, e.target.value);
+    const row = e.target.closest(".pursuit-card"); if (row) renameModule(row.dataset.id, e.target.value);
   });
   wrap.addEventListener("change", (e) => {
     if (e.target.id === "newModType") { toggleAddFormFields(); return; }
-    if (!e.target.classList.contains("mod-enabled")) return;
-    const row = e.target.closest(".mod-row"); if (row) toggleModule(row.dataset.id, e.target.checked);
+    const row = e.target.closest(".pursuit-card"); if (!row) return;
+    if (e.target.classList.contains("mod-enabled")) toggleModule(row.dataset.id, e.target.checked);
+    else if (e.target.classList.contains("pursuit-target-input")) setPursuitTarget(row.dataset.id, e.target.value);
   });
 }
 
@@ -465,7 +645,6 @@ function wireStatsEditor() {
   });
 }
 let saveTimer = null;
-let editingDayIndex = null;
 let booting = true;   // suppresses persistence during the instant cache-paint at startup
 
 // ===== THEMES =====
@@ -574,39 +753,125 @@ function cacheState() {
   } catch (e) {}
 }
 
-async function persistDatabase() {
-  if (booting) return;
-  const key = weekKey();
-  const weekData = database.weeks[key];
-  if (!weekData) return;
-
-  // Persist to server
+function readPendingWrites() {
+  const value = readCache(APP_PENDING_KEY);
+  return value && typeof value === "object" ? value : { weeks: {}, settings: null };
+}
+function writePendingWrites(value) {
   try {
-    await fetch(`/api/week/${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(weekData)
-    });
-  } catch (e) {
-    console.error("Failed to persist to server", e);
+    if (!value.settings && !Object.keys(value.weeks || {}).length) localStorage.removeItem(APP_PENDING_KEY);
+    else localStorage.setItem(APP_PENDING_KEY, JSON.stringify(value));
+  } catch (e) {}
+}
+function setSaveState(state, message) {
+  const el = document.getElementById("saveState");
+  if (!el) return;
+  el.dataset.state = state;
+  el.textContent = message || ({ saving: "Saving…", saved: "Saved", queued: "Saved offline", failed: "Save failed" }[state] || state);
+}
+function queueWrite(resource, payload) {
+  const pending = readPendingWrites();
+  pending.weeks = pending.weeks || {};
+  if (resource === "settings") pending.settings = payload;
+  else pending.weeks[resource] = payload;
+  writePendingWrites(pending);
+}
+function clearQueuedWrite(resource, payload) {
+  const pending = readPendingWrites();
+  const queued = resource === "settings" ? pending.settings : (pending.weeks || {})[resource];
+  if (JSON.stringify(queued) !== JSON.stringify(payload)) return;
+  if (resource === "settings") pending.settings = null;
+  else delete pending.weeks[resource];
+  writePendingWrites(pending);
+}
+function serialWrite(resource, operation) {
+  const prior = writeChains.get(resource) || Promise.resolve();
+  const next = prior.catch(() => {}).then(operation);
+  writeChains.set(resource, next);
+  return next.finally(() => { if (writeChains.get(resource) === next) writeChains.delete(resource); });
+}
+function schedulePendingRetry() {
+  clearTimeout(pendingRetryTimer);
+  pendingRetryTimer = setTimeout(() => { flushPendingWrites(); }, 3000);
+}
+async function postJson(url, payload) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || body.message || `Server returned ${res.status}`);
   }
+  return res;
+}
 
-  // Fallback to localStorage
+async function persistDatabase() {
+  return persistWeekByKey(weekKey());
+}
+
+// Persist a specific week. Unified quests can be scheduled into a different
+// week than the one currently open, so their initial unchecked state (and any
+// moved completion) must be written to that exact week.
+async function persistWeekByKey(key) {
+  const weekData = database.weeks[key];
+  if (!weekData || booting) return false;
+  const snapshot = structuredCloneSafe(weekData);
   localStorage.setItem(APP_DB_KEY, JSON.stringify(database));
+  queueWrite(key, snapshot);
+  return serialWrite(`week:${key}`, async () => {
+    activeWrites++; setSaveState("saving");
+    try {
+      await postJson(`/api/week/${key}`, snapshot);
+      clearQueuedWrite(key, snapshot);
+      return true;
+    } catch (e) {
+      console.error(`Failed to persist week ${key}`, e);
+      setSaveState(navigator.onLine ? "failed" : "queued", navigator.onLine ? "Save failed · retrying" : "Saved offline");
+      schedulePendingRetry();
+      return false;
+    } finally {
+      activeWrites--;
+      if (!activeWrites && !Object.keys(readPendingWrites().weeks || {}).length && !readPendingWrites().settings) setSaveState("saved");
+    }
+  });
 }
 
 async function persistSettings() {
-  if (booting) return;
-  try {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings)
-    });
-  } catch (e) {
-    console.error("Failed to persist settings to server", e);
-  }
+  if (booting) return false;
+  const snapshot = structuredCloneSafe(settings);
   localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
+  queueWrite("settings", snapshot);
+  return serialWrite("settings", async () => {
+    activeWrites++; setSaveState("saving");
+    try {
+      await postJson("/api/settings", snapshot);
+      clearQueuedWrite("settings", snapshot);
+      return true;
+    } catch (e) {
+      console.error("Failed to persist settings to server", e);
+      setSaveState(navigator.onLine ? "failed" : "queued", navigator.onLine ? "Save failed · retrying" : "Saved offline");
+      schedulePendingRetry();
+      return false;
+    } finally {
+      activeWrites--;
+      if (!activeWrites && !Object.keys(readPendingWrites().weeks || {}).length && !readPendingWrites().settings) setSaveState("saved");
+    }
+  });
+}
+
+function applyPendingWrites() {
+  const pending = readPendingWrites();
+  Object.entries(pending.weeks || {}).forEach(([key, week]) => { database.weeks[key] = week; });
+  if (pending.settings) settings = pending.settings;
+}
+async function flushPendingWrites() {
+  if (booting) return;
+  const pending = readPendingWrites();
+  const jobs = Object.keys(pending.weeks || {}).map((key) => persistWeekByKey(key));
+  if (pending.settings) jobs.push(persistSettings());
+  if (jobs.length) await Promise.all(jobs);
 }
 
 function getWeekData() {
@@ -991,8 +1256,7 @@ async function checkAutoRecords(p) {
 function renderStatic() {
   renderScoreboard();
   renderStudyAreas();
-  renderDiet();
-  renderProjectChecks();
+  renderProjectGoals();
   renderReview();
 }
 
@@ -1009,10 +1273,11 @@ function dayPctInfo(date) {
   if (!wk || !wk.checks) return null;
   const di = date.getDay();
   const tasks = getDailyBlueprint()[Object.keys(getDailyBlueprint())[di]] || [];
-  if (!tasks.length) return null;
-  let done = 0;
-  tasks.forEach(t => { if (wk.checks[taskId(di, t)]) done++; });
-  return { pct: Math.round(done / tasks.length * 100), done, total: tasks.length, tasks, di, wk };
+  const items = tasks.map((t) => ({ title: t, done: !!wk.checks[taskId(di, t)] }));
+  questsForDate(date).forEach((q) => items.push({ title: q.title, done: !!wk.checks[questCheckId(q, date)] }));
+  if (!items.length) return null;
+  const done = items.filter((x) => x.done).length;
+  return { pct: Math.round(done / items.length * 100), done, total: items.length, items, di, wk };
 }
 function hmLevel(pct) {
   if (pct == null || pct === 0) return 0;
@@ -1029,8 +1294,7 @@ function openDayInsights(date, info) {
     html = "No data recorded for this day.";
   } else {
     html = `<strong>Completion:</strong> ${info.pct}% &nbsp;(${info.done}/${info.total} quests)<br><br>`;
-    html += info.tasks.map(t =>
-      `${info.wk.checks[taskId(info.di, t)] ? "✅" : "▫️"} ${escapeHtml(t)}`).join("<br>");
+    html += info.items.map((item) => `${item.done ? "✅" : "▫️"} ${escapeHtml(item.title)}`).join("<br>");
   }
   document.getElementById("insightsContent").innerHTML = html;
   document.getElementById("insightsModal").classList.add("active");
@@ -1121,59 +1385,698 @@ const defaultStudyAreas = [
   "Reading List",
   "Skill Practice"
 ];
-function getStudyAreas() { return settings.studyAreas || defaultStudyAreas; }
+function forgeId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+function latestWeekField(id, fallback) {
+  const keys = Object.keys(database.weeks || {}).sort().reverse();
+  for (const key of keys) {
+    const fields = (database.weeks[key] && database.weeks[key].fields) || {};
+    if (fields[id] !== undefined && String(fields[id]).trim()) return fields[id];
+  }
+  return fallback;
+}
+function migrateQuestModelIfNeeded() {
+  let changed = false;
+  let migratedProjects = false;
+  if (!Array.isArray(settings.studyGoals)) {
+    const areas = Array.isArray(settings.studyAreas) ? settings.studyAreas : defaultStudyAreas;
+    const dates = settings.certDates || {};
+    settings.studyGoals = areas.map((title, i) => ({
+      id: forgeId("study"), title, type: "study",
+      objective: latestWeekField(`goal-study-${i}`, ""),
+      status: latestWeekField(`status-study-${i}`, "Planned"),
+      targetDate: dates[title] || "", order: i
+    }));
+    changed = true;
+  }
+  if (!Array.isArray(settings.projectGoals)) {
+    const focus = latestWeekField("projectFocus", "");
+    settings.projectGoals = [{
+      id: forgeId("project"), title: focus || "My Project", type: "project",
+      objective: focus ? "Turn this focus into visible output." : "Define the outcome, then add the next concrete task.",
+      status: "In Progress", targetDate: "", order: 0
+    }];
+    changed = true; migratedProjects = true;
+  }
+  if (!Array.isArray(settings.quests)) { settings.quests = []; changed = true; }
+  // Keep customized legacy Workshop outputs visible as a backlog under the
+  // migrated project. They become unified tasks as soon as the user schedules
+  // them, while historical project-* checks remain untouched.
+  if (migratedProjects && settings.projectGoals[0] && Array.isArray(settings.projectChecks)) {
+    settings.projectChecks.forEach((title, order) => settings.quests.push({
+      id: forgeId("q"), title, scheduledDate: "", sourceType: "project",
+      sourceId: settings.projectGoals[0].id, attr: "Craft", category: "project",
+      order, createdAt: new Date().toISOString()
+    }));
+  }
+  // Normalize the first unified-quest iteration into the final task shape.
+  settings.quests.forEach((q) => {
+    if (!q.scheduleType) { q.scheduleType = "once"; changed = true; }
+    if (q.scheduleType === "once" && !q.scheduledDate) { q.scheduledDate = iso(new Date()); changed = true; }
+    if (!Array.isArray(q.repeatDays)) { q.repeatDays = []; changed = true; }
+    if (q.areaId === undefined) {
+      q.areaId = q.sourceType === "study" ? "study" : q.sourceType === "project" ? "projects" : "";
+      q.goalId = (q.sourceType === "study" || q.sourceType === "project") ? (q.sourceId || "") : "";
+      changed = true;
+    }
+  });
 
-function getCertDates() { return settings.certDates || {}; }
+  // One-time migration: recurring weekday checklist rows become the same task
+  // objects as dated quests. Existing week completion is copied to the stable
+  // task occurrence ids before the legacy template is emptied.
+  if (Number(settings.taskModelVersion || 0) < 2) {
+    const blueprint = settings.dayTemplates || defaultDailyBlueprint;
+    const oldLinks = settings.taskLinks || {};
+    const modulesBefore = getModules();
+    const routines = new Map();
+    const occurrences = [];
+    Object.keys(defaultDailyBlueprint).forEach((day, dayIndex) => {
+      (blueprint[day] || []).forEach((title) => {
+        const attr = taskAttr(title);
+        const link = window.Forge ? Forge.taskLinkOf(oldLinks, title) : null;
+        const ref = link && window.Forge ? Forge.normLink(link) : null;
+        const areaId = ref ? ref.m : "";
+        const goalId = "";
+        const key = [String(title).trim().toLowerCase(), attr, areaId, goalId].join("|");
+        let task = routines.get(key);
+        if (!task) {
+          task = { id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [], areaId, goalId, attr, category: attrCat(attr), order: settings.quests.length + routines.size, createdAt: new Date().toISOString() };
+          routines.set(key, task);
+          settings.quests.push(task);
+        }
+        if (!task.repeatDays.includes(dayIndex)) task.repeatDays.push(dayIndex);
+        occurrences.push({ task, title, dayIndex, link });
+      });
+    });
+    Object.values(database.weeks || {}).forEach((week) => {
+      if (!week || !week.checks) return;
+      occurrences.forEach(({ task, title, dayIndex, link }) => {
+        const oldId = taskId(dayIndex, title);
+        const sharedId = link && window.Forge ? Forge.linkTargetId(link, modulesBefore, dayIndex) : null;
+        if (week.checks[oldId] === undefined && (!sharedId || week.checks[sharedId] === undefined)) return;
+        week.checks[questCheckId(task, dayIndex)] = !!(week.checks[oldId] !== undefined ? week.checks[oldId] : week.checks[sharedId]);
+        delete week.checks[oldId];
+      });
+    });
+    const empty = {}; Object.keys(defaultDailyBlueprint).forEach((day) => { empty[day] = []; });
+    settings.dayTemplates = empty;
+    settings.taskLinks = {};
+    settings.taskModelVersion = 2;
+    changed = true;
+  }
+
+  // One plan model: the old Training table and Provisions checklist were a
+  // second kind of task that could not be scheduled or mirrored in Daily.
+  // Convert every legacy plan row into a unified task and carry its checks and
+  // training notes forward. From this point on, a pursuit's plan IS its tasks.
+  if (Number(settings.taskModelVersion || 0) < 3) {
+    const migrated = [];
+    const names = dayNames().map((d) => d.toLowerCase());
+    const workoutPlan = Array.isArray(settings.workouts) ? settings.workouts : defaultWorkouts;
+    const provisionPlan = Array.isArray(settings.dietItems) ? settings.dietItems : defaultDietItems;
+    workoutPlan.forEach((row, legacyIndex) => {
+      const dayLabel = String((row && row[0]) || "").trim();
+      const title = String((row && row[1]) || "").trim();
+      if (!title) return;
+      let dayIndex = names.findIndex((d) => d === dayLabel.toLowerCase());
+      if (dayIndex < 0) dayIndex = (legacyIndex + 1) % 7;
+      const task = { id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [dayIndex], areaId: "workout", goalId: "", attr: "Body", category: "training", order: settings.quests.filter((q) => q.areaId === "workout" && !q.goalId).length, createdAt: new Date().toISOString(), migratedFrom: `workout-${legacyIndex}` };
+      settings.quests.push(task);
+      migrated.push({ kind: "workout", legacyIndex, dayIndex, task });
+    });
+    provisionPlan.forEach((title, legacyIndex) => {
+      title = String(title || "").trim();
+      if (!title) return;
+      const task = { id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [0,1,2,3,4,5,6], areaId: "diet", goalId: "", attr: "Vitality", category: "protein", order: settings.quests.filter((q) => q.areaId === "diet" && !q.goalId).length, createdAt: new Date().toISOString(), migratedFrom: `diet-${slugify(title)}` };
+      settings.quests.push(task);
+      migrated.push({ kind: "diet", legacyIndex, dayIndex: 0, legacyId: dietId(title), task });
+    });
+    Object.values(database.weeks || {}).forEach((week) => {
+      if (!week) return;
+      if (!week.checks) week.checks = {};
+      if (!week.fields) week.fields = {};
+      migrated.forEach((item) => {
+        const oldId = item.kind === "workout" ? `workout-${item.legacyIndex}` : item.legacyId;
+        if (week.checks[oldId] !== undefined) {
+          week.checks[questCheckId(item.task, item.dayIndex)] = !!week.checks[oldId];
+          delete week.checks[oldId];
+        }
+        if (item.kind === "workout") {
+          const oldNote = `workout-note-${item.legacyIndex}`;
+          if (week.fields[oldNote] !== undefined) {
+            week.fields[questNoteId(item.task, item.dayIndex)] = week.fields[oldNote];
+            delete week.fields[oldNote];
+          }
+        }
+      });
+    });
+    settings.workouts = [];
+    settings.dietItems = [];
+    settings.taskModelVersion = 3;
+    changed = true;
+  }
+  // Custom checklist/daily pursuits follow the same rule. Counters and notes
+  // remain supporting trackers; actionable rows become scheduled plan tasks.
+  if (Number(settings.taskModelVersion || 0) < 4) {
+    const migratedCustom = [];
+    (settings.customModules || []).forEach((m) => {
+      if (m.type !== "checklist" && m.type !== "table") return;
+      m.planOnly = true;
+      m.countScore = false;
+      const attr = m.attr || "Discipline", category = attrCat(attr);
+      if (m.type === "checklist") {
+        (m.items || []).forEach((title, itemIndex) => {
+          const task = { id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [0], areaId: m.id, goalId: "", attr, category, order: itemIndex, createdAt: new Date().toISOString(), migratedFrom: Forge.checklistId(m.idPrefix || m.id, title) };
+          settings.quests.push(task);
+          migratedCustom.push({ task, dayIndex: 0, legacyId: Forge.checklistId(m.idPrefix || m.id, title) });
+        });
+      } else {
+        const days = Array.from({ length: Math.min(7, Number(m.checkCount || 7)) }, (_, i) => i);
+        const task = { id: forgeId("q"), title: m.name, scheduleType: "weekly", scheduledDate: "", repeatDays: days, areaId: m.id, goalId: "", attr, category, order: 0, createdAt: new Date().toISOString(), migratedFrom: m.idPrefix || m.id };
+        settings.quests.push(task);
+        days.forEach((dayIndex) => migratedCustom.push({ task, dayIndex, legacyId: `${m.idPrefix || m.id}-${dayIndex}`, legacyNoteId: `${m.idPrefix || m.id}-note-${dayIndex}` }));
+      }
+    });
+    Object.values(database.weeks || {}).forEach((week) => {
+      if (!week) return;
+      if (!week.checks) week.checks = {};
+      if (!week.fields) week.fields = {};
+      migratedCustom.forEach(({ task, dayIndex, legacyId, legacyNoteId }) => {
+        if (week.checks[legacyId] !== undefined) {
+          week.checks[questCheckId(task, dayIndex)] = !!week.checks[legacyId];
+          delete week.checks[legacyId];
+        }
+        if (legacyNoteId && week.fields[legacyNoteId] !== undefined) {
+          week.fields[questNoteId(task, dayIndex)] = week.fields[legacyNoteId];
+          delete week.fields[legacyNoteId];
+        }
+      });
+    });
+    settings.taskModelVersion = 4;
+    changed = true;
+  }
+  // Keep legacy consumers (module engine, focus timer, exports) aligned.
+  settings.studyAreas = settings.studyGoals.map((g) => g.title);
+  return changed;
+}
+function getStudyGoals() { return Array.isArray(settings.studyGoals) ? settings.studyGoals : []; }
+function getProjectGoals() { return Array.isArray(settings.projectGoals) ? settings.projectGoals : []; }
+function getStudyAreas() { return getStudyGoals().map((g) => g.title); }
+function getUnifiedQuests() { return Array.isArray(settings.quests) ? settings.quests : []; }
+function questCheckId(q, occurrence) {
+  const base = `quest-${q.category || attrCat(q.attr || "Discipline")}-${q.id}`;
+  if (q.scheduleType !== "weekly") return base;
+  const dayIndex = typeof occurrence === "number" ? occurrence : occurrence instanceof Date ? occurrence.getDay() : null;
+  return dayIndex == null ? base : `${base}-d${dayIndex}`;
+}
+function questNoteId(q, occurrence) {
+  const base = `quest-note-${q.id}`;
+  if (q.scheduleType !== "weekly") return base;
+  const dayIndex = typeof occurrence === "number" ? occurrence : occurrence instanceof Date ? occurrence.getDay() : null;
+  return dayIndex == null ? base : `${base}-d${dayIndex}`;
+}
+function questDate(q) { return q && q.scheduledDate ? new Date(q.scheduledDate + "T00:00:00") : null; }
+function questWeekKey(q) { const d = q && q.scheduleType === "once" ? questDate(q) : null; return d ? iso(getStartOfWeek(d)) : ""; }
+function questsForDate(date) {
+  const key = iso(date);
+  const dayIndex = date.getDay();
+  return getUnifiedQuests().filter((q) => !q.archived && ((q.scheduleType === "weekly" && (q.repeatDays || []).includes(dayIndex)) || (q.scheduleType !== "weekly" && q.scheduledDate === key))).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function questsForSource(type, sourceId) {
+  const areaId = type === "study" ? "study" : type === "project" ? "projects" : type;
+  return getUnifiedQuests().filter((q) => !q.archived && q.areaId === areaId && q.goalId === sourceId).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function questsForArea(areaId) {
+  return getUnifiedQuests().filter((q) => !q.archived && q.areaId === areaId && !q.goalId).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function questOccurrencesInWeek(q, start) {
+  start = start || selectedWeekStart;
+  if (q.scheduleType === "weekly") return (q.repeatDays || []).slice().sort((a,b) => a-b).map((d) => addDays(start, d));
+  const d = questDate(q);
+  return d && iso(getStartOfWeek(d)) === iso(start) ? [d] : [];
+}
+function defaultQuestDate() {
+  const today = iso(new Date()), end = iso(addDays(selectedWeekStart, 6));
+  return today >= weekKey() && today <= end ? today : weekKey();
+}
+function newPlanTaskOptions(areaId) {
+  if (areaId === "workout") return { areaId, scheduleType: "weekly", days: [getTodayDayIndex()] };
+  if (areaId === "diet") return { areaId, scheduleType: "weekly", days: [0,1,2,3,4,5,6] };
+  return { areaId, date: defaultQuestDate() };
+}
+function questArea(q) { return q && q.areaId ? getModules().find((m) => m.id === q.areaId) || null : null; }
+function questGoal(q) {
+  if (!q || !q.goalId) return null;
+  const list = q.areaId === "study" ? getStudyGoals() : q.areaId === "projects" ? getProjectGoals() : [];
+  return list.find((g) => g.id === q.goalId) || null;
+}
+function questContextLabel(q) {
+  const area = questArea(q), goal = questGoal(q);
+  if (goal && area) return `${area.name} / ${goal.title}`;
+  return area ? area.name : "";
+}
+function goalDaysLabel(dateString) {
+  if (!dateString) return "No target date";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(dateString + "T00:00:00") - today) / 86400000);
+  if (days < 0) return `${Math.abs(days)}d overdue`;
+  if (days === 0) return "Due today";
+  return days < 7 ? `${days}d left` : `${days}d · ${Math.ceil(days / 7)}w`;
+}
+function contextAttr(areaId) { const m = areaId ? getModules().find((x) => x.id === areaId) : null; return (m && m.attr) || "Discipline"; }
+
+function renderSourceQuest(q) {
+  const attr = q.attr || contextAttr(q.areaId);
+  const area = questArea(q);
+  const occurrences = questOccurrencesInWeek(q);
+  const wk = getWeekData();
+  const checks = occurrences.map((d) => ({ d, id: questCheckId(q, d), checked: !!wk.checks[questCheckId(q, d)] }));
+  const scheduleLabel = q.scheduleType === "weekly"
+    ? (q.repeatDays || []).length === 7 ? "Daily" : `Every ${(q.repeatDays || []).map((d) => dayNames()[d].slice(0, 3)).join(" · ")}`
+    : questDate(q) ? questDate(q).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Choose a date";
+  const occurrenceHtml = checks.length ? `<div class="routine-occurrences">${checks.map((x) => `<label title="${dayNames()[x.d.getDay()]}"><input id="${x.id}" type="checkbox" data-mirror="true" data-save ${x.checked ? "checked" : ""}><span>${dayNames()[x.d.getDay()].slice(0,1)}</span></label>`).join("")}</div>` : "";
+  const supportsSessionNotes = q.areaId === "workout" || (area && area.planOnly && area.type === "table");
+  const noteHtml = supportsSessionNotes && checks.length ? `<details class="quest-session-notes-wrap"><summary>Session notes</summary><div class="quest-session-notes">${checks.map((x) => `<label><span>${dayNames()[x.d.getDay()].slice(0,3)}</span><input id="${questNoteId(q, x.d)}" type="text" data-save placeholder="What did you do?"></label>`).join("")}</div></details>` : "";
+  const schedule = q.scheduleType === "once" ? `<button class="quest-date-badge quest-jump" type="button" data-date="${escapeHtml(q.scheduledDate || "")}" title="Open this task's week">${escapeHtml(scheduleLabel)}</button>` : `<span class="quest-date-badge is-weekly"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>${escapeHtml(scheduleLabel)}</span>`;
+  return `<div class="quest-row${occurrences.length ? "" : " is-outside-week"}" data-quest-id="${escapeHtml(q.id)}" style="--ac:${attrColor(attr)}">
+    <span class="q-text">${escapeHtml(q.title)}</span>
+    ${occurrenceHtml}
+    ${schedule}
+    <div class="quest-row-actions">
+      <button class="quest-move-up" type="button" title="Move up" aria-label="Move task up"><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
+      <button class="quest-move-down" type="button" title="Move down" aria-label="Move task down"><svg viewBox="0 0 24 24" class="ic"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="quest-edit" type="button" title="Edit quest" aria-label="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
+    </div>
+    ${noteHtml}
+  </div>`;
+}
+
+function renderGoalCard(goal, index) {
+  const type = goal.type || "study";
+  const tasks = questsForSource(type, goal.id);
+  const statusClass = String(goal.status || "Planned").toLowerCase().replace(/[^a-z]+/g, "-");
+  const hours = type === "study" ? `<div class="goal-hours"><label for="hours-study-${index}">Hours this week</label><input id="hours-study-${index}" data-save data-hours="study" type="number" min="0" step="0.25" value="0"></div>` : "";
+  return `<article class="goal-card${goal.status === "Completed" ? " is-complete" : ""}" data-goal-type="${type}" data-goal-id="${escapeHtml(goal.id)}">
+    <div class="goal-card-head"><div><h3 class="goal-card-title">${escapeHtml(goal.title)}</h3><div class="goal-meta"><span class="goal-status ${statusClass}">${escapeHtml(goal.status || "Planned")}</span><span class="quest-date-badge">${escapeHtml(goalDaysLabel(goal.targetDate))}</span></div></div>
+      <div class="goal-card-actions"><button class="goal-edit" type="button" title="Edit" aria-label="Edit ${escapeHtml(goal.title)}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></div>
+    </div>
+    <p class="goal-objective">${escapeHtml(goal.objective || "Add an outcome so the plan has a clear finish line.")}</p>
+    ${hours}
+    <div class="goal-task-head"><span class="goal-task-title">Plan · ${tasks.length} task${tasks.length === 1 ? "" : "s"}</span><button class="goal-task-add" type="button"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button></div>
+    <div class="goal-task-list">${tasks.length ? tasks.map(renderSourceQuest).join("") : `<div class="quest-empty">No tasks yet. Add the first concrete next action.</div>`}</div>
+  </article>`;
+}
 
 function renderStudyAreas() {
-  const tbody = document.getElementById("studyRows");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  const dates = getCertDates();
-  getStudyAreas().forEach((area, i) => {
-    const d = dates[area] || "";
-    tbody.insertAdjacentHTML("beforeend", `<tr>
-      <td>${escapeHtml(area)}</td>
-      <td data-label="Goal"><input id="goal-study-${i}" data-save type="text" placeholder="Goal..."></td>
-      <td data-label="Hours"><input id="hours-study-${i}" class="small-input" data-save data-hours="study" type="number" min="0" step="0.25" value="0"> hrs</td>
-      <td data-label="Status"><select id="status-study-${i}" data-save><option>Planned</option><option>In Progress</option><option>Ready for Exam</option><option>Completed</option><option>Paused</option></select></td>
-      <td data-label="Target"><input type="date" class="cert-date" data-certdate="${escapeHtml(area)}" value="${d}"></td>
-      <td data-label="Days Left"><span class="cert-cd" id="cd-study-${i}">—</span></td>
-    </tr>`);
-  });
+  const wrap = document.getElementById("studyGoalsGrid");
+  if (!wrap) return;
+  const goals = getStudyGoals();
+  wrap.innerHTML = goals.length ? goals.map(renderGoalCard).join("") : `<div class="goal-empty"><strong>No certifications or skills yet</strong>Add one, define the outcome, then build its study plan.</div>`;
   updateCertCountdowns();
+}
+function renderProjectGoals() {
+  const wrap = document.getElementById("projectGoalsGrid");
+  if (!wrap) return;
+  const goals = getProjectGoals();
+  wrap.innerHTML = goals.length ? goals.map((g, i) => renderGoalCard(g, i)).join("") : `<div class="goal-empty"><strong>No projects yet</strong>Add a project and give it one concrete next action.</div>`;
+}
+
+// The class that gives a section's plan its own personality (row styling).
+function planVariantClass(m) {
+  if (m.id === "workout") return "training-plan";
+  if (m.id === "diet") return "nutrition-plan";
+  return "";
+}
+function pursuitTaskPanelHtml(m) {
+  const tasks = questsForArea(m.id);
+  const occurrences = tasks.flatMap((q) => questOccurrencesInWeek(q).map((d) => ({ q, d })));
+  const wk = getWeekData();
+  const done = occurrences.filter(({ q, d }) => !!wk.checks[questCheckId(q, d)]).length;
+  const planLabel = m.id === "workout" ? "Weekly split" : m.id === "diet" ? "Daily habits" : "Plan";
+  return `<div class="pursuit-task-panel pursuit-plan ${planVariantClass(m)}" data-area-id="${escapeHtml(m.id)}">
+    <div class="goal-task-head pursuit-plan-head"><div><span class="goal-task-title">${planLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"}</span><p class="pursuit-plan-hint">The same tasks and completion appear in Daily Quests.</p></div><div class="pursuit-plan-actions"><span class="plan-progress" data-plan-progress="${escapeHtml(m.id)}">${done}/${occurrences.length} this week</span><button class="pursuit-task-add goal-task-add" type="button"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button></div></div>
+    <div class="goal-task-list">${tasks.length ? tasks.map(renderSourceQuest).join("") : `<div class="quest-empty"><strong>No plan yet.</strong> Add the first task and choose when it should appear in Daily Quests.</div>`}</div>
+  </div>`;
+}
+// Per-day completion state for a pursuit's scheduled tasks this week.
+const DOW_INITIAL = ["S", "M", "T", "W", "T", "F", "S"];
+function sectionDayStates(areaId) {
+  const tasks = getUnifiedQuests().filter((q) => !q.archived && q.areaId === areaId);
+  const wk = getWeekData();
+  const states = Array.from({ length: 7 }, (_, d) => ({ dayIndex: d, planned: 0, done: 0 }));
+  tasks.forEach((q) => questOccurrencesInWeek(q).forEach((date) => {
+    const s = states[date.getDay()]; s.planned++;
+    if (wk.checks[questCheckId(q, date)]) s.done++;
+  }));
+  return states;
+}
+// ===== Immersive themed section "screens" =====
+// Every pursuit gets its OWN widget — a distinct visualization that fits what the
+// section is for — inside a shared themed frame (crest + kicker + title + count).
+function heroFrame(theme, crest, kicker, title, countHtml, widgetHtml) {
+  return `<div class="sec-hero" data-theme="${theme}">
+    <div class="hero-wm" aria-hidden="true">${crest}</div>
+    <div class="hero-top">
+      <div class="hero-crest" aria-hidden="true">${crest}</div>
+      <div class="hero-head"><div class="hero-kicker">${escapeHtml(kicker)}</div><div class="hero-title">${escapeHtml(title)}</div></div>
+      ${countHtml || ""}
+    </div>
+    ${widgetHtml}
+  </div>`;
+}
+function heroCount(num, denText) { return `<div class="hero-count"><b>${num}</b><span>${escapeHtml(denText)}</span></div>`; }
+function heroGauge(pct, cap) {
+  return `<div class="hero-gauge"><span style="width:${Math.max(0, Math.min(100, pct))}%"></span></div>${cap ? `<div class="hero-cap">${escapeHtml(cap)}</div>` : ""}`;
+}
+function round1(n) { return Math.round(n * 10) / 10; }
+// Each section returns a DIFFERENT widget. Empty string → no hero.
+function sectionHeroHtml(m) {
+  const crest = moduleIconSvg(m.icon);
+  // TRAINING — a weekly campaign track of circular day-nodes that light up.
+  if (m.id === "workout") {
+    const st = sectionDayStates("workout");
+    const done = st.reduce((n, d) => n + (d.done > 0 ? 1 : 0), 0);
+    const tgt = settings.workoutMin != null ? settings.workoutMin : 5;
+    const track = `<div class="hero-track">` + st.map((d) => `<span class="ht-node ${d.done ? "done" : d.planned ? "planned" : "rest"}" title="${escapeHtml(dayNames()[d.dayIndex])}"><b>${DOW_INITIAL[d.dayIndex]}</b></span>`).join("") + `</div>`;
+    return heroFrame("training", crest, "Training grounds", "This week's regimen", heroCount(done, `/ ${tgt}`), heroGauge(tgt ? done / tgt * 100 : 0, `${done} sessions cleared · target ${tgt}`) + track);
+  }
+  // PROVISIONS — supply "vials" that fill by each day's provision completion.
+  if (m.id === "diet") {
+    const stats = (window.Forge && Forge.nutritionWeekStats)
+      ? Forge.nutritionWeekStats(getWeekData(), getUnifiedQuests(), selectedWeekStart, settings.proteinFloorPct || 60)
+      : { daysMet: 0, days: [] };
+    const tgt = settings.proteinMin != null ? settings.proteinMin : 7;
+    const vials = `<div class="hero-vials">` + (stats.days || []).map((d) => {
+      const pct = d.total ? Math.round(d.done / d.total * 100) : 0;
+      return `<span class="hv ${d.met ? "met" : ""}" style="--fill:${pct}%" title="${escapeHtml(dayNames()[d.dayIndex])}: ${d.done}/${d.total}"><i></i><b>${DOW_INITIAL[d.dayIndex]}</b></span>`;
+    }).join("") + `</div>`;
+    return heroFrame("provisions", crest, "Quartermaster's stores", "Rations this week", heroCount(stats.daysMet, `/ ${tgt}`), heroGauge(tgt ? stats.daysMet / tgt * 100 : 0, `${stats.daysMet} days provisioned · target ${tgt}`) + vials);
+  }
+  // SCHOLARSHIP — a looming "next trial" countdown + study-hours gauge.
+  if (m.id === "study") {
+    const up = getStudyGoals().filter((g) => g.targetDate && g.status !== "Completed")
+      .map((g) => ({ g, days: Math.round((new Date(g.targetDate + "T00:00:00") - new Date().setHours(0, 0, 0, 0)) / 86400000) }))
+      .filter((x) => x.days >= 0).sort((a, b) => a.days - b.days)[0];
+    const wk = getWeekData(); let hrs = 0; for (const k in (wk.fields || {})) if (k.indexOf("hours-study-") === 0) hrs += Number(wk.fields[k] || 0);
+    const tgt = settings.studyTarget != null ? settings.studyTarget : 14;
+    const trial = up
+      ? `<div class="hero-trial"><div class="ht-days"><b>${up.days}</b><span>day${up.days === 1 ? "" : "s"}</span></div><div class="ht-meta"><div class="ht-tlabel">Next trial</div><div class="ht-name">${escapeHtml(up.g.title)}</div></div></div>`
+      : `<div class="hero-trial is-empty">No trials on the calendar — set a target date on a certification to start its countdown.</div>`;
+    return heroFrame("archives", crest, "The archives", "Studies in progress", heroCount(round1(hrs), `/ ${tgt} hrs`), trial + heroGauge(tgt ? hrs / tgt * 100 : 0, `${round1(hrs)} hrs studied this week · target ${tgt}`));
+  }
+  // WAR COUNCIL — a weekly grade sigil + a debrief (reflections logged) meter.
+  if (m.id === "review") {
+    const f = (getWeekData().fields) || {};
+    const filled = ["wins", "misses", "changes", "refuseDrop"].filter((k) => f[k] && String(f[k]).trim()).length;
+    const graded = f.grade && f.grade !== "Not graded yet" ? String(f.grade).trim() : "";
+    const letter = graded ? graded.charAt(0).toUpperCase() : "—";
+    const sigil = `<div class="hero-count sigil-count"><div class="hero-sigil grade-${(letter || "x").toLowerCase()}"><span>${letter}</span></div></div>`;
+    const meter = `<div class="hero-gauge"><span style="width:${filled / 4 * 100}%"></span></div><div class="hero-cap">${filled} of 4 reflections logged${graded ? ` · grade ${escapeHtml(letter)}` : " · not graded yet"}</div>`;
+    return heroFrame("warroom", crest, "War room", "This week's debrief", sigil, meter);
+  }
+  // CUSTOM pursuits — a widget chosen by TYPE, so they differ too.
+  if (m.custom) {
+    if (m.type === "counter") {
+      const wk = getWeekData(), mods = getModules();
+      const total = (Forge.moduleCountValue ? Forge.moduleCountValue(wk, mods, m) : 0) + (Forge.questSessionDays ? Forge.questSessionDays(wk, mods, m.id) : 0);
+      const tgt = (m.target && m.target.value) || 1, unit = (m.target && m.target.unit) || "count";
+      return heroFrame("tally", crest, m.name, "This week's tally", heroCount(round1(total), `/ ${tgt}`), heroGauge(tgt ? total / tgt * 100 : 0, `${round1(total)} ${unit} · target ${tgt}`));
+    }
+    if (m.type === "checklist" || m.type === "table") {
+      const st = sectionDayStates(m.id);
+      const done = st.reduce((n, d) => n + d.done, 0), planned = st.reduce((n, d) => n + d.planned, 0);
+      return heroFrame("tally", crest, m.name, "This week's habits", heroCount(done, `/ ${planned}`), heroGauge(planned ? done / planned * 100 : 0, `${done} of ${planned} completed this week`));
+    }
+    if (m.type === "notes") return heroFrame("log", crest, m.name, "Captain's log", "", `<div class="hero-cap">This week's entry — jot it below.</div>`);
+  }
+  return "";
+}
+// Inject each section's distinct hero. Projects (Workshop) has a static forge hero
+// in the HTML because its focus + hours inputs must not be re-rendered mid-edit.
+function renderSectionHeroes() {
+  getModules().forEach((m) => {
+    if (m.id === "daily" || m.id === "projects") return;
+    const sec = document.getElementById(m.id); if (!sec) return;
+    const content = sec.querySelector(":scope > .content"); if (!content) return;
+    const html = sectionHeroHtml(m);
+    let hero = content.querySelector(":scope > .sec-hero");
+    if (html) { const s = document.createElement("div"); s.innerHTML = html; if (hero) hero.replaceWith(s.firstElementChild); else content.insertBefore(s.firstElementChild, content.firstChild); }
+    else if (hero) hero.remove();
+  });
+}
+function renderPursuitTaskPanels() {
+  getModules().filter((m) => m.id !== "daily" && m.id !== "study" && m.id !== "projects").forEach((m) => {
+    const sec = document.getElementById(m.id); if (!sec) return;
+    const content = sec.querySelector(":scope > .content"); if (!content) return;
+    let panel = content.querySelector(":scope > .pursuit-task-panel");
+    if (!panel) { panel = document.createElement("div"); panel.className = "pursuit-task-panel"; content.appendChild(panel); }
+    const shell = document.createElement("div"); shell.innerHTML = pursuitTaskPanelHtml(m);
+    panel.replaceWith(shell.firstElementChild);
+  });
 }
 
 function updateCertCountdowns() {
-  const dates = getCertDates();
-  const areas = getStudyAreas();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  let soonest = null;
-  areas.forEach((area, i) => {
-    const el = document.getElementById(`cd-study-${i}`);
-    if (!el) return;
-    const ds = dates[area];
-    if (!ds) { el.textContent = "—"; el.className = "cert-cd"; return; }
-    const days = Math.round((new Date(ds + "T00:00:00") - today) / 86400000);
-    let cls = "cert-cd", txt;
-    if (days < 0) { txt = `${Math.abs(days)}d overdue`; cls += " cd-over"; }
-    else if (days === 0) { txt = "Today!"; cls += " cd-soon"; }
-    else { txt = days < 7 ? `${days}d left` : `${days}d · ${Math.ceil(days / 7)}w`; cls += days < 14 ? " cd-soon" : days < 35 ? " cd-mid" : " cd-far"; }
-    el.textContent = txt; el.className = cls;
-    if (days >= 0 && (soonest === null || days < soonest.days)) soonest = { area, days };
-  });
+  const upcoming = getStudyGoals().filter((g) => g.targetDate && g.status !== "Completed").map((g) => ({ goal: g, days: Math.round((new Date(g.targetDate + "T00:00:00") - new Date().setHours(0,0,0,0)) / 86400000) })).filter((x) => x.days >= 0).sort((a, b) => a.days - b.days)[0];
   const sum = document.getElementById("certSummary");
-  if (sum) {
-    if (soonest) {
-      const wks = Math.max(1, Math.ceil(soonest.days / 7));
-      const tgt = settings.studyTarget || 14;
-      sum.innerHTML = `⏳ Next exam: <strong>${escapeHtml(soonest.area)}</strong> in <strong>${soonest.days}</strong> day${soonest.days === 1 ? "" : "s"} · ~${wks} week${wks === 1 ? "" : "s"} to prep at ${tgt} hrs/wk (${wks * tgt} hrs).`;
-      sum.style.display = "";
-    } else {
-      sum.innerHTML = `🎯 Set a target date on a certification to start its countdown.`;
-      sum.style.display = "";
-    }
+  if (!sum) return;
+  if (upcoming) {
+    const wks = Math.max(1, Math.ceil(upcoming.days / 7));
+    const tgt = settings.studyTarget || 14;
+    sum.innerHTML = `⏳ Next target: <strong>${escapeHtml(upcoming.goal.title)}</strong> in <strong>${upcoming.days}</strong> day${upcoming.days === 1 ? "" : "s"} · ${wks * tgt} planned study hours at ${tgt} hrs/wk.`;
+  } else sum.innerHTML = `🎯 Add a target date to a certification to start its countdown.`;
+  sum.style.display = "";
+}
+
+let goalEditorState = null;
+let questEditorState = null;
+let mobileFullWeekKey = "";
+function closeEditorModal(id) {
+  const el = document.getElementById(id);
+  if (el) { el.classList.remove("active"); el.setAttribute("aria-hidden", "true"); }
+}
+function openGoalEditor(type, id) {
+  const list = type === "study" ? getStudyGoals() : getProjectGoals();
+  const goal = id ? list.find((g) => g.id === id) : null;
+  goalEditorState = { type, id: goal ? goal.id : null };
+  document.getElementById("goalEditorTitle").textContent = goal ? `Edit ${type === "study" ? "certification" : "project"}` : `Add ${type === "study" ? "certification or skill" : "project"}`;
+  document.getElementById("goalTitle").value = goal ? goal.title : "";
+  document.getElementById("goalObjective").value = goal ? (goal.objective || "") : "";
+  document.getElementById("goalStatus").value = goal ? (goal.status || "Planned") : (type === "project" ? "In Progress" : "Planned");
+  document.getElementById("goalTargetDate").value = goal ? (goal.targetDate || "") : "";
+  document.getElementById("deleteGoalBtn").style.display = goal ? "" : "none";
+  const modal = document.getElementById("goalEditorModal");
+  modal.classList.add("active"); modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => document.getElementById("goalTitle").focus(), 0);
+}
+async function saveGoalEditor() {
+  if (!goalEditorState) return;
+  const title = document.getElementById("goalTitle").value.trim();
+  if (!title) { document.getElementById("goalTitle").focus(); return; }
+  const type = goalEditorState.type;
+  const list = type === "study" ? getStudyGoals() : getProjectGoals();
+  let goal = list.find((g) => g.id === goalEditorState.id);
+  const wasCompleted = goal && goal.status === "Completed";
+  if (!goal) {
+    goal = { id: forgeId(type), type, order: list.length };
+    list.push(goal);
   }
+  Object.assign(goal, {
+    title,
+    objective: document.getElementById("goalObjective").value.trim(),
+    status: document.getElementById("goalStatus").value,
+    targetDate: document.getElementById("goalTargetDate").value
+  });
+  settings.studyAreas = getStudyGoals().map((g) => g.title);
+  await persistSettings();
+  closeEditorModal("goalEditorModal");
+  if (type === "study" && !wasCompleted && goal.status === "Completed") {
+    await saveRecord({ title: goal.title, category: "certification", notes: goal.objective || "Completed scholarship goal", completed_at: new Date().toISOString(), week_key: weekKey(), source: "auto", ext_key: `cert:${goal.id}` });
+  }
+  renderStatic();
+  applyWeekToUI();
+}
+async function deleteGoalEditor() {
+  if (!goalEditorState || !goalEditorState.id) return;
+  const type = goalEditorState.type, id = goalEditorState.id;
+  const list = type === "study" ? getStudyGoals() : getProjectGoals();
+  const goal = list.find((g) => g.id === id);
+  const linked = questsForSource(type, id);
+  if (!confirm(`Delete "${goal ? goal.title : "this pursuit"}" and its ${linked.length} linked task${linked.length === 1 ? "" : "s"}?`)) return;
+  const touched = new Set();
+  linked.forEach((q) => {
+    const base = questCheckId(q), noteBase = questNoteId(q);
+    Object.entries(database.weeks || {}).forEach(([key, week]) => {
+      let changed = false;
+      Object.keys((week && week.checks) || {}).forEach((checkId) => { if (checkId === base || checkId.indexOf(base + "-d") === 0) { delete week.checks[checkId]; changed = true; } });
+      Object.keys((week && week.fields) || {}).forEach((fieldId) => { if (fieldId === noteBase || fieldId.indexOf(noteBase + "-d") === 0) { delete week.fields[fieldId]; changed = true; } });
+      if (changed) touched.add(key);
+    });
+  });
+  const areaId = type === "study" ? "study" : "projects";
+  settings.quests = getUnifiedQuests().filter((q) => !(q.areaId === areaId && q.goalId === id));
+  if (type === "study") settings.studyGoals = list.filter((g) => g.id !== id);
+  else settings.projectGoals = list.filter((g) => g.id !== id);
+  settings.studyAreas = getStudyGoals().map((g) => g.title);
+  await Promise.all([...touched].map(persistWeekByKey));
+  await persistSettings();
+  closeEditorModal("goalEditorModal");
+  renderStatic(); applyWeekToUI();
+}
+
+function questSourceOptions(selected) {
+  const opts = [`<option value="daily"${selected === "daily" ? " selected" : ""}>Daily only</option>`];
+  getModules().filter((m) => m.id !== "daily" && m.enabled !== false).forEach((m) => {
+    const goals = m.id === "study" ? getStudyGoals() : m.id === "projects" ? getProjectGoals() : [];
+    if (goals.length) {
+      goals.forEach((g) => { const v = `${m.id}::${g.id}`; opts.push(`<option value="${escapeHtml(v)}"${selected === v ? " selected" : ""}>${escapeHtml(m.name)} / ${escapeHtml(g.title)}</option>`); });
+    } else {
+      const v = `${m.id}::`;
+      opts.push(`<option value="${escapeHtml(v)}"${selected === v ? " selected" : ""}>${escapeHtml(m.name)}</option>`);
+    }
+  });
+  return opts.join("");
+}
+function parseQuestContext(value) {
+  if (!value || value === "daily") return { areaId: "", goalId: "" };
+  const parts = value.split("::"); return { areaId: parts[0] || "", goalId: parts[1] || "" };
+}
+function syncQuestAttrToSource() {
+  const ctx = parseQuestContext(document.getElementById("questSource").value);
+  const attr = document.getElementById("questAttr");
+  const hint = document.getElementById("questAttrHint");
+  if (ctx.areaId) {
+    attr.value = contextAttr(ctx.areaId); attr.disabled = true;
+    const m = getModules().find((x) => x.id === ctx.areaId);
+    if (hint) hint.textContent = `${m ? m.name : "This pursuit"} automatically trains ${attrName(attr.value)}.`;
+  } else {
+    attr.disabled = false;
+    if (hint) hint.textContent = "Daily-only tasks can train any attribute.";
+  }
+}
+function syncQuestScheduleFields() {
+  const weekly = document.getElementById("questScheduleType").value === "weekly";
+  document.getElementById("questOnceFields").style.display = weekly ? "none" : "";
+  document.getElementById("questWeeklyFields").style.display = weekly ? "" : "none";
+}
+function renderQuestWeekdays(selected) {
+  const picked = new Set(selected || []);
+  document.getElementById("questWeekdays").innerHTML = dayNames().map((day, i) => `<label class="weekday-option"><input type="checkbox" value="${i}" ${picked.has(i) ? "checked" : ""}><span>${day.slice(0,3)}</span></label>`).join("");
+}
+function openQuestEditor(opts) {
+  opts = opts || {};
+  const q = opts.id ? getUnifiedQuests().find((x) => x.id === opts.id) : null;
+  const areaId = q ? (q.areaId || "") : (opts.areaId || (opts.sourceType === "study" ? "study" : opts.sourceType === "project" ? "projects" : ""));
+  const goalId = q ? (q.goalId || "") : (opts.goalId || opts.sourceId || "");
+  const sourceValue = areaId ? `${areaId}::${goalId}` : "daily";
+  const scheduleType = q ? (q.scheduleType || "once") : (opts.scheduleType || "once");
+  questEditorState = { id: q ? q.id : null };
+  document.getElementById("questEditorTitle").textContent = q ? "Edit task" : "Add task";
+  document.getElementById("questTitle").value = q ? q.title : "";
+  document.getElementById("questDate").value = q ? q.scheduledDate : (opts.date || iso(new Date()));
+  document.getElementById("questScheduleType").value = scheduleType;
+  document.getElementById("questSource").innerHTML = questSourceOptions(sourceValue);
+  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : ["Discipline", "Body", "Mind", "Vitality", "Craft"];
+  const selectedAttr = q ? q.attr : areaId ? contextAttr(areaId) : (opts.attr || "Discipline");
+  document.getElementById("questAttr").innerHTML = attrs.map((a) => `<option value="${a}"${selectedAttr === a ? " selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
+  renderQuestWeekdays(q ? q.repeatDays : (opts.days || []));
+  document.getElementById("deleteQuestBtn").style.display = q ? "" : "none";
+  syncQuestScheduleFields();
+  syncQuestAttrToSource();
+  const modal = document.getElementById("questEditorModal");
+  modal.classList.add("active"); modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => document.getElementById("questTitle").focus(), 0);
+}
+function weekForQuest(q) {
+  const key = questWeekKey(q);
+  if (!key) return null;
+  if (!database.weeks[key]) database.weeks[key] = { fields: {}, checks: {}, createdAt: new Date().toISOString(), schemaVersion: 2 };
+  if (!database.weeks[key].checks) database.weeks[key].checks = {};
+  if (!database.weeks[key].fields) database.weeks[key].fields = {};
+  return database.weeks[key];
+}
+function ensureQuestOccurrencesForWeek() {
+  const wk = getWeekData();
+  for (let day = 0; day < 7; day++) {
+    const date = addDays(selectedWeekStart, day);
+    questsForDate(date).forEach((q) => {
+      const id = questCheckId(q, date);
+      if (wk.checks[id] === undefined) wk.checks[id] = false;
+    });
+  }
+}
+async function saveQuestEditor() {
+  const title = document.getElementById("questTitle").value.trim();
+  const scheduleType = document.getElementById("questScheduleType").value;
+  const scheduledDate = document.getElementById("questDate").value;
+  const repeatDays = [...document.querySelectorAll("#questWeekdays input:checked")].map((el) => Number(el.value));
+  if (!title) { document.getElementById("questTitle").focus(); return; }
+  if (scheduleType === "once" && !scheduledDate) { document.getElementById("questDate").focus(); return; }
+  if (scheduleType === "weekly" && !repeatDays.length) { alert("Choose at least one day for this weekly routine."); return; }
+  const ctx = parseQuestContext(document.getElementById("questSource").value);
+  const attr = document.getElementById("questAttr").value;
+  const current = questEditorState && questEditorState.id ? getUnifiedQuests().find((q) => q.id === questEditorState.id) : null;
+  const old = current ? Object.assign({}, current) : null;
+  const siblingCount = getUnifiedQuests().filter((q) => q.areaId === ctx.areaId && q.goalId === ctx.goalId).length;
+  const next = current || { id: forgeId("q"), createdAt: new Date().toISOString(), order: siblingCount };
+  Object.assign(next, { title, scheduleType, scheduledDate: scheduleType === "once" ? scheduledDate : "", repeatDays: scheduleType === "weekly" ? repeatDays : [], areaId: ctx.areaId, goalId: ctx.goalId, attr, category: attrCat(attr), updatedAt: new Date().toISOString() });
+  if (!current) settings.quests.push(next);
+  const carried = new Map(), carriedNotes = new Map(), touched = new Set();
+  if (old) {
+    const oldBase = questCheckId(old), oldNoteBase = questNoteId(old);
+    Object.entries(database.weeks || {}).forEach(([key, week]) => {
+      Object.keys((week && week.checks) || {}).forEach((id) => {
+        if (id === oldBase || id.indexOf(oldBase + "-d") === 0) { carried.set(`${key}|${id.slice(oldBase.length)}`, !!week.checks[id]); delete week.checks[id]; touched.add(key); }
+      });
+      Object.keys((week && week.fields) || {}).forEach((id) => {
+        if (id === oldNoteBase || id.indexOf(oldNoteBase + "-d") === 0) { carriedNotes.set(`${key}|${id.slice(oldNoteBase.length)}`, week.fields[id]); delete week.fields[id]; touched.add(key); }
+      });
+    });
+  }
+  if (scheduleType === "once") {
+    const nextWeek = weekForQuest(next), key = questWeekKey(next);
+    const wasDone = [...carried.values()].some(Boolean);
+    nextWeek.checks[questCheckId(next)] = wasDone; touched.add(key);
+    const note = [...carriedNotes.values()].find((value) => String(value || "").trim());
+    if (note !== undefined) nextWeek.fields[questNoteId(next)] = note;
+  } else {
+    if (!database.weeks[weekKey()]) getWeekData();
+    Object.entries(database.weeks || {}).forEach(([key, week]) => repeatDays.forEach((day) => {
+      const id = questCheckId(next, day);
+      week.checks[id] = carried.get(`${key}|-d${day}`) || false;
+      const note = carriedNotes.get(`${key}|-d${day}`);
+      if (note !== undefined) week.fields[questNoteId(next, day)] = note;
+      touched.add(key);
+    }));
+  }
+  await persistSettings();
+  await Promise.all([...touched].filter(Boolean).map(persistWeekByKey));
+  closeEditorModal("questEditorModal");
+  renderStatic(); applyWeekToUI();
+}
+async function deleteQuestEditor() {
+  const q = questEditorState && questEditorState.id ? getUnifiedQuests().find((x) => x.id === questEditorState.id) : null;
+  if (!q || !confirm(`Delete "${q.title}"?`)) return;
+  const base = questCheckId(q), noteBase = questNoteId(q), touched = [];
+  Object.entries(database.weeks || {}).forEach(([key, week]) => {
+    let changed = false;
+    Object.keys((week && week.checks) || {}).forEach((id) => { if (id === base || id.indexOf(base + "-d") === 0) { delete week.checks[id]; changed = true; } });
+    Object.keys((week && week.fields) || {}).forEach((id) => { if (id === noteBase || id.indexOf(noteBase + "-d") === 0) { delete week.fields[id]; changed = true; } });
+    if (changed) touched.push(key);
+  });
+  settings.quests = getUnifiedQuests().filter((x) => x.id !== q.id);
+  await persistSettings(); await Promise.all(touched.map(persistWeekByKey));
+  closeEditorModal("questEditorModal");
+  renderStatic(); applyWeekToUI();
+}
+async function moveQuest(id, direction) {
+  const q = getUnifiedQuests().find((x) => x.id === id); if (!q) return;
+  const siblings = getUnifiedQuests().filter((x) => !x.archived && x.areaId === q.areaId && x.goalId === q.goalId).sort((a,b) => (a.order || 0) - (b.order || 0));
+  const i = siblings.findIndex((x) => x.id === id), j = i + direction;
+  if (i < 0 || j < 0 || j >= siblings.length) return;
+  const oi = siblings[i].order || i, oj = siblings[j].order || j;
+  siblings[i].order = oj; siblings[j].order = oi;
+  await persistSettings(); renderStatic(); loadWeekFields();
 }
 
 // ===== EDITABLE LISTS: Diet / Project / Review =====
@@ -1192,16 +2095,6 @@ const defaultDietItems = [
 ];
 function getDietItems() { return settings.dietItems || defaultDietItems; }
 function dietId(text) { return `diet-${slugify(text)}`; }
-function renderDiet() {
-  const wrap = document.getElementById("dietRows");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-  const xp = (window.Game && Game.xpForCat) ? Game.xpForCat("protein") : 12;
-  getDietItems().forEach(item => {
-    wrap.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${dietId(item)}" type="checkbox" data-cat="protein" data-save><span class="q-text">${escapeHtml(item)}</span><span class="q-xp">+${xp}</span></label>`);
-  });
-}
-
 const defaultProjectChecks = [
   "Made progress on a project",
   "Documented what you did",
@@ -1242,103 +2135,48 @@ function renderScoreboard() {
 
 function renderDays() {
   const wrap = document.getElementById("daysGrid");
-  const blueprint = getDailyBlueprint();
-  const wk = getWeekData();
   wrap.innerHTML = "";
-
-  // Empty state — a blank slate ("Start blank") shouldn't look broken. Point the
-  // user at where to add their first quests instead of showing seven empty days.
-  const totalTasks = Object.values(blueprint).reduce((n, t) => n + (t ? t.length : 0), 0);
-  if (totalTasks === 0) {
-    wrap.insertAdjacentHTML("beforeend",
-      `<div class="empty-state">
-        <div class="empty-state-title">No daily quests yet</div>
-        <p>Add your first habits in <strong>Settings → Pursuits</strong> — or load a ready-made path there to get a starter set.</p>
-        <button type="button" class="primary" onclick="(document.getElementById('openSettingsBtn')||document.getElementById('moreSettingsBtn')||{click(){}}).click()">Open Settings</button>
-      </div>`);
-    return;
-  }
-
-  // Attribute legend — teaches what the colored dots on each habit mean.
   const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
   if (attrs.length) {
     const legend = attrs.map((a) => `<span class="al-item"><span class="al-dot" style="background:${attrColor(a)}"></span>${escapeHtml(attrName(a))}</span>`).join("");
-    wrap.insertAdjacentHTML("beforeend", `<div class="attr-legend-row">${legend}<span class="al-hint">tap a dot to set which stat a habit trains</span></div>`);
+    wrap.insertAdjacentHTML("beforeend", `<div class="attr-legend-row">${legend}<span class="al-hint">pursuits automatically route task XP to their attribute</span></div>`);
   }
-
   const todayIndex = getTodayDayIndex();
-  const entries = Object.entries(blueprint);
-  
-  // On mobile, render today first, then others collapsed
-  let orderedEntries;
-  if (isMobile()) {
-    orderedEntries = [];
-    // Today first
-    orderedEntries.push({ entry: entries[todayIndex], dayIndex: todayIndex, isToday: true });
-    // Then the rest in order
-    for (let i = 0; i < entries.length; i++) {
-      if (i !== todayIndex) {
-        orderedEntries.push({ entry: entries[i], dayIndex: i, isToday: false });
-      }
-    }
-  } else {
-    orderedEntries = entries.map((entry, i) => ({ entry, dayIndex: i, isToday: i === todayIndex }));
-  }
-
-  orderedEntries.forEach(({ entry: [day, tasks], dayIndex, isToday }) => {
+  const entries = dayNames().map((day, dayIndex) => ({ day, dayIndex, isToday: dayIndex === todayIndex }));
+  const orderedEntries = isMobile() ? [entries[todayIndex]].concat(entries.filter((x) => x.dayIndex !== todayIndex)) : entries;
+  const visibleEntries = isMobile() && mobileFullWeekKey !== weekKey() ? [entries[todayIndex]] : orderedEntries;
+  visibleEntries.forEach(({ day, dayIndex, isToday }) => {
     const date = addDays(selectedWeekStart, dayIndex);
+    const tasks = questsForDate(date);
     const card = document.createElement("details");
     card.className = "day-card" + (isToday ? " today" : "");
-    // On mobile: only today open. On desktop: all open.
     card.open = isMobile() ? isToday : true;
-    const pencil = (window.ICONS && window.ICONS.pencil) || "✎";
-    card.innerHTML = `<summary class="day-summary"><div><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="date-tag">${fmt(date)}</div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Edit ${day} checklist">${pencil}</button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
+    card.innerHTML = `<summary class="day-summary"><div><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="date-tag">${fmt(date)}</div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Add weekly routine for ${day}" aria-label="Add weekly routine for ${day}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
     const group = card.querySelector(".task-group");
-    tasks.forEach((task, taskIndex) => {
-      const link = taskLink(task);
-      const linkMod = (link && window.Forge) ? Forge.linkModule(link, getModules()) : null;
-      const targetId = (link && window.Forge) ? Forge.linkTargetId(link, getModules(), dayIndex) : null;
-      if (linkMod && targetId) {
-        // Linked task → a PROXY over the section's per-day checkbox (shared id).
-        // No id/data-save/data-cat so it can't double-count; it writes the same
-        // week.checks key the section uses. The badge shows where it links.
-        const lattr = linkMod.attr;
-        const lxp = (linkMod.type === "checklist") ? (linkMod.xpPer || 10) : ((window.Game && Game.xpForCat) ? Game.xpForCat(linkMod.category) : 30);
-        group.insertAdjacentHTML("beforeend", `<label class="check quest linked"><input type="checkbox" data-link-id="${escapeHtml(targetId)}" ${wk.checks[targetId] ? "checked" : ""}><span class="q-text">${escapeHtml(task)}</span><span class="link-badge" style="--ac:${attrColor(lattr)}" title="Linked to ${escapeHtml(linkMod.name)} — one shared check"><svg viewBox="0 0 24 24" class="ic"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07L11.5 4.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07L10.5 19.5"/></svg>${escapeHtml(linkMod.name)}</span><span class="q-xp">+${lxp}</span></label>`);
-        return;
-      }
-      const id = taskId(dayIndex, task);
-      const legacyId = `day-${dayIndex}-task-${taskIndex}`;
-      if (wk.checks[id] === undefined && wk.checks[legacyId] !== undefined) wk.checks[id] = wk.checks[legacyId];
-      const attr = taskAttr(task);
-      const cat = attrCat(attr);
+    tasks.forEach((q) => {
+      const attr = q.attr || contextAttr(q.areaId);
+      const cat = q.category || attrCat(attr);
       const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
-      if (linkMod) {
-        // Linked, no shared checkbox: own checkbox, stat is the section's. count
-        // mode → each completed day is +1 session to the section (engine adds it);
-        // stat mode → just feeds the section's stat. Badge replaces the attr dot.
-        const ref = window.Forge ? Forge.normLink(link) : { mode: "stat" };
-        const isCount = ref.mode === "count";
-        const linkXp = isCount ? (linkMod.type === "counter" ? (linkMod.xpPer || 0) : (linkMod.xpPerHour || 0)) : xp;
-        const title = isCount ? `Each day = +1 to ${linkMod.name} (${attrName(attr)})` : `Linked to ${linkMod.name} — feeds ${attrName(attr)}`;
-        group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><span class="link-badge${isCount ? " counts" : ""}" style="--ac:${attrColor(attr)}" title="${escapeHtml(title)}"><svg viewBox="0 0 24 24" class="ic"><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07L11.5 4.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07L10.5 19.5"/></svg>${escapeHtml(linkMod.name)}${isCount ? " +1" : ""}</span><span class="q-xp">+${linkXp}</span></label>`);
-        return;
-      }
-      group.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${id}" type="checkbox" data-cat="${cat}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(task)}</span><button class="q-attr" type="button" data-task="${escapeHtml(task)}" data-attr="${attr}" style="--ac:${attrColor(attr)}" title="Trains ${escapeHtml(attrName(attr))} · click to change" aria-label="Attribute: ${escapeHtml(attrName(attr))}"></button><span class="q-xp">+${xp}</span></label>`);
+      const context = questContextLabel(q);
+      const sourceLabel = context || attrName(attr);
+      const sourceTitle = context ? `${context} · trains ${attrName(attr)}` : `Daily task · trains ${attrName(attr)}`;
+      const contextBadge = `<span class="quest-source-badge daily-source" title="${escapeHtml(sourceTitle)}"><span class="source-dot"></span><span class="source-label">${escapeHtml(sourceLabel)}</span></span>`;
+      const scheduleBadge = q.scheduleType === "weekly" ? `<span class="task-kind-badge" title="Repeats every week"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>Weekly</span>` : "";
+      const taskMeta = `<span class="task-meta">${contextBadge}${scheduleBadge}</span>`;
+      const repeatTitle = q.scheduleType === "weekly" ? "Weekly routine" : "One-time task";
+      group.insertAdjacentHTML("beforeend", `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}" title="${repeatTitle}" style="--ac:${attrColor(attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="q-xp">+${xp}</span></label>`);
     });
-    if (!tasks.length) {
-      group.innerHTML = `<div class="day-empty">No quests yet for ${day}. Tap ✎ to build this day's checklist.</div>`;
-    }
+    if (!tasks.length) group.innerHTML = `<div class="day-empty">Nothing planned. Add a task or a weekly routine.</div>`;
+    group.insertAdjacentHTML("beforeend", `<button class="day-quick-add" type="button" data-quest-date="${iso(date)}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button>`);
     wrap.appendChild(card);
   });
-}
-
-function renderWorkouts() {
-  const body = document.getElementById("workoutRows");
-  body.innerHTML = "";
-  getWorkouts().forEach(([day, plan], i) => {
-    body.insertAdjacentHTML("beforeend", `<tr><td>${day}</td><td data-label="Plan">${plan}</td><td><label class="check"><input id="workout-${i}" type="checkbox" data-cat="training" data-save><span>Done</span></label></td><td data-label="Notes / Weight / Reps"><input id="workout-note-${i}" type="text" placeholder="Example: 20 lb DB, 3x10, felt strong..." data-save></td></tr>`);
-  });
+  if (isMobile() && mobileFullWeekKey !== weekKey()) {
+    wrap.insertAdjacentHTML("beforeend", `<button class="show-week-btn" type="button"><span>Today is ready</span><strong>Show the other 6 days</strong></button>`);
+    wrap.querySelector(".show-week-btn").addEventListener("click", () => {
+      mobileFullWeekKey = weekKey();
+      renderDays(); loadWeekFields(); updateProgress();
+    }, { once: true });
+  }
 }
 
 function applyWeekToUI() {
@@ -1354,9 +2192,13 @@ function applyWeekToUI() {
   if (mobileWeek) mobileWeek.textContent = `${fmt(selectedWeekStart)} – ${fmt(addDays(selectedWeekStart, 6))}`;
   if (mobileToday) mobileToday.textContent = new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   
+  ensureQuestOccurrencesForWeek();
   renderDays();
-  renderWorkouts();
+  renderStudyAreas();
+  renderProjectGoals();
   renderCustomSections();
+  renderPursuitTaskPanels();
+  renderSectionHeroes();
   loadWeekFields();
   updateProgress();
   updateStreakAndHeatmap();
@@ -1412,15 +2254,18 @@ function syncCounterDisplays() {
   const mods = getModules();
   mods.forEach((m) => {
     if (m.type !== "counter") return;
-    const total = Forge.moduleCountValue(wk, mods, m);
-    const fromDaily = Forge.linkedCountDays(wk, mods, m.id);
+    // Completed scheduled tasks for this section count as "sessions" toward its
+    // number (display only — XP comes from the tasks themselves, see modules.js).
+    const questSessions = Forge.questSessionDays ? Forge.questSessionDays(wk, mods, m.id) : 0;
+    const sessions = questSessions + Forge.linkedCountDays(wk, mods, m.id);
+    const total = Forge.moduleCountValue(wk, mods, m) + questSessions; // base + legacy links + scheduled
     const tgt = (m.target && m.target.value) || 1;
     const totalEl = document.querySelector(`.counter-total[data-counter="${m.id}"]`);
     if (totalEl) totalEl.textContent = total;
     const bar = document.querySelector(`[data-counter-bar="${m.id}"]`);
     if (bar) bar.style.width = Math.min(100, Math.round((total / tgt) * 100)) + "%";
     const sess = document.querySelector(`.counter-sessions[data-counter-sessions="${m.id}"]`);
-    if (sess) sess.textContent = fromDaily > 0 ? `+ ${fromDaily} from linked daily task${fromDaily === 1 ? "" : "s"} → ${total} total this week` : "";
+    if (sess) sess.textContent = sessions > 0 ? `+ ${sessions} from scheduled task${sessions === 1 ? "" : "s"} → ${total} total this week` : "";
   });
 }
 // Built-in hours sections (Study, Projects) get a live "+N hours from daily" note.
@@ -1443,16 +2288,34 @@ function syncSessionNotes() {
 }
 
 function saveWeekField(el) {
+  const key = weekKey();
   const wk = getWeekData();
   if (!el.id) return;
-  if (el.type === "checkbox") wk.checks[el.id] = el.checked;
+  if (el.type === "checkbox") {
+    wk.checks[el.id] = el.checked;
+    document.querySelectorAll(`input[type="checkbox"][id="${el.id}"]`).forEach((mirror) => { if (mirror !== el) mirror.checked = el.checked; });
+  }
   else wk.fields[el.id] = el.value;
   wk.updatedAt = new Date().toISOString();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { persistDatabase(); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
+  saveTimer = setTimeout(() => { persistWeekByKey(key); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
 }
 
 function percent(done, total) { return total ? Math.round((done / total) * 100) : 0; }
+function questOccurrenceRows(start, areaId) {
+  start = start || selectedWeekStart;
+  if (window.Forge && Forge.questOccurrenceRows) return Forge.questOccurrenceRows(getUnifiedQuests(), start, areaId);
+  return [];
+}
+function questWeekStats(week, start, areaId) {
+  if (window.Forge && Forge.questWeekStats) return Forge.questWeekStats(week, getUnifiedQuests(), start || selectedWeekStart, areaId);
+  return { rows: [], done: 0, total: 0, pct: 0 };
+}
+function nutritionWeekStats(week, start) {
+  const floor = Math.min(100, Math.max(1, Number(settings.proteinFloorPct) || 60));
+  if (window.Forge && Forge.nutritionWeekStats) return Forge.nutritionWeekStats(week, getUnifiedQuests(), start || selectedWeekStart, floor);
+  return { rows: [], done: 0, total: 0, pct: 0, floor, days: [], daysMet: 0 };
+}
 function setMetric(id, value) {
   const safe = Math.max(0, Math.min(value, 100));
   const bar = document.getElementById(`bar-${id}`);
@@ -1468,16 +2331,19 @@ function updateProgress() {
   const projectTarget = settings.projectTarget || 2;
   const projectStretch = projectTarget + 1;
 
-  const pillW = document.getElementById("pillWorkout"); if (pillW) pillW.textContent = `${workoutMin} sessions minimum`;
-  const pillD = document.getElementById("pillDiet"); if (pillD) pillD.textContent = `${proteinMin} protein days`;
+  const pillW = document.getElementById("pillWorkout"); if (pillW) pillW.textContent = `${workoutMin} sessions target`;
+  const pillD = document.getElementById("pillDiet"); if (pillD) pillD.textContent = `${proteinMin} days target`;
   const pillS = document.getElementById("pillStudy"); if (pillS) pillS.textContent = `${studyTarget} hours/week minimum`;
   const pillP = document.getElementById("pillProject"); if (pillP) pillP.textContent = `${projectTarget} hrs minimum · ${projectStretch} bonus`;
   const hintP = document.getElementById("hintProject"); if (hintP) hintP.textContent = `Minimum target: ${projectTarget} hrs`;
   const ptVal = document.getElementById("projectTargetValue"); if (ptVal) ptVal.textContent = projectTarget;
 
-  const checks = [...document.querySelectorAll('input[type="checkbox"][data-cat]')];
-  const done = checks.filter(x => x.checked).length;
-  const total = checks.length;
+  // Plans and Daily are projections of the same occurrence model. Calculate
+  // from data rather than visible DOM so mobile/lazy views cannot change score.
+  const _wk = getWeekData(), _mods = getModules();
+  const allStats = questWeekStats(_wk, selectedWeekStart);
+  const done = allStats.done;
+  const total = allStats.total;
   const overall = percent(done, total);
   document.getElementById("scoreValue").textContent = overall + "%";
   document.getElementById("scoreRing").style.background = `conic-gradient(var(--accent-success) ${overall * 3.6}deg, rgba(255,255,255,0.075) 0deg)`;
@@ -1489,14 +2355,21 @@ function updateProgress() {
   if (mobileRing) mobileRing.style.background = `conic-gradient(var(--accent-success) ${overall * 3.6}deg, rgba(255,255,255,0.08) 0deg)`;
   if (mobileVal) mobileVal.textContent = overall + "%";
 
-  ["discipline", "training", "protein", "study"].forEach(cat => {
-    const items = checks.filter(x => x.dataset.cat === cat);
-    setMetric(cat, percent(items.filter(x => x.checked).length, items.length));
-  });
+  const byCategory = (cat) => {
+    const rows = allStats.rows.filter((row) => (row.q.category || attrCat(row.q.attr || "Discipline")) === cat);
+    return { done: rows.filter((row) => !!_wk.checks[row.id]).length, total: rows.length };
+  };
+  const discipline = byCategory("discipline"), studyTasks = byCategory("study");
+  const training = questWeekStats(_wk, selectedWeekStart, "workout");
+  const nutrition = nutritionWeekStats(_wk, selectedWeekStart);
+  setMetric("discipline", percent(discipline.done, discipline.total));
+  setMetric("training", percent(training.done, workoutMin));
+  setMetric("protein", percent(nutrition.daysMet, proteinMin));
+  setMetric("study", percent(studyTasks.done, studyTasks.total));
 
   for (let d = 0; d < 7; d++) {
-    const items = checks.filter(x => x.dataset.day === String(d));
-    const dayDone = items.filter(x => x.checked).length;
+    const items = allStats.rows.filter((row) => row.dayIndex === d);
+    const dayDone = items.filter((row) => !!_wk.checks[row.id]).length;
     const p = percent(dayDone, items.length);
     const badge = document.getElementById(`dayBadge-${d}`);
     const bar = document.getElementById(`dayBar-${d}`);
@@ -1505,7 +2378,6 @@ function updateProgress() {
   }
 
   // Built-in hours sections include linked daily "sessions" (each completed day = +1 hr).
-  const _wk = getWeekData(), _mods = getModules();
   const studySessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "study") : 0;
   const projSessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "projects") : 0;
 
@@ -1519,11 +2391,20 @@ function updateProgress() {
   setMetric("projects-bonus", Math.round((projectHours / projectStretch) * 100));
   syncSessionNotes();
 
+  document.querySelectorAll("[data-plan-progress]").forEach((el) => {
+    const tasks = questsForArea(el.dataset.planProgress);
+    const occurrences = tasks.flatMap((q) => questOccurrencesInWeek(q).map((d) => ({ q, d })));
+    const wk = getWeekData();
+    const completed = occurrences.filter(({ q, d }) => !!wk.checks[questCheckId(q, d)]).length;
+    el.textContent = `${completed}/${occurrences.length} this week`;
+  });
+
   const reviewDone = ["wins", "misses", "changes", "refuseDrop"].filter(id => document.getElementById(id)?.value.trim()).length;
   setMetric("review", percent(reviewDone, 4));
   renderXpChips();
   syncLinkedProxies();
   syncCounterDisplays();
+  if (typeof renderSectionHeroes === "function") renderSectionHeroes(); // live-update the section widgets
   if (typeof renderBoss === "function") renderBoss();
 }
 
@@ -1622,9 +2503,79 @@ function initSettingsTabs() {
       // Render content for specific tabs
       if (target === 'appearance') renderThemeGrid();
       if (target === 'modules') { renderModulesEditor(); renderStatsEditor(); }
+      if (target === 'sync') loadSyncStatus();
     });
   });
 }
+
+// ===== REMINDERS SYNC SETTINGS =====
+async function loadSyncStatus() {
+  try {
+    const [statusRes, tokenRes] = await Promise.all([
+      fetch("/api/sync/status"),
+      fetch("/api/sync/token"),
+    ]);
+    const { status } = await statusRes.json();
+    const { token } = await tokenRes.json();
+
+    // Update token display
+    const tokenEl = document.getElementById("syncTokenDisplay");
+    if (tokenEl) {
+      tokenEl.textContent = token || "Not generated yet";
+      tokenEl.classList.toggle("has-token", !!token);
+    }
+
+    // Update status display
+    const statusEl = document.getElementById("syncStatusDisplay");
+    if (statusEl && status && status.receivedAt) {
+      const ago = timeAgo(new Date(status.receivedAt));
+      const dotClass = (Date.now() - new Date(status.receivedAt).getTime()) < 10 * 60 * 1000 ? "online" : "stale";
+      statusEl.innerHTML = `<span class="sync-dot ${dotClass}"></span><span>Last sync: ${ago} — ${status.synced || 0} synced, ${status.errors || 0} errors</span>`;
+    } else if (statusEl) {
+      statusEl.innerHTML = `<span class="sync-dot offline"></span><span>No sync detected yet</span>`;
+    }
+  } catch (e) {
+    console.warn("Failed to load sync status:", e);
+  }
+}
+
+function timeAgo(date) {
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function initSyncPanel() {
+  const genBtn = document.getElementById("syncGenTokenBtn");
+  if (genBtn) {
+    genBtn.onclick = async () => {
+      if (!confirm("Generate a new sync token? Any existing sync scripts will need the new token.")) return;
+      try {
+        const res = await fetch("/api/sync/token", { method: "POST" });
+        const { token } = await res.json();
+        const el = document.getElementById("syncTokenDisplay");
+        if (el) { el.textContent = token; el.classList.add("has-token"); }
+      } catch (e) {
+        alert("Failed to generate token.");
+      }
+    };
+  }
+  const copyBtn = document.getElementById("syncCopyTokenBtn");
+  if (copyBtn) {
+    copyBtn.onclick = () => {
+      const el = document.getElementById("syncTokenDisplay");
+      const text = el ? el.textContent : "";
+      if (!text || text === "Not generated yet") { alert("Generate a token first."); return; }
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+      });
+    };
+  }
+}
+
 
 // ===== MOBILE TAB BAR =====
 function tabHaptic() {
@@ -1824,15 +2775,13 @@ async function enableReminders() {
 }
 
 function openSettings() {
-  document.getElementById("cfgWorkoutMin").value = settings.workoutMin || 5;
-  document.getElementById("cfgProteinMin").value = settings.proteinMin || 7;
-  document.getElementById("cfgProjectTarget").value = settings.projectTarget || 2;
-  document.getElementById("cfgStudyTarget").value = settings.studyTarget || 14;
+  // Per-pursuit weekly targets now live on each pursuit card (renderModulesEditor);
+  // only the truly-global rules load here.
+  const floor = document.getElementById("cfgProteinFloorPct"); if (floor) floor.value = settings.proteinFloorPct || 60;
   const dif = document.getElementById("cfgDifficulty"); if (dif) dif.value = String(settings.gameBase || 100);
   const sg = document.getElementById("cfgStreakGrade"); if (sg) sg.value = settings.streakGrade || 75;
   const sf = document.getElementById("cfgStreakFreeze"); if (sf) sf.value = (settings.streakFreeze != null ? settings.streakFreeze : 1);
   const cs = document.getElementById("cfgCallsign"); if (cs) cs.value = settings.callsign || "";
-  renderSectionToggles();
   renderModulesEditor();
   renderStatsEditor();
   const rem = getReminders();
@@ -1871,16 +2820,15 @@ function bossForWeek(key) {
 function computeBossDamage() {
   const boss = bossForWeek(weekKey());
   const checks = getWeekData().checks || {};
-  const blueprint = getDailyBlueprint();
-  const names = Object.keys(blueprint);
   let totW = 0, doneW = 0;
-  for (let i = 0; i < 7; i++) {
-    (blueprint[names[i]] || []).forEach((t) => {
-      const w = categoryFor(t) === boss.weak ? 2 : 1;
-      totW += w; if (checks[taskId(i, t)]) doneW += w;
+  for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+    const date = addDays(selectedWeekStart, dayIndex);
+    questsForDate(date).forEach((q) => {
+      const category = q.category || attrCat(q.attr || "Discipline");
+      const weight = category === boss.weak ? 2 : 1;
+      totW += weight;
+      if (checks[questCheckId(q, date)]) doneW += weight;
     });
-    const ww = boss.weak === "training" ? 2 : 1;
-    totW += ww; if (checks["workout-" + i]) doneW += ww;
   }
   return { boss, dmg: totW ? Math.round(doneW / totW * 100) : 0 };
 }
@@ -2143,28 +3091,30 @@ function renderTrends() {
     last12.push({ date: d, score: w ? calc(w) : 0, xp: w ? wxp(w) : 0, byAttr: w ? wxa(w) : {} });
   }
 
-  const blueprint = getDailyBlueprint();
-  const names = Object.keys(blueprint);
   const wdSum = [0, 0, 0, 0, 0, 0, 0], wdN = [0, 0, 0, 0, 0, 0, 0];
   const taskStat = {};
-  Object.values(weeks).forEach((w) => {
+  Object.entries(weeks).forEach(([key, w]) => {
     if (!w || !w.checks) return;
+    const start = new Date(key + "T00:00:00");
+    const rows = questOccurrenceRows(start);
     for (let i = 0; i < 7; i++) {
-      const tasks = blueprint[names[i]] || [];
-      if (!tasks.length) continue;
+      const dayRows = rows.filter((row) => row.dayIndex === i);
+      if (!dayRows.length) continue;
       let done = 0;
-      tasks.forEach((t) => {
-        const c = !!w.checks[taskId(i, t)];
-        const st = taskStat[t] || (taskStat[t] = { done: 0, seen: 0 });
+      dayRows.forEach((row) => {
+        const c = !!w.checks[row.id];
+        const statKey = row.q.id;
+        const st = taskStat[statKey] || (taskStat[statKey] = { name: row.q.title, done: 0, seen: 0 });
         st.seen++; if (c) { st.done++; done++; }
       });
-      wdSum[i] += Math.round(done / tasks.length * 100); wdN[i]++;
+      wdSum[i] += Math.round(done / dayRows.length * 100); wdN[i]++;
     }
   });
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const weekday = wdSum.map((s, i) => wdN[i] ? Math.round(s / wdN[i]) : 0);
-  const skipped = Object.entries(taskStat).map(([name, st]) => ({ name, rate: Math.round(st.done / st.seen * 100) }))
-    .filter((x) => taskStat[x.name].seen >= 2).sort((a, b) => a.rate - b.rate).slice(0, 5);
+  const skipped = Object.values(taskStat).filter((st) => st.seen >= 2)
+    .map((st) => ({ name: st.name, rate: Math.round(st.done / st.seen * 100) }))
+    .sort((a, b) => a.rate - b.rate).slice(0, 5);
 
   let html = "";
   if (prof) {
@@ -2190,13 +3140,14 @@ function bindEvents() {
     if (!e.target.matches || !e.target.matches("input[data-link-id]")) return;
     const id = e.target.getAttribute("data-link-id");
     if (!id) return;
+    const key = weekKey();
     const wk = getWeekData();
     wk.checks[id] = e.target.checked;
     wk.updatedAt = new Date().toISOString();
     const secEl = document.getElementById(id);          // mirror onto the section's own checkbox
     if (secEl && secEl.type === "checkbox") secEl.checked = e.target.checked;
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { persistDatabase(); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
+    saveTimer = setTimeout(() => { persistWeekByKey(key); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
     updateProgress();
   });
   // First-run onboarding: pick a path or start blank.
@@ -2237,7 +3188,32 @@ function bindEvents() {
   });
   document.addEventListener("click", e => {
     const btn = e.target.closest(".edit-day-btn");
-    if (btn) { e.preventDefault(); e.stopPropagation(); openDayEditor(Number(btn.dataset.dayIndex)); }
+    if (btn) { e.preventDefault(); e.stopPropagation(); openQuestEditor({ scheduleType: "weekly", days: [Number(btn.dataset.dayIndex)], attr: "Discipline" }); }
+  });
+  // Unified quest actions work from both Daily Quests and the source plan.
+  document.addEventListener("click", e => {
+    const quick = e.target.closest(".day-quick-add");
+    if (quick) { e.preventDefault(); openQuestEditor({ date: quick.dataset.questDate }); return; }
+    const add = e.target.closest(".goal-task-add");
+    if (add) {
+      e.preventDefault();
+      const card = add.closest(".goal-card");
+      if (card) openQuestEditor({ areaId: card.dataset.goalType === "study" ? "study" : "projects", goalId: card.dataset.goalId, date: defaultQuestDate() });
+      else {
+        const panel = add.closest(".pursuit-task-panel");
+        const areaId = (panel && panel.dataset.areaId) || add.dataset.areaId;
+        if (areaId) openQuestEditor(newPlanTaskOptions(areaId));
+      }
+      return;
+    }
+    const qe = e.target.closest(".quest-edit");
+    if (qe) { e.preventDefault(); e.stopPropagation(); const row = qe.closest("[data-quest-id]"); if (row) openQuestEditor({ id: row.dataset.questId }); return; }
+    const ge = e.target.closest(".goal-edit");
+    if (ge) { e.preventDefault(); const card = ge.closest(".goal-card"); openGoalEditor(card.dataset.goalType, card.dataset.goalId); return; }
+    const jump = e.target.closest(".quest-jump");
+    if (jump && jump.dataset.date) { e.preventDefault(); selectedWeekStart = getStartOfWeek(new Date(jump.dataset.date + "T00:00:00")); applyWeekToUI(); scrollToSection("daily"); return; }
+    const up = e.target.closest(".quest-move-up"), down = e.target.closest(".quest-move-down");
+    if (up || down) { e.preventDefault(); const row = (up || down).closest("[data-quest-id]"); if (row) moveQuest(row.dataset.questId, up ? -1 : 1); }
   });
   // Click a daily task's attribute dot to cycle which stat it trains.
   document.addEventListener("click", e => {
@@ -2271,51 +3247,6 @@ function bindEvents() {
   document.getElementById("importFile").onchange = importBackup;
   document.getElementById("expandAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = true);
   document.getElementById("collapseAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = false);
-  document.getElementById("cancelDayEditBtn").onclick = closeDayEditor;
-  const cancelDayTop = document.getElementById("cancelDayEditTopBtn");
-  if (cancelDayTop) cancelDayTop.onclick = closeDayEditor;
-  document.getElementById("saveDayTemplateBtn").onclick = saveDayTemplate;
-  document.getElementById("resetDayTemplateBtn").onclick = resetDayTemplate;
-  document.getElementById("editDayModal").addEventListener("click", e => { if (e.target.id === "editDayModal") closeDayEditor(); });
-  // Day-editor rows: add / reorder / delete / live stat-dot
-  const addDayTaskBtn = document.getElementById("addDayTaskBtn");
-  if (addDayTaskBtn) addDayTaskBtn.onclick = () => {
-    const rows = dayEditorReadRows();
-    rows.push({ text: "", attr: "Discipline" });
-    renderDayEditorRows(rows);
-    const inputs = document.querySelectorAll("#editDayRows .de-text");
-    if (inputs.length) inputs[inputs.length - 1].focus();
-  };
-  const dayRows = document.getElementById("editDayRows");
-  if (dayRows) {
-    dayRows.addEventListener("click", (e) => {
-      const row = e.target.closest(".day-edit-row"); if (!row) return;
-      const rows = dayEditorReadRows();
-      const idx = [...dayRows.children].indexOf(row);
-      if (e.target.closest(".de-del")) { rows.splice(idx, 1); renderDayEditorRows(rows); }
-      else if (e.target.closest(".de-up") && idx > 0) { [rows[idx - 1], rows[idx]] = [rows[idx], rows[idx - 1]]; renderDayEditorRows(rows); }
-      else if (e.target.closest(".de-down") && idx < rows.length - 1) { [rows[idx + 1], rows[idx]] = [rows[idx], rows[idx + 1]]; renderDayEditorRows(rows); }
-    });
-    dayRows.addEventListener("change", (e) => {
-      const rowEl = e.target.closest(".day-edit-row");
-      if (!rowEl) return;
-      // Picking a link auto-assigns + locks the stat to the linked section's stat.
-      if (e.target.classList.contains("de-link")) {
-        let ref = null;
-        if (e.target.value) { try { ref = JSON.parse(e.target.value); } catch (x) { ref = e.target.value; } }
-        const lm = ref && window.Forge ? Forge.linkModule(ref, getModules()) : null;
-        const attrSel = rowEl.querySelector(".de-attr");
-        const dot = rowEl.querySelector(".de-dot");
-        if (lm && lm.attr) { attrSel.value = lm.attr; attrSel.disabled = true; if (dot) dot.style.setProperty("--ac", attrColor(lm.attr)); }
-        else { attrSel.disabled = false; if (dot) dot.style.setProperty("--ac", attrColor(attrSel.value)); }
-        return;
-      }
-      if (e.target.classList.contains("de-attr")) {
-        const dot = rowEl.querySelector(".de-dot");
-        if (dot) dot.style.setProperty("--ac", attrColor(e.target.value));
-      }
-    });
-  }
 
   document.querySelectorAll(".nav a[href^='#']").forEach(link => {
     link.addEventListener("click", e => {
@@ -2337,15 +3268,13 @@ function bindEvents() {
   const saveSettingsBtn = document.getElementById("saveSettingsBtn");
   if (saveSettingsBtn) {
     saveSettingsBtn.onclick = async () => {
-      settings.workoutMin = Number(document.getElementById("cfgWorkoutMin").value);
-      settings.proteinMin = Number(document.getElementById("cfgProteinMin").value);
-      settings.projectTarget = Number(document.getElementById("cfgProjectTarget").value);
-      settings.studyTarget = Number(document.getElementById("cfgStudyTarget").value);
+      // Per-pursuit targets + visibility save live from the Pursuits tab; only the
+      // global rules + profile are read here.
+      const floor = document.getElementById("cfgProteinFloorPct"); if (floor) settings.proteinFloorPct = Math.min(100, Math.max(1, Number(floor.value) || 60));
       const dif = document.getElementById("cfgDifficulty"); if (dif) settings.gameBase = Number(dif.value) || 100;
       const sg = document.getElementById("cfgStreakGrade"); if (sg) settings.streakGrade = Math.min(100, Math.max(1, Number(sg.value) || 75));
       const sf = document.getElementById("cfgStreakFreeze"); if (sf) settings.streakFreeze = Math.min(3, Math.max(0, Number(sf.value) || 0));
       const cs = document.getElementById("cfgCallsign"); if (cs && cs.value.trim()) settings.callsign = cs.value.trim();
-      settings.hiddenSections = [...document.querySelectorAll('#sectionToggles input[data-section]')].filter(c => !c.checked).map(c => c.dataset.section);
       const reEnable = document.getElementById("cfgRemindEnable");
       if (reEnable) {
         const wasEnabled = (settings.reminders || {}).enabled;
@@ -2377,6 +3306,9 @@ function bindEvents() {
   document.getElementById("settingsModal")?.addEventListener("click", e => {
     if (e.target.id === "settingsModal") document.getElementById("settingsModal").classList.remove("active");
   });
+
+  // Settings Sync Tab
+  initSyncPanel();
 
   // Cabinet (trophies + insignias + records)
   const openCabinetBtn = document.getElementById("openCabinetBtn");
@@ -2452,58 +3384,33 @@ function bindEvents() {
     };
   }
 
-  // Edit Workouts
-  const editWorkoutsBtn = document.querySelector(".edit-workouts-btn");
-  if (editWorkoutsBtn) {
-    editWorkoutsBtn.onclick = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      document.getElementById("editWorkoutsTextarea").value = getWorkouts().map(w => `${w[0]}: ${w[1]}`).join("\n");
-      document.getElementById("editWorkoutsModal").classList.add("active");
-    };
-  }
-  const cancelWorkoutsBtn = document.getElementById("cancelWorkoutsBtn");
-  if (cancelWorkoutsBtn) cancelWorkoutsBtn.onclick = () => document.getElementById("editWorkoutsModal").classList.remove("active");
-  const saveWorkoutsBtn = document.getElementById("saveWorkoutsBtn");
-  if (saveWorkoutsBtn) {
-    saveWorkoutsBtn.onclick = async () => {
-      const lines = document.getElementById("editWorkoutsTextarea").value.split("\n").map(l => l.trim()).filter(Boolean);
-      const newWorkouts = lines.map(l => {
-        const parts = l.split(":");
-        if (parts.length >= 2) return [parts[0].trim(), parts.slice(1).join(":").trim()];
-        return ["Day", l];
-      });
-      settings.workouts = newWorkouts;
-      await persistSettings();
-      document.getElementById("editWorkoutsModal").classList.remove("active");
-      renderWorkouts();
-      loadWeekFields();
-    };
-  }
-
-  // Edit Study
+  // Add Scholarship / Workshop goals
   const editStudyBtn = document.querySelector(".edit-study-btn");
   if (editStudyBtn) {
     editStudyBtn.onclick = (e) => {
       e.preventDefault(); e.stopPropagation();
-      document.getElementById("editStudyTextarea").value = getStudyAreas().join("\n");
-      document.getElementById("editStudyModal").classList.add("active");
+      openGoalEditor("study");
     };
   }
-  const cancelStudyBtn = document.getElementById("cancelStudyBtn");
-  if (cancelStudyBtn) cancelStudyBtn.onclick = () => document.getElementById("editStudyModal").classList.remove("active");
-  const saveStudyBtn = document.getElementById("saveStudyBtn");
-  if (saveStudyBtn) {
-    saveStudyBtn.onclick = async () => {
-      const lines = document.getElementById("editStudyTextarea").value.split("\n").map(l => l.trim()).filter(Boolean);
-      settings.studyAreas = lines;
-      await persistSettings();
-      document.getElementById("editStudyModal").classList.remove("active");
-      renderStudyAreas();
-      loadWeekFields();
-    };
+  const editProjectBtn = document.querySelector(".edit-project-btn");
+  if (editProjectBtn) {
+    editProjectBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openGoalEditor("project"); };
   }
 
-  // Editable lists: Diet / Project / Review
+  document.getElementById("closeGoalEditorBtn").onclick = () => closeEditorModal("goalEditorModal");
+  document.getElementById("cancelGoalEditorBtn").onclick = () => closeEditorModal("goalEditorModal");
+  document.getElementById("saveGoalEditorBtn").onclick = saveGoalEditor;
+  document.getElementById("deleteGoalBtn").onclick = deleteGoalEditor;
+  document.getElementById("goalEditorModal").addEventListener("click", (e) => { if (e.target.id === "goalEditorModal") closeEditorModal("goalEditorModal"); });
+  document.getElementById("closeQuestEditorBtn").onclick = () => closeEditorModal("questEditorModal");
+  document.getElementById("cancelQuestEditorBtn").onclick = () => closeEditorModal("questEditorModal");
+  document.getElementById("saveQuestEditorBtn").onclick = saveQuestEditor;
+  document.getElementById("deleteQuestBtn").onclick = deleteQuestEditor;
+  document.getElementById("questSource").addEventListener("change", syncQuestAttrToSource);
+  document.getElementById("questScheduleType").addEventListener("change", syncQuestScheduleFields);
+  document.getElementById("questEditorModal").addEventListener("click", (e) => { if (e.target.id === "questEditorModal") closeEditorModal("questEditorModal"); });
+
+  // Editable non-task content. Pursuit plans use the unified task editor above.
   function wireListEditor(opts) {
     const btn = document.querySelector(opts.btnSel);
     if (btn) btn.onclick = (e) => {
@@ -2526,8 +3433,6 @@ function bindEvents() {
       if (window.Game) Game.render();
     };
   }
-  wireListEditor({ btnSel: ".edit-diet-btn", modalId: "editDietModal", textareaId: "editDietTextarea", cancelId: "cancelDietBtn", saveId: "saveDietBtn", get: getDietItems, set: (l) => { settings.dietItems = l; }, rerender: renderDiet });
-  wireListEditor({ btnSel: ".edit-project-btn", modalId: "editProjectModal", textareaId: "editProjectTextarea", cancelId: "cancelProjectBtn", saveId: "saveProjectBtn", get: getProjectChecks, set: (l) => { settings.projectChecks = l; }, rerender: renderProjectChecks });
   wireListEditor({ btnSel: ".edit-review-btn", modalId: "editReviewModal", textareaId: "editReviewTextarea", cancelId: "cancelReviewBtn", saveId: "saveReviewBtn", get: getReviewPrompts, set: (l) => { settings.reviewPrompts = l; }, rerender: renderReview });
 
   // Insights Modal
@@ -2687,95 +3592,6 @@ function bindEvents() {
   });
 }
 
-function dayEditorAttrs() { return (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : ["Discipline", "Body", "Mind", "Vitality", "Craft"]; }
-function renderDayEditorRows(rows) {
-  const wrap = document.getElementById("editDayRows");
-  if (!wrap) return;
-  const attrs = dayEditorAttrs();
-  const targets = (window.Forge && Forge.linkTargets) ? Forge.linkTargets(getModules()) : [];
-  wrap.innerHTML = rows.map((row) => {
-    const linkedMod = row.link && window.Forge ? Forge.linkModule(row.link, getModules()) : null;
-    const attr = linkedMod ? linkedMod.attr : (row.attr || "Discipline");
-    const opts = attrs.map((a) => `<option value="${a}" ${a === attr ? "selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
-    const curLink = row.link && window.Forge ? JSON.stringify(Forge.normLink(row.link)) : "";
-    const linkSel = targets.length ? `<select class="de-link" aria-label="Link to section" title="Link to a section — shared checkbox, or attached by stat"><option value="">— no link</option>${targets.map((t) => { const v = JSON.stringify(t.ref); return `<option value="${escapeHtml(v)}" ${v === curLink ? "selected" : ""}>↔ ${escapeHtml(t.label)}</option>`; }).join("")}</select>` : "";
-    return `<div class="day-edit-row">
-      <div class="de-move">
-        <button class="de-up" type="button" aria-label="Move up"><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
-        <button class="de-down" type="button" aria-label="Move down"><svg viewBox="0 0 24 24" class="ic"><path d="M6 9l6 6 6-6"/></svg></button>
-      </div>
-      <span class="de-dot" style="--ac:${attrColor(attr)}"></span>
-      <input class="de-text" type="text" value="${escapeHtml(row.text)}" placeholder="Task name" spellcheck="false">
-      <select class="de-attr" aria-label="Stat" ${linkedMod ? "disabled title='Set by the link'" : ""}>${opts}</select>
-      ${linkSel}
-      <button class="de-del" type="button" aria-label="Remove task"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-    </div>`;
-  }).join("");
-}
-function dayEditorReadRows() {
-  return [...document.querySelectorAll("#editDayRows .day-edit-row")].map((r) => ({
-    text: r.querySelector(".de-text").value.trim(),
-    attr: r.querySelector(".de-attr").value,
-    link: (() => { const el = r.querySelector(".de-link"); if (!el || !el.value) return ""; try { return JSON.parse(el.value); } catch (e) { return el.value; } })(),
-  }));
-}
-function openDayEditor(dayIndex) {
-  editingDayIndex = dayIndex;
-  const name = dayNames()[dayIndex];
-  const tasks = getDailyBlueprint()[name] || [];
-  document.getElementById("editDayTitle").textContent = `Edit ${name} Checklist`;
-  renderDayEditorRows(tasks.map((t) => ({ text: t, attr: taskAttr(t), link: taskLink(t) })));
-  document.getElementById("editDayModal").classList.add("active");
-  document.getElementById("editDayModal").setAttribute("aria-hidden", "false");
-}
-
-function closeDayEditor() {
-  editingDayIndex = null;
-  document.getElementById("editDayModal").classList.remove("active");
-  document.getElementById("editDayModal").setAttribute("aria-hidden", "true");
-}
-
-async function saveDayTemplate() {
-  if (editingDayIndex === null) return;
-  const name = dayNames()[editingDayIndex];
-  const rows = dayEditorReadRows().filter((r) => r.text);
-  if (!rows.length) { alert("Keep at least one task in the day."); return; }
-  const templates = structuredCloneSafe(getDailyBlueprint());
-  templates[name] = rows.map((r) => r.text);
-  settings.dayTemplates = templates;
-  // Persist each task's chosen attribute explicitly (keyed by task slug) so it's
-  // no longer inferred — the picker is now the source of truth.
-  if (!settings.taskAttrs) settings.taskAttrs = {};
-  if (!settings.taskLinks) settings.taskLinks = {};
-  rows.forEach((r) => {
-    if (!window.Forge) return;
-    const k = Forge.dailyAttrKey(r.text);
-    if (r.link) {
-      settings.taskLinks[k] = r.link;
-      const lm = Forge.linkModule(r.link, getModules());   // auto-assign the section's stat
-      settings.taskAttrs[k] = (lm && lm.attr) ? lm.attr : r.attr;
-    } else {
-      delete settings.taskLinks[k];
-      settings.taskAttrs[k] = r.attr;
-    }
-  });
-  await persistSettings();
-  closeDayEditor();
-  applyWeekToUI();
-}
-
-async function resetDayTemplate() {
-  if (editingDayIndex === null) return;
-  if (!confirm("Reset this day's checklist back to the default template?")) return;
-  const name = dayNames()[editingDayIndex];
-  const templates = structuredCloneSafe(getDailyBlueprint());
-  templates[name] = [...defaultDailyBlueprint[name]];
-  settings.dayTemplates = templates;
-  await persistSettings();
-  closeDayEditor();
-  applyWeekToUI();
-}
-
 async function resetThisWeek() {
   if (!confirm("Reset only this selected week? Other weeks, templates, and exported backups will not be touched.")) return;
   database.weeks[weekKey()] = { fields: {}, checks: {}, createdAt: new Date().toISOString(), schemaVersion: 2 };
@@ -2857,6 +3673,9 @@ async function init() {
   if (cachedDb && cachedDb.weeks && cachedSettings) {
     database = cachedDb;
     settings = cachedSettings;
+    // Cached data is an instant visual preview only. Migrate it in memory so
+    // pure render getters never have to mutate state; server data replaces it.
+    migrateQuestModelIfNeeded();
     if (settings.theme) applyTheme(settings.theme);
     renderStatic();
     applyWeekToUI();
@@ -2864,16 +3683,38 @@ async function init() {
 
   // Revalidate from the server in parallel (one round-trip, not three), then reconcile.
   await Promise.all([loadDatabase(), loadSettings(), loadAchievements()]);
+  // Offline writes are authoritative for the resources they touched. Reapply
+  // them after server revalidation, then retry once boot has completed.
+  applyPendingWrites();
   await migrateLegacyIfNeeded();
+  const beforeQuestMigration = { database: structuredCloneSafe(database), settings: structuredCloneSafe(settings), savedAt: new Date().toISOString() };
+  const questModelMigrated = migrateQuestModelIfNeeded();
   booting = false;
+  if (questModelMigrated) {
+    // Keep one rollback snapshot locally, then commit settings + every touched
+    // week in the server's existing SQLite transaction. A failed request leaves
+    // the server untouched and is visible in the save indicator.
+    try { localStorage.setItem(APP_PRE_MIGRATION_KEY, JSON.stringify(beforeQuestMigration)); } catch (e) {}
+    try {
+      setSaveState("saving", "Upgrading data…");
+      await postJson("/api/backup", { database, settings });
+      setSaveState("saved");
+    } catch (e) {
+      console.error("Task-model migration could not be committed", e);
+      setSaveState("failed", "Upgrade not saved");
+    }
+  }
   cacheState();
   if (settings.theme) applyTheme(settings.theme);
   renderStatic();
   applyWeekToUI();
+  await flushPendingWrites();
   maybeShowOnboarding();
 }
 
 init();
+
+window.addEventListener("online", () => { flushPendingWrites(); });
 
 // Register the service worker for offline support + installable PWA.
 if ('serviceWorker' in navigator) {

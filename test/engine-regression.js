@@ -107,5 +107,67 @@ for (const S of variants) {
   }
 }
 console.log(`Fuzz: ${runs} randomized weeks checked — ${fails === 0 ? "OK" : "FAILED"}`);
+
+// ---- 3. unified quest extension --------------------------------------------
+// A scheduled quest is initialized as false in its target week. It counts once
+// toward completion, awards the category's XP once, and attributes that XP to
+// the source pursuit even though the same checkbox is rendered in two places.
+const emptyDays = { Sunday: [], Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [] };
+const questSettings = {
+  dayTemplates: emptyDays,
+  quests: [{ id: "az-module-1", title: "Watch module 1", category: "study", attr: "Mind", sourceType: "study", sourceId: "az900" }]
+};
+const questModules = Forge.migrateModules(questSettings);
+const questKey = Forge.questCheckId(questSettings.quests[0]);
+const questWeek = { checks: { [questKey]: true }, fields: {} };
+const questScore = Forge.weekScore(questWeek, questModules);
+const questXp = Forge.weekXp(questWeek, questModules);
+if (questScore !== 13 || questXp.xp !== 25 || questXp.byAttr.Mind !== 25 || questXp.bySource.study !== 25) {
+  fails++; console.log("UNIFIED QUEST MISMATCH", { questScore, questXp });
+}
+
+const routine = { id: "mobility", title: "Mobility", scheduleType: "weekly", repeatDays: [2, 6], category: "training", attr: "Body", areaId: "workout" };
+const routineSettings = { dayTemplates: emptyDays, quests: [routine] };
+const routineModules = Forge.migrateModules(routineSettings);
+const tueKey = Forge.questCheckId(routine, 2), satKey = Forge.questCheckId(routine, 6);
+const routineWeek = { checks: { [tueKey]: true, [satKey]: false }, fields: {} };
+const routineScore = Forge.weekScore(routineWeek, routineModules);
+const routineXp = Forge.weekXp(routineWeek, routineModules);
+if (tueKey === satKey || routineScore !== 11 || routineXp.xp !== 30 || routineXp.byAttr.Body !== 30 || routineXp.bySource.training !== 30) {
+  fails++; console.log("WEEKLY ROUTINE MISMATCH", { tueKey, satKey, routineScore, routineXp });
+}
+
+// In task-model v3, Training and Provisions plans are unified quests. The old
+// seven-slot workout table must not add a second completion denominator or XP.
+const provision = { id: "protein", title: "Hit protein", scheduleType: "weekly", repeatDays: [2], category: "protein", attr: "Vitality", areaId: "diet" };
+const planSettings = { taskModelVersion: 3, dayTemplates: emptyDays, workouts: [], dietItems: [], quests: [routine, provision] };
+const planModules = Forge.migrateModules(planSettings);
+const proteinKey = Forge.questCheckId(provision, 2);
+const planWeek = { checks: { [tueKey]: true, [proteinKey]: false }, fields: {} };
+const planScore = Forge.weekScore(planWeek, planModules);
+const planXp = Forge.weekXp(planWeek, planModules);
+const legacyWorkoutModule = planModules.find((m) => m.id === "workout");
+if (!legacyWorkoutModule || legacyWorkoutModule.countScore !== false || planScore !== 50 || planXp.xp !== 30 || planXp.bySource.training !== 30) {
+  fails++; console.log("UNIFIED PURSUIT PLAN MISMATCH", { planScore, planXp, legacyWorkoutModule });
+}
+
+// All projections use the same occurrence set. Training counts completed
+// sessions; Provisions counts a day only when its configurable floor is met.
+const provision2 = { id: "veg", title: "Eat vegetables", scheduleType: "weekly", repeatDays: [2, 3], category: "protein", attr: "Vitality", areaId: "diet" };
+const occurrenceQuests = [routine, provision, provision2];
+const occurrenceWeek = { checks: {
+  [Forge.questCheckId(routine, 2)]: true,
+  [Forge.questCheckId(routine, 6)]: false,
+  [Forge.questCheckId(provision, 2)]: true,
+  [Forge.questCheckId(provision2, 2)]: false,
+  [Forge.questCheckId(provision2, 3)]: true,
+}, fields: {} };
+const trainingStats = Forge.questWeekStats(occurrenceWeek, occurrenceQuests, "2026-07-12", "workout");
+const nutrition60 = Forge.nutritionWeekStats(occurrenceWeek, occurrenceQuests, "2026-07-12", 60);
+const nutrition50 = Forge.nutritionWeekStats(occurrenceWeek, occurrenceQuests, "2026-07-12", 50);
+if (trainingStats.done !== 1 || trainingStats.total !== 2 || nutrition60.daysMet !== 1 || nutrition50.daysMet !== 2) {
+  fails++; console.log("OCCURRENCE TARGET MISMATCH", { trainingStats, nutrition60, nutrition50 });
+}
+
 console.log(fails === 0 ? "\n✅ ENGINE REGRESSION PASSED — byte-identical to legacy logic." : `\n❌ ${fails} mismatch(es).`);
 process.exit(fails === 0 ? 0 : 1);

@@ -9,12 +9,12 @@
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=53" />
+  <link rel="stylesheet" href="style.css?v=66" />
 </head>
 <body>
   <main class="shell">
     <div class="topbar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></span><span>The Forge</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> <span id="streakUnit">Weeks</span></span></div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></span><span>The Forge</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> <span id="streakUnit">Weeks</span></span><span class="save-state" id="saveState" role="status" aria-live="polite" data-state="saved">Saved</span></div>
       <nav class="nav" id="mainNav">
         <!-- Desktop nav links -->
         <a href="#scoreboard" class="desktop-nav-item">Quest Log</a>
@@ -208,38 +208,42 @@
     </details>
 
     <details id="daily" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Daily Quests</h2><p class="hint">Daily basics protect the structure. Build each day's checklist however you train.</p></div><span class="chev">⌄</span></summary>
+      <summary><div class="summary-left"><h2>Daily Quests</h2><p class="hint">One agenda for every task—daily-only or organized inside any pursuit.</p></div><span class="chev">⌄</span></summary>
       <div class="content"><div class="grid grid-2" id="daysGrid"></div></div>
     </details>
 
     <details id="workout" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Training</h2><p class="hint">Notes preserve progression across the plan.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillWorkout">5 sessions minimum</span><button class="icon-btn edit-workouts-btn" type="button" title="Edit Workouts"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
-      <div class="content"><table><thead><tr><th>Day</th><th>Plan</th><th>Done</th><th>Notes / Weight / Reps</th></tr></thead><tbody id="workoutRows"></tbody></table></div>
+      <summary><div class="summary-left"><h2>Training</h2><p class="hint">Build the plan from scheduled tasks, then log the same sessions from here or Daily.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillWorkout">5 sessions target</span><span class="chev">⌄</span></div></summary>
+      <div class="content"></div>
     </details>
 
     <details id="diet" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Provisions</h2><p class="hint">Track the daily nutrition behaviors you want to keep.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillDiet">7 protein days</span><button class="icon-btn edit-diet-btn" type="button" title="Edit Diet Plan"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
-      <div class="content grid grid-3" id="dietRows"></div>
+      <summary><div class="summary-left"><h2>Provisions</h2><p class="hint">Your nutrition plan is a set of scheduled tasks shared with Daily Quests.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillDiet">7 days target</span><span class="chev">⌄</span></div></summary>
+      <div class="content"></div>
     </details>
 
     <details id="study" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Scholarship</h2><p class="hint">Connect studying to the direction you're growing toward.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillStudy">14 hours/week minimum</span><button class="icon-btn edit-study-btn" type="button" title="Edit Study Plan"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
+      <summary><div class="summary-left"><h2>Scholarship</h2><p class="hint">Turn every certification or skill into an ordered study plan. Scheduled tasks also appear in Daily Quests.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill blue" id="pillStudy">14 hours/week minimum</span><button class="icon-btn edit-study-btn" type="button" title="Add certification or skill"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button><span class="chev">⌄</span></div></summary>
       <div class="content">
-        <div id="certSummary" class="cert-summary"></div>
-        <table>
-          <thead><tr><th>Certification / Skill</th><th>Goal</th><th>Hours</th><th>Status</th><th>Target</th><th>Days Left</th></tr></thead>
-          <tbody id="studyRows">
-          </tbody>
-        </table>
+        <div class="goal-grid" id="studyGoalsGrid"></div>
       </div>
     </details>
 
     <details id="projects" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Workshop</h2><p class="hint">Hours only count when the work creates output. Research without output is a hobby.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillProject">2 hrs minimum · 3 bonus</span><button class="icon-btn edit-project-btn" type="button" title="Edit Project Outputs"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
-      <div class="content grid grid-3">
-        <div class="metric"><div class="top"><div><div class="metric-title">Project Hours</div><p class="hint" id="hintProject">Minimum target: 2 hrs</p></div><span class="metric-number"><span id="projectHoursValue">0</span>/<span id="projectTargetValue">2</span></span></div><div class="bar"><div class="bar-fill" id="projectBar"></div></div><label class="label" style="margin-top:14px">Hours completed</label><input id="projectHours" data-save type="number" min="0" step="0.25" value="0"></div>
-        <div class="metric"><div class="metric-title">Valid Output</div><div id="projectChecks"></div></div>
-        <div class="metric"><div class="metric-title">Current Focus</div><textarea id="projectFocus" data-save placeholder="Example: portfolio site, side project, a feature you're shipping this week..."></textarea></div>
+      <summary><div class="summary-left"><h2>Workshop</h2><p class="hint">Plan concrete project outputs, schedule the next action, and execute it from Daily Quests.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillProject">2 hrs minimum · 3 bonus</span><button class="icon-btn edit-project-btn" type="button" title="Add project"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button><span class="chev">⌄</span></div></summary>
+      <div class="content">
+        <div class="sec-hero forge-hero" data-theme="forge">
+          <div class="hero-wm" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></div>
+          <div class="hero-top">
+            <div class="hero-crest" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></div>
+            <div class="hero-head"><div class="hero-kicker">The forge</div><div class="hero-title">On the anvil</div></div>
+            <div class="hero-count"><b id="projectHoursValue">0</b><span>/ <span id="projectTargetValue">2</span> hrs</span></div>
+          </div>
+          <textarea id="projectFocus" data-save class="forge-focus" rows="2" placeholder="What are you forging this week? Name the one thing that matters."></textarea>
+          <div class="hero-gauge forge-gauge"><div class="bar-fill" id="projectBar"></div></div>
+          <div class="forge-foot"><span class="hero-cap" id="hintProject">Minimum target: 2 hrs</span><label class="forge-log"><span>Log hours</span><input id="projectHours" data-save type="number" min="0" step="0.25" value="0"></label></div>
+        </div>
+        <div class="goal-grid" id="projectGoalsGrid"></div>
       </div>
     </details>
 
@@ -297,27 +301,6 @@
       </div>
     </div>
 
-    <!-- Edit Day Modal -->
-    <div class="modal-backdrop" id="editDayModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="editDayTitle" style="max-width: 540px;">
-        <div class="modal-head">
-          <div class="modal-title-wrap">
-            <span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
-            <h3 id="editDayTitle">Edit Day Checklist</h3>
-          </div>
-          <button class="modal-close" id="cancelDayEditTopBtn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-        </div>
-        <p class="hint" style="margin-top:4px;">Name each task and pick which stat it trains — the colored dot shows the stat. Reorder with the arrows.</p>
-        <div class="day-edit-rows" id="editDayRows"></div>
-        <button class="day-edit-add" id="addDayTaskBtn" type="button"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg> Add task</button>
-        <div class="modal-actions">
-          <button class="danger" id="resetDayTemplateBtn" type="button">Reset to default</button>
-          <button id="cancelDayEditBtn" type="button">Cancel</button>
-          <button id="saveDayTemplateBtn" type="button" class="primary">Save Checklist</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Settings Modal (replaces old Config modal) -->
     <div class="modal-backdrop" id="settingsModal" aria-hidden="true">
       <div class="modal glass" role="dialog" aria-modal="true" style="max-width: 560px;">
@@ -330,31 +313,28 @@
         </div>
 
         <div class="settings-tabs">
-          <button class="settings-tab active" data-settings-tab="goals">Targets</button>
-          <button class="settings-tab" data-settings-tab="modules">Pursuits</button>
+          <button class="settings-tab active" data-settings-tab="modules">Pursuits</button>
+          <button class="settings-tab" data-settings-tab="goals">Rules</button>
           <button class="settings-tab" data-settings-tab="profile">Profile</button>
           <button class="settings-tab" data-settings-tab="appearance">Themes</button>
           <button class="settings-tab" data-settings-tab="data">Data</button>
+          <button class="settings-tab" data-settings-tab="sync">Sync</button>
         </div>
 
-        <!-- Targets Tab -->
-        <div class="settings-panel" id="settingsGoals" data-panel="goals">
-          <p class="settings-intro">Your weekly targets — these drive the scoreboard bars and your weekly completion %.</p>
+        <!-- Pursuits Tab -->
+        <div class="settings-panel" id="settingsModules" data-panel="modules">
+          <p class="settings-intro">Your pursuits — the areas of life you're leveling up. Each owns its own weekly target, stat and plan. Rename, reorder, show/hide, retarget, or add your own.</p>
+          <div class="modules-editor" id="modulesEditor"></div>
+          <p class="settings-intro" style="margin-top:22px;">Your stats — rename each and pick its color. The five stats stay; only how they look changes.</p>
+          <div class="stats-editor" id="statsEditor"></div>
+        </div>
+
+        <!-- Rules Tab (global settings that apply across every pursuit) -->
+        <div class="settings-panel" id="settingsGoals" data-panel="goals" style="display:none;">
+          <p class="settings-intro">Global rules that apply across every pursuit. Each pursuit's own weekly target lives on its card in the Pursuits tab.</p>
           <div class="set-row">
-            <div class="set-row-text"><span class="set-row-label">Workouts / week</span><span class="set-row-hint">Minimum training sessions</span></div>
-            <input type="number" id="cfgWorkoutMin" data-cfg="true" value="5" min="0">
-          </div>
-          <div class="set-row">
-            <div class="set-row-text"><span class="set-row-label">Protein days / week</span><span class="set-row-hint">Days hitting your nutrition floor</span></div>
-            <input type="number" id="cfgProteinMin" data-cfg="true" value="7" min="0">
-          </div>
-          <div class="set-row">
-            <div class="set-row-text"><span class="set-row-label">Study hours / week</span><span class="set-row-hint">Certification &amp; skill time</span></div>
-            <input type="number" id="cfgStudyTarget" data-cfg="true" value="14" min="0">
-          </div>
-          <div class="set-row">
-            <div class="set-row-text"><span class="set-row-label">Project hours / week</span><span class="set-row-hint">Minimum output-producing work</span></div>
-            <input type="number" id="cfgProjectTarget" data-cfg="true" value="2" min="0">
+            <div class="set-row-text"><span class="set-row-label">Nutrition floor</span><span class="set-row-hint">Percent of a day's scheduled provision tasks needed for a successful day</span></div>
+            <input type="number" id="cfgProteinFloorPct" data-cfg="true" value="60" min="1" max="100">
           </div>
           <div class="set-row">
             <div class="set-row-text"><span class="set-row-label">Difficulty</span><span class="set-row-hint">How fast you level up</span></div>
@@ -370,21 +350,12 @@
           </div>
         </div>
 
-        <!-- Sections Tab -->
-        <div class="settings-panel" id="settingsModules" data-panel="modules" style="display:none;">
-          <p class="settings-intro">Your pursuits — the areas of life you're leveling up. Rename, reorder, show/hide, or add your own. This is your dashboard — make it yours.</p>
-          <div class="modules-editor" id="modulesEditor"></div>
-          <p class="settings-intro" style="margin-top:22px;">Your stats — rename each and pick its color. The five stats stay; only how they look changes.</p>
-          <div class="stats-editor" id="statsEditor"></div>
-        </div>
-
         <!-- Profile Tab -->
         <div class="settings-panel" id="settingsProfile" data-panel="profile" style="display:none;">
-          <p class="settings-intro">Your hero identity and which pursuits to show.</p>
+          <p class="settings-intro">Your hero identity and reminders.</p>
           <label class="label">Callsign</label>
           <input type="text" id="cfgCallsign" placeholder="Player One" maxlength="28">
-          <label class="label" style="margin-top:18px;">Visible sections</label>
-          <div class="section-toggles" id="sectionToggles"></div>
+          <p class="hint" style="margin-top:8px;">Show or hide pursuits from the <strong>Pursuits</strong> tab — each pursuit card has its own Show toggle.</p>
 
           <label class="label" style="margin-top:18px;">Reminders (phone push)</label>
           <label class="check" style="margin:0 0 4px;"><input type="checkbox" id="cfgRemindEnable"><span>Enable push reminders on this device</span></label>
@@ -410,6 +381,35 @@
             <button id="loadSampleBtn"><svg viewBox="0 0 24 24" class="ic"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.5 2.5M16.5 16.5L19 19M19 5l-2.5 2.5M7.5 16.5L5 19"/></svg>Load Sample Data</button>
             <button class="danger" id="settingsResetBtn"><svg viewBox="0 0 24 24" class="ic"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Reset This Week</button>
           </div>
+        </div>
+
+        <!-- Sync Tab -->
+        <div class="settings-panel" id="settingsSync" data-panel="sync" style="display:none;">
+          <p class="settings-intro">Sync your daily quests with Apple Reminders. Complete a quest on your phone or in The Forge — it updates everywhere.</p>
+
+          <label class="label">Sync Token</label>
+          <p class="hint">Your sync script uses this token to authenticate with The Forge.</p>
+          <div class="sync-token-row">
+            <code id="syncTokenDisplay" class="sync-token-code">Not generated yet</code>
+            <button id="syncGenTokenBtn" type="button" class="sync-btn" title="Generate new token">Generate</button>
+            <button id="syncCopyTokenBtn" type="button" class="sync-btn" title="Copy token">Copy</button>
+          </div>
+
+          <label class="label" style="margin-top:18px;">Status</label>
+          <div id="syncStatusDisplay" class="sync-status">
+            <span class="sync-dot offline"></span>
+            <span>No sync detected yet</span>
+          </div>
+
+          <label class="label" style="margin-top:18px;">Setup (macOS)</label>
+          <div class="sync-instructions">
+            <p><strong>1.</strong> Click <strong>Generate</strong> above to create your sync token.</p>
+            <p><strong>2.</strong> On your Mac, open Terminal in the Forge directory and run:</p>
+            <pre><code>bash install-sync.sh</code></pre>
+            <p><strong>3.</strong> Paste your Forge URL and sync token when prompted.</p>
+            <p><strong>4.</strong> A <strong>"The Forge"</strong> list will appear in Apple Reminders with today's quests. ✅</p>
+          </div>
+          <p class="hint" style="margin-top:8px;">Sync runs every 5 minutes while your Mac is on. To stop: <code>bash uninstall-sync.sh</code></p>
         </div>
 
         <div class="modal-actions">
@@ -527,57 +527,52 @@
       </div>
     </div>
 
-    <!-- Edit Workouts Modal -->
-    <div class="modal-backdrop" id="editWorkoutsModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true">
-        <h3>Edit Workout Plan</h3>
-        <p class="hint">One plan per line (7 lines max, mapped to Mon-Sun).</p>
-        <textarea id="editWorkoutsTextarea" spellcheck="false"></textarea>
-        <div class="modal-actions">
-          <button id="cancelWorkoutsBtn" type="button">Cancel</button>
-          <button id="saveWorkoutsBtn" type="button" class="primary">Save Workouts</button>
+    <!-- Certification / Project editor -->
+    <div class="modal-backdrop" id="goalEditorModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="goalEditorTitle" style="max-width:560px;">
+        <div class="modal-head">
+          <div class="modal-title-wrap"><span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></span><h3 id="goalEditorTitle">Add pursuit</h3></div>
+          <button class="modal-close" id="closeGoalEditorBtn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="form-grid">
+          <div class="form-span"><label class="label" for="goalTitle">Name</label><input id="goalTitle" type="text" maxlength="120" placeholder="AZ-900, Portfolio rebuild, Spanish B2…"></div>
+          <div class="form-span"><label class="label" for="goalObjective">Outcome</label><textarea id="goalObjective" style="min-height:76px" maxlength="500" placeholder="What does done look like?"></textarea></div>
+          <div><label class="label" for="goalStatus">Status</label><select id="goalStatus"><option>Planned</option><option>In Progress</option><option>Ready for Exam</option><option>Paused</option><option>Completed</option></select></div>
+          <div><label class="label" for="goalTargetDate">Target date</label><input id="goalTargetDate" type="date"></div>
+        </div>
+        <div class="modal-actions split-actions">
+          <button class="danger" id="deleteGoalBtn" type="button" style="display:none">Delete</button>
+          <span class="action-spacer"></span>
+          <button id="cancelGoalEditorBtn" type="button">Cancel</button>
+          <button id="saveGoalEditorBtn" type="button" class="primary">Save</button>
         </div>
       </div>
     </div>
 
-    <!-- Edit Study Modal -->
-    <div class="modal-backdrop" id="editStudyModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true">
-        <h3>Edit Study Plan</h3>
-        <p class="hint">One certification or skill per line.</p>
-        <textarea id="editStudyTextarea" spellcheck="false"></textarea>
-        <div class="modal-actions">
-          <button id="cancelStudyBtn" type="button">Cancel</button>
-          <button id="saveStudyBtn" type="button" class="primary">Save Study Plan</button>
+    <!-- Unified quest editor -->
+    <div class="modal-backdrop" id="questEditorModal" aria-hidden="true">
+      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="questEditorTitle" style="max-width:560px;">
+        <div class="modal-head">
+          <div class="modal-title-wrap"><span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span><h3 id="questEditorTitle">Add task</h3></div>
+          <button class="modal-close" id="closeQuestEditorBtn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="form-grid">
+          <div class="form-span"><label class="label" for="questTitle">Task</label><input id="questTitle" type="text" maxlength="160" placeholder="Watch module 1 and take notes"></div>
+          <div><label class="label" for="questScheduleType">Schedule</label><select id="questScheduleType"><option value="once">One-time</option><option value="weekly">Weekly routine</option></select></div>
+          <div><label class="label" for="questSource">Pursuit</label><select id="questSource"></select></div>
+          <div class="form-span" id="questOnceFields"><label class="label" for="questDate">Do on</label><input id="questDate" type="date"></div>
+          <div class="form-span" id="questWeeklyFields" style="display:none;"><label class="label">Repeat on</label><div class="weekday-picker" id="questWeekdays"></div></div>
+          <div class="form-span"><label class="label" for="questAttr">Attribute</label><select id="questAttr"></select><p class="hint quest-attr-hint" id="questAttrHint">Tasks inside a pursuit automatically train that pursuit's attribute.</p></div>
+        </div>
+        <div class="modal-actions split-actions">
+          <button class="danger" id="deleteQuestBtn" type="button" style="display:none">Delete</button>
+          <span class="action-spacer"></span>
+          <button id="cancelQuestEditorBtn" type="button">Cancel</button>
+          <button id="saveQuestEditorBtn" type="button" class="primary">Save task</button>
         </div>
       </div>
     </div>
 
-    <!-- Edit Diet Modal -->
-    <div class="modal-backdrop" id="editDietModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true">
-        <h3>Edit Diet & Protein Plan</h3>
-        <p class="hint">One item per line. Each becomes a checkbox worth protein XP.</p>
-        <textarea id="editDietTextarea" spellcheck="false"></textarea>
-        <div class="modal-actions">
-          <button id="cancelDietBtn" type="button">Cancel</button>
-          <button id="saveDietBtn" type="button" class="primary">Save Diet Plan</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Edit Project Outputs Modal -->
-    <div class="modal-backdrop" id="editProjectModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true">
-        <h3>Edit Project Output Checks</h3>
-        <p class="hint">One item per line. Each becomes a checkbox worth project XP.</p>
-        <textarea id="editProjectTextarea" spellcheck="false"></textarea>
-        <div class="modal-actions">
-          <button id="cancelProjectBtn" type="button">Cancel</button>
-          <button id="saveProjectBtn" type="button" class="primary">Save Outputs</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Edit Review Prompts Modal -->
     <div class="modal-backdrop" id="editReviewModal" aria-hidden="true">
@@ -724,10 +719,10 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="modules.js?v=10"></script>
-  <script src="game.js?v=24"></script>
+  <script src="modules.js?v=15"></script>
+  <script src="game.js?v=27"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=48"></script>
+  <script src="app.js?v=59"></script>
   <script src="extras.js?v=5"></script>
 </body>
 </html>

@@ -125,6 +125,17 @@ function getVapid() {
 const VAPID = getVapid();
 webpush.setVapidDetails('mailto:forge@example.com', VAPID.publicKey, VAPID.privateKey);
 
+// Persisted sync token for Apple Reminders sync script (Bearer auth).
+function getSyncToken() {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'sync_token'").get();
+  return (row && row.value) ? row.value : null;
+}
+function generateSyncToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('sync_token', ?)").run(token);
+  return token;
+}
+
 function getStoredPasswordHash() {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(PASSWORD_HASH_KEY);
   if (!row || !row.value) return null;
@@ -526,6 +537,13 @@ const requireAuth = (req, res, next) => {
     }
     return res.redirect('/setup.html');
   }
+  // Accept Bearer token auth from sync scripts alongside cookie auth.
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const stored = getSyncToken();
+    if (stored && safeStringEqual(token, stored)) return next();
+  }
   if (req.signedCookies.auth_token === 'ok') {
     next();
   } else {
@@ -727,6 +745,27 @@ app.post('/api/push/unsubscribe', (req, res) => {
     if (typeof req.body.endpoint !== 'string' || req.body.endpoint.length > 2048) return validationError(res, 'subscription endpoint is invalid.');
     db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(req.body.endpoint);
   }
+  res.json({ success: true });
+});
+
+// ===== Reminders Sync =====
+app.post('/api/sync/token', (req, res) => {
+  const token = generateSyncToken();
+  res.json({ token });
+});
+app.get('/api/sync/token', (req, res) => {
+  const token = getSyncToken();
+  res.json({ token: token || null });
+});
+app.get('/api/sync/status', (req, res) => {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'sync_status'").get();
+  const token = getSyncToken();
+  res.json({ status: row ? parseJson(row.value) : null, tokenConfigured: !!token });
+});
+app.post('/api/sync/heartbeat', (req, res) => {
+  const { lastSync, synced, errors } = req.body || {};
+  const value = JSON.stringify({ lastSync, synced: synced || 0, errors: errors || 0, receivedAt: new Date().toISOString() });
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('sync_status', ?)").run(value);
   res.json({ success: true });
 });
 

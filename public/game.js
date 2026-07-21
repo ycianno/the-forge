@@ -329,10 +329,12 @@
     const di = date.getDay();
     const names = Object.keys(getDailyBlueprint());
     const tasks = getDailyBlueprint()[names[di]] || [];
-    if (!tasks.length) return 0;
+    const linked = unifiedDay(date);
+    if (!tasks.length && !linked.length) return 0;
     let done = 0;
     tasks.forEach(t => { if (wk.checks[taskId(di, t)]) done++; });
-    return Math.round(done / tasks.length * 100);
+    linked.forEach((q) => { if (wk.checks[questCheckId(q, date)]) done++; });
+    return Math.round(done / (tasks.length + linked.length) * 100);
   }
   function computeDayStreak() {
     const thr = 50;
@@ -642,23 +644,26 @@
     const names = Object.keys(getDailyBlueprint());
     return getDailyBlueprint()[names[date.getDay()]] || [];
   }
+  function unifiedDay(date) { return typeof questsForDate === "function" ? questsForDate(date) : []; }
   function weekChecks(date) {
     const db = (typeof database !== "undefined") ? database : null;
     if (!db || !db.weeks || typeof getStartOfWeek !== "function") return {};
     const wk = db.weeks[iso(getStartOfWeek(date))];
     return (wk && wk.checks) ? wk.checks : {};
   }
-  // Blueprint quests only — matches the Daily tab + the day-cleared celebration.
+  // Recurring habits + unified scheduled quests — exactly what Daily renders.
   function dayQuest(date) {
     const tasks = blueprintDay(date), checks = weekChecks(date);
     let done = 0;
     tasks.forEach(t => { if (checks[taskId(date.getDay(), t)]) done++; });
-    return { done, total: tasks.length };
+    const linked = unifiedDay(date);
+    linked.forEach((q) => { if (checks[questCheckId(q, date)]) done++; });
+    return { done, total: tasks.length + linked.length };
   }
-  // Quests + that day's workout slot — matches calculateWeekScoreData's units.
+  // Every actionable plan item is already a unified quest. There is no extra
+  // workout slot beside the task list.
   function dayUnits(date) {
-    const q = dayQuest(date), checks = weekChecks(date);
-    return { done: q.done + (checks["workout-" + date.getDay()] ? 1 : 0), total: q.total + 1 };
+    return dayQuest(date);
   }
   function weekPct(weekStart) {
     const db = (typeof database !== "undefined") ? database : null;
@@ -850,9 +855,16 @@
       const db = (typeof database !== "undefined") ? database : null;
       if (!db || !db.weeks) return false;
       for (const k in db.weeks) {
-        const c = (db.weeks[k] || {}).checks || {};
-        let all = true; for (let i = 0; i < 7; i++) { if (!c["workout-" + i]) { all = false; break; } }
-        if (all) return true;
+        const c = (db.weeks[k] || {}).checks || {}, start = new Date(k + "T00:00:00");
+        let total = 0, done = 0;
+        for (let day = 0; day < 7; day++) {
+          const date = new Date(start); date.setDate(start.getDate() + day);
+          unifiedDay(date).forEach((q) => {
+            if ((q.category || "discipline") !== "training") return;
+            total++; if (c[questCheckId(q, date)]) done++;
+          });
+        }
+        if (total >= ((typeof settings !== "undefined" && settings.workoutMin) || 5) && done === total) return true;
       }
       return false;
     })();
@@ -1087,7 +1099,12 @@
       if (!cats[cat]) cats[cat] = { done: 0, total: 0 };
       cats[cat].total++; if (checks[taskId(di, t)]) cats[cat].done++;
     });
-    return { qDone: q.done, qTotal: q.total, uDone: u.done, uTotal: u.total, workout: !!checks["workout-" + di], cats };
+    unifiedDay(today).forEach((q) => {
+      const cat = q.category || "discipline";
+      if (!cats[cat]) cats[cat] = { done: 0, total: 0 };
+      cats[cat].total++; if (checks[questCheckId(q, today)]) cats[cat].done++;
+    });
+    return { qDone: q.done, qTotal: q.total, uDone: u.done, uTotal: u.total, workout: !!(cats.training && cats.training.done), cats };
   }
 
   // The full pool available *today* (base missions + any category present today).
@@ -1251,6 +1268,26 @@
     (modules || []).forEach(m => {
       if (!m || m.enabled === false) return;
       const nm = m.name || "Pursuit";
+      const usesUnifiedPlan = Number(settings.taskModelVersion || 0) >= 3 && (m.id === "workout" || m.id === "diet" || m.planOnly);
+      if (usesUnifiedPlan && typeof questWeekStats === "function") {
+        const start = wqWeekStart();
+        if (m.id === "diet" && typeof nutritionWeekStats === "function") {
+          const stats = nutritionWeekStats(week, start);
+          if (!stats.total) return;
+          const target = Number((m.target && m.target.value) || settings.proteinMin || 7);
+          push(m, nm + ": " + target + " nutrition day" + (target === 1 ? "" : "s"), stats.daysMet, target);
+        } else if (m.id === "workout") {
+          const stats = questWeekStats(week, start, m.id);
+          if (!stats.total) return;
+          const target = Number((m.target && m.target.value) || settings.workoutMin || 5);
+          push(m, nm + ": " + target + " session" + (target === 1 ? "" : "s"), stats.done, target);
+        } else {
+          const stats = questWeekStats(week, start, m.id);
+          if (!stats.total) return;
+          push(m, nm + ": complete the plan", stats.done, stats.total);
+        }
+        return;
+      }
       if (m.type === "table") {
         const n = m.checkCount != null ? m.checkCount : (m.rows ? m.rows.length : 7);
         const tgt = (m.target && m.target.value) ? Number(m.target.value) : n;
