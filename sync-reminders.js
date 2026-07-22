@@ -73,7 +73,6 @@ function runJxa(script) {
     try { fs.unlinkSync(tmpFile); } catch (_) {}
     return output.trim();
   } catch (error) {
-    console.error("JXA Execution Error:", error.message);
     try { fs.unlinkSync(tmpFile); } catch (_) {}
     return null;
   }
@@ -169,9 +168,11 @@ function updateReminderTimeAndBody(id, dueTime, body) {
 
   const script = `
     const app = Application("Reminders");
-    const rem = app.reminders.byId(${JSON.stringify(id)});
-    ${timeSetup}
-    if (${JSON.stringify(body)}) rem.body = ${JSON.stringify(body)};
+    try {
+      const rem = app.reminders.byId(${JSON.stringify(id)});
+      ${timeSetup}
+      if (${JSON.stringify(body)}) rem.body = ${JSON.stringify(body)};
+    } catch(e) {}
   `;
   runJxa(script);
 }
@@ -179,8 +180,10 @@ function updateReminderTimeAndBody(id, dueTime, body) {
 function markReminderCompleted(id) {
   const script = `
     const app = Application("Reminders");
-    const rem = app.reminders.byId(${JSON.stringify(id)});
-    rem.completed = true;
+    try {
+      const rem = app.reminders.byId(${JSON.stringify(id)});
+      rem.completed = true;
+    } catch(e) {}
   `;
   runJxa(script);
 }
@@ -188,8 +191,10 @@ function markReminderCompleted(id) {
 function deleteReminder(id) {
   const script = `
     const app = Application("Reminders");
-    const rem = app.reminders.byId(${JSON.stringify(id)});
-    rem.delete();
+    try {
+      const rem = app.reminders.byId(${JSON.stringify(id)});
+      rem.delete();
+    } catch(e) {}
   `;
   runJxa(script);
 }
