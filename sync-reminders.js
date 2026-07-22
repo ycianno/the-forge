@@ -86,13 +86,26 @@ function getReminders() {
     try { list = app.lists.byName("The Forge"); list.name(); }
     catch(e) { list = app.List({ name: "The Forge" }); app.lists.push(list); }
 
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
     const reminders = list.reminders();
     const result = reminders.map(r => {
       let dueTime = "";
+      let isPast = false;
+      let dateStr = "";
       try {
         const d = r.dueDate();
         if (d) {
           const dt = new Date(d);
+          const y = dt.getFullYear();
+          const mo = String(dt.getMonth() + 1).padStart(2, '0');
+          const dy = String(dt.getDate()).padStart(2, '0');
+          dateStr = \`\${y}-\${mo}-\${dy}\`;
+
+          if (dt < todayStart) {
+            isPast = true;
+          }
           const h = dt.getHours();
           const m = dt.getMinutes();
           if (h !== 0 || m !== 0) {
@@ -106,7 +119,9 @@ function getReminders() {
         name: r.name(),
         body: r.body() || "",
         completed: r.completed(),
-        dueTime: dueTime
+        dueTime,
+        isPast,
+        dateStr
       };
     });
     JSON.stringify(result);
@@ -226,7 +241,25 @@ async function sync() {
     const weekData = (database.weeks && database.weeks[weekKey]) ? database.weeks[weekKey] : { checks: {}, fields: {} };
     const checks = weekData.checks || {};
 
-    // Compute today's active quests
+    // 1. Fetch current Apple Reminders
+    const allReminders = getReminders();
+
+    // 2. Clean up past/yesterday reminders from Apple Reminders so the list stays focused on TODAY
+    for (const r of allReminders) {
+      const isForgeReminder = (r.name || '').includes('🗡️') || (r.body || '').includes('forge:');
+      if (!isForgeReminder) continue;
+
+      if (r.isPast || (r.dateStr && r.dateStr < todayStr)) {
+        console.log(`  ✕ Cleaning past reminder from ${r.dateStr || 'yesterday'}: ${r.name}`);
+        deleteReminder(r.id);
+        syncedCount++;
+      }
+    }
+
+    // Fetch fresh active reminders after clearing past ones
+    const reminders = getReminders().filter(r => !r.isPast && (!r.dateStr || r.dateStr >= todayStr));
+
+    // 3. Compute today's active quests
     const activeQuests = {};
     (settings.quests || []).forEach(q => {
       if (q.archived) return;
@@ -251,26 +284,24 @@ async function sync() {
       }
     });
 
-    const reminders = getReminders();
     let forgeUpdates = false;
 
-    // Reconcile Forge <-> Reminders
+    // 4. Reconcile Today's Forge Quests <-> Today's Reminders
     for (const checkId in activeQuests) {
       const q = activeQuests[checkId];
-      // Match by title (clean) OR checkId in body for backwards compatibility
       const reminder = reminders.find(r => 
         cleanTitle(r.name) === q.title.trim() || r.body.includes('forge:' + checkId)
       );
 
       if (!reminder) {
-        // Quest not in Reminders yet — create it (unless already completed in Forge)
+        // Quest not in Reminders yet — create it for Today (unless already completed in Forge)
         if (!q.isCompleted) {
-          console.log(`  + Creating Reminder: ${q.title} (${q.dueTime || 'all-day'})`);
+          console.log(`  + Creating Today Reminder: ${q.title} (${q.dueTime || 'all-day'})`);
           createReminder('🗡️ ' + q.title, q.attr || 'Discipline', q.dueTime);
           syncedCount++;
         }
       } else {
-        // Reminder exists: check if dueTime needs updating
+        // Reminder exists for Today: check if dueTime needs updating
         if (q.dueTime !== reminder.dueTime) {
           console.log(`  ✎ Updating Reminder time for ${q.title}: ${reminder.dueTime || 'all-day'} -> ${q.dueTime || 'all-day'}`);
           updateReminderTimeAndBody(reminder.id, q.dueTime, q.attr || 'Discipline');
@@ -278,7 +309,7 @@ async function sync() {
         }
 
         if (reminder.completed && !q.isCompleted) {
-          // Completed in Reminders but not in Forge → mark done in Forge
+          // Completed in Reminders but not in Forge → mark done in Forge for Today
           console.log(`  ← Forge complete: ${q.title}`);
           checks[checkId] = true;
           forgeUpdates = true;
@@ -292,7 +323,7 @@ async function sync() {
       }
     }
 
-    // Cleanup stale/orphaned Reminders (quests no longer active today)
+    // 5. Cleanup stale/orphaned Reminders for Today (quests no longer active today)
     for (const r of reminders) {
       const rName = cleanTitle(r.name);
       const isForgeReminder = (r.name || '').includes('🗡️') || (r.body || '').includes('forge:');
@@ -320,7 +351,7 @@ async function sync() {
       errors: errorCount
     });
 
-    console.log(`[${ts}] Sync complete — ${syncedCount} actions, ${Object.keys(activeQuests).length} active quests.`);
+    console.log(`[${ts}] Sync complete — ${syncedCount} actions, ${Object.keys(activeQuests).length} active quests today.`);
 
   } catch (error) {
     console.error(`[${ts}] Sync failed:`, error.message);
