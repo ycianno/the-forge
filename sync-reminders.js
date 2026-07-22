@@ -244,19 +244,28 @@ async function sync() {
     // 1. Fetch current Apple Reminders
     const allReminders = getReminders();
 
-    // 2. Clean up past/yesterday reminders from Apple Reminders so the list stays focused on TODAY
-    for (const r of allReminders) {
+    // 2. Clean up past/yesterday reminders AND duplicate reminders from Apple Reminders
+    const seenTitles = new Set();
+    for (let i = allReminders.length - 1; i >= 0; i--) {
+      const r = allReminders[i];
       const isForgeReminder = (r.name || '').includes('🗡️') || (r.body || '').includes('forge:');
       if (!isForgeReminder) continue;
 
+      const cTitle = cleanTitle(r.name);
       if (r.isPast || (r.dateStr && r.dateStr < todayStr)) {
         console.log(`  ✕ Cleaning past reminder from ${r.dateStr || 'yesterday'}: ${r.name}`);
         deleteReminder(r.id);
         syncedCount++;
+      } else if (seenTitles.has(cTitle)) {
+        console.log(`  ✕ Cleaning duplicate reminder: ${r.name}`);
+        deleteReminder(r.id);
+        syncedCount++;
+      } else {
+        seenTitles.add(cTitle);
       }
     }
 
-    // Fetch fresh active reminders after clearing past ones
+    // Fetch fresh active reminders after clearing past and duplicate items
     const reminders = getReminders().filter(r => !r.isPast && (!r.dateStr || r.dateStr >= todayStr));
 
     // 3. Compute today's active quests
