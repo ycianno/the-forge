@@ -225,6 +225,8 @@ Then open **http://localhost:3007**.
 | **Can't reach it from my phone** | Use your machine's LAN IP, not `localhost`: `http://<server-ip>:3007`. Both devices must be on the same Wi-Fi, and the host firewall must allow port 3007. For outside-home access, see [Accessing it](#accessing-it-from-your-phone--outside-home). |
 | **I forgot my password / want to change it** | Set a temporary `APP_PASSWORD` environment override and restart, log in, export a backup if needed, then remove the override when you're ready to use the stored setup password again. |
 | **How do I update?** | **Docker:** `docker pull …:latest` then recreate the container (your `data/` volume is kept). **Bare metal:** `git pull && npm install &&` restart. Your database is never touched by updates. |
+| **How do I uninstall?** | **Linux / macOS:** `./uninstall.sh` (pass `--purge` to delete database and config). **Windows:** Double-click `uninstall.bat` or run `.\uninstall.ps1` in PowerShell (pass `-Purge` to delete data). |
+
 
 ## Configuration
 
