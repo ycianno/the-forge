@@ -104,6 +104,30 @@
     return ATTR_OF_CAT[categoryFor(text)] || "Discipline";
   }
 
+  /* =========================================================================
+   * LEGACY — weeks logged before taskModelVersion 4
+   * -------------------------------------------------------------------------
+   * Everything between this banner and END LEGACY exists only to read history.
+   * The current app cannot produce any of it: migrations 2→4 emptied
+   * settings.dayTemplates, settings.taskLinks, settings.workouts and
+   * settings.dietItems, and there is no code path that writes them again.
+   *
+   * It is kept — not deleted — because The Forge ships as a published image
+   * and installs upgrading from an older version still hold weeks whose checks
+   * use these ids. Removing this would silently re-score their history and move
+   * their level on upgrade.
+   *
+   * Rules for this block:
+   *   - nothing here may be called from a path that a post-v4 week reaches,
+   *     except through the two legacy* helpers below, which no-op on an empty
+   *     blueprint;
+   *   - nothing new may be added here;
+   *   - link behavior is pinned by the LEGACY LINK cases in
+   *     test/engine-regression.js. The fuzz above them does NOT cover links —
+   *     its oracle is pre-link legacy logic, so a link-bearing week would
+   *     mismatch by design. Those golden cases are the only coverage; keep them.
+   * ====================================================================== */
+
   // ----- daily task ↔ section links ----------------------------------------
   // A link ref = { m: moduleId, item?: string, mode: "share"|"count"|"stat" }:
   //   share → ONE shared checkbox (table day-row, checklist/composite item)
@@ -170,6 +194,40 @@
     }));
     return days;
   }
+
+  // The two seams between the live engine and this block. Both iterate the
+  // legacy blueprint, so on a post-v4 week (blueprint empty) they do nothing and
+  // return immediately — the live path never walks link logic.
+  //
+  // Ids a legacy daily task contributes to the weekly score. A task whose link
+  // is consumed by its section is skipped so it is not counted twice.
+  function legacyBlueprintIds(m, modules) {
+    const bp = m.blueprint || {};
+    const ids = [];
+    Object.keys(bp).forEach((day, i) => (bp[day] || []).forEach((t) => {
+      const link = taskLinkOf(m.taskLinks, t);
+      if (link && linkConsumesDaily(link, modules, i)) return;
+      ids.push(taskId(i, t));
+    }));
+    return ids;
+  }
+  // XP for completed legacy daily tasks. A linked task takes its section's stat;
+  // otherwise the explicit per-task attribute, else the keyword default.
+  function legacyBlueprintXp(m, modules, checks, award) {
+    const bp = m.blueprint || {};
+    Object.keys(bp).forEach((day, i) => (bp[day] || []).forEach((t) => {
+      const link = taskLinkOf(m.taskLinks, t);
+      if (link && linkConsumesDaily(link, modules, i)) return;
+      if (!checks[taskId(i, t)]) return;
+      let attr;
+      if (link) { const lm = (modules || []).find((x) => x.id === normLink(link).m); if (lm) attr = lm.attr; }
+      if (!attr) attr = dailyAttr(t, m.taskAttrs);
+      const c = CAT_OF_ATTR[attr] || "discipline";
+      award(c, XP_BY_CAT[c] || XP_BY_CAT.other, m.source);
+    }));
+  }
+  /* ===== END LEGACY ====================================================== */
+
   // Days a section's OWN scheduled tasks (unified quests with areaId === moduleId)
   // were completed this week — the new-model equivalent of a "session". Lets a
   // counter's number move when you tick its scheduled task in Daily Quests.
@@ -292,6 +350,9 @@
       // never retroactively changes historical weeks.
       if (!m.countScore) return;
       if (m.type === "daily") {
+        // Legacy blueprint ids only (see LEGACY block); empty on post-v4 weeks.
+        // Unlike weekScore this does not apply link filtering — callers use it
+        // to enumerate every id a week could hold, not to compute a score.
         const bp = m.blueprint || {};
         Object.keys(bp).forEach((day, i) => (bp[day] || []).forEach((t) => ids.push(taskId(i, t))));
       } else if (m.type === "table") {
@@ -313,12 +374,7 @@
     (modules || []).forEach((m) => {
       if (!m.countScore) return;     // `enabled` is visibility-only (see note above)
       if (m.type === "daily") {
-        const bp = m.blueprint || {};
-        Object.keys(bp).forEach((day, i) => (bp[day] || []).forEach((t) => {
-          const link = taskLinkOf(m.taskLinks, t);
-          if (link && linkConsumesDaily(link, modules, i)) return;  // shared/counted by its section
-          set.add(taskId(i, t));                                     // own checkbox (incl. stat links)
-        }));
+        legacyBlueprintIds(m, modules).forEach((id) => set.add(id));   // pre-v4 weeks only; no-op otherwise
         Object.keys(checks).forEach((id) => { if (id.indexOf("quest-") === 0) set.add(id); });
       } else if (m.type === "table") {
         const n = m.checkCount != null ? m.checkCount : (m.rows ? m.rows.length : 0);
@@ -356,18 +412,7 @@
     (modules || []).forEach((m) => {
       // `enabled` is visibility-only — XP always counts (see scoreIds note).
       if (m.type === "daily") {
-        const bp = m.blueprint || {};
-        Object.keys(bp).forEach((day, i) => (bp[day] || []).forEach((t) => {
-          const link = taskLinkOf(m.taskLinks, t);
-          if (link && linkConsumesDaily(link, modules, i)) return;   // shared/counted by its section
-          if (checks[taskId(i, t)]) {
-            let attr;
-            if (link) { const lm = (modules || []).find((x) => x.id === normLink(link).m); if (lm) attr = lm.attr; } // attach → section's stat
-            if (!attr) attr = dailyAttr(t, m.taskAttrs);  // explicit attribute, else keyword default
-            const c = CAT_OF_ATTR[attr] || "discipline";
-            award(c, XP_BY_CAT[c] || XP_BY_CAT.other, m.source);
-          }
-        }));
+        legacyBlueprintXp(m, modules, checks, award);   // pre-v4 weeks only; no-op otherwise
         Object.keys(checks).forEach((id) => {
           if (id.indexOf("quest-") !== 0 || !checks[id]) return;
           const match = id.match(/^quest-([a-z]+)-/);

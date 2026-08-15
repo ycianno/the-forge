@@ -169,6 +169,38 @@ if (trainingStats.done !== 1 || trainingStats.total !== 2 || nutrition60.daysMet
   fails++; console.log("OCCURRENCE TARGET MISMATCH", { trainingStats, nutrition60, nutrition50 });
 }
 
+// ---- LEGACY block: daily-task ↔ section links ------------------------------
+// The fuzz above cannot cover these: its legacy oracle predates links, so a
+// link-bearing week would mismatch by design. These are golden values captured
+// from the engine and verified byte-identical against the pre-quarantine
+// implementation across 28,672 generated weeks. They pin the three link modes
+// (share / count / stat) plus a dangling ref, so the LEGACY block in modules.js
+// cannot be reorganized or dropped without an upgrader's history changing.
+const LINK_BLUEPRINT = {
+  Sunday: ["Workout", "Read"], Monday: ["Workout", "Cook dinner"], Tuesday: ["Deep work"],
+  Wednesday: ["Workout"], Thursday: ["Read"], Friday: ["Cook dinner"], Saturday: ["Deep work"],
+};
+const LINK_WEEK = { checks: {
+  "day-0-workout": true, "day-0-read": true, "day-1-cook-dinner": true, "day-2-deep-work": true,
+  "day-4-read": true, "workout-0": true, "workout-1": true, "diet-cook-instead-of-takeout": true,
+}, fields: { "hours-study-0": "2", projectHours: "1" } };
+const LINK_CASES = [
+  ["share → table row",      { workout: "workout" },                                                    46, 142],
+  ["share → checklist item", { "cook-dinner": { m: "diet", item: "Cook instead of takeout", mode: "share" } }, 43, 160],
+  ["count → hours-table",    { "deep-work": { m: "study", mode: "count" } },                            43, 170],
+  ["stat  → no consumption", { read: { m: "review", mode: "stat" } },                                   44, 172],
+  ["mixed modes at once",    { workout: "workout", "deep-work": { m: "study", mode: "count" }, read: { m: "review", mode: "stat" } }, 45, 140],
+  ["dangling link ref",      { workout: { m: "does-not-exist", mode: "share" } },                       44, 172],
+];
+for (const [label, taskLinks, wantScore, wantXp] of LINK_CASES) {
+  const mods = Forge.migrateModules({ dayTemplates: LINK_BLUEPRINT, taskLinks, workoutMin: 3, proteinMin: 4, studyTarget: 10, projectTarget: 2 });
+  const gotScore = Forge.weekScore(LINK_WEEK, mods);
+  const gotXp = Forge.weekXp(LINK_WEEK, mods).xp;
+  if (gotScore !== wantScore || gotXp !== wantXp) {
+    fails++; console.log("LEGACY LINK DRIFT", { label, gotScore, wantScore, gotXp, wantXp });
+  }
+}
+
 // ---- single-source guard --------------------------------------------------
 // Every consumer (browser app, Apple Reminders sync) must derive check ids from
 // this engine and nowhere else. A private copy silently desyncs completions:
