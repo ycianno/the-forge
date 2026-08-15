@@ -6,6 +6,11 @@ const https = require('https');
 const http = require('http');
 const { execSync } = require('child_process');
 
+// The Forge's engine — the single source of truth for check-id derivation and
+// the attribute→category map. Shared with the browser (public/modules.js) so
+// this script and the app can never disagree about which id a quest owns.
+const Forge = require('./public/modules.js');
+
 // 1. Load Environment Variables
 function loadEnv() {
   const envPath = path.join(__dirname, '.env.sync');
@@ -218,12 +223,6 @@ function getDates() {
   return { todayStr, dayIndex, weekKey };
 }
 
-// 5. Attribute → category fallback (matches The Forge's attrCat() function)
-function attrCat(attr) {
-  const map = { Discipline: 'discipline', Body: 'training', Mind: 'study', Vitality: 'provisions', Craft: 'projects' };
-  return map[attr] || 'discipline';
-}
-
 // Clean title helper (strips 🗡️ prefix if present)
 function cleanTitle(str) {
   return String(str || '').replace(/^🗡️\s*/, '').trim();
@@ -278,13 +277,14 @@ async function sync() {
     (settings.quests || []).forEach(q => {
       if (q.archived) return;
 
-      const category = q.category || attrCat(q.attr || 'Discipline');
+      // Check ids come from the engine (public/modules.js) — never rebuilt here.
+      // A private copy of this format silently desyncs Reminders from The Forge.
       let checkId = null;
 
       if (q.scheduleType === 'weekly' && q.repeatDays && q.repeatDays.includes(dayIndex)) {
-        checkId = `quest-${category}-${q.id}-d${dayIndex}`;
+        checkId = Forge.questCheckId(q, dayIndex);
       } else if (q.scheduleType !== 'weekly' && q.scheduledDate === todayStr) {
-        checkId = `quest-${category}-${q.id}`;
+        checkId = Forge.questCheckId(q);
       }
 
       if (checkId) {

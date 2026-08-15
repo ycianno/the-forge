@@ -33,8 +33,8 @@
   // Hour/review XP rates now live in modules.js (the engine). game.js keeps only
   // XP_BY_CAT/ATTR_OF_CAT below, still used by the UI helpers (xpForCat, radar).
 
-  // Diet & project check ids are derived at runtime from the editable lists in
-  // app.js (getDietItems/dietId, getProjectChecks/projId).
+  // Diet & project check ids for historical weeks are derived by the engine
+  // (modules.js) from settings.dietItems / settings.projectChecks.
 
   // ----- Attributes (the RPG stat sheet) -----------------------------------
   const ATTR_OF_CAT = {

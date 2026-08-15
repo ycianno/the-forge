@@ -47,6 +47,14 @@
     const dayIndex = typeof occurrence === "number" ? occurrence : (occurrence && typeof occurrence.getDay === "function") ? occurrence.getDay() : null;
     return dayIndex == null ? base : `${base}-d${dayIndex}`;
   }
+  // The per-occurrence field id holding a task's session note. Same occurrence
+  // rules as questCheckId, so a note always travels with the check it belongs to.
+  function questNoteId(q, occurrence) {
+    const base = `quest-note-${q.id}`;
+    if (q.scheduleType !== "weekly") return base;
+    const dayIndex = typeof occurrence === "number" ? occurrence : (occurrence && typeof occurrence.getDay === "function") ? occurrence.getDay() : null;
+    return dayIndex == null ? base : `${base}-d${dayIndex}`;
+  }
   function localIso(date) {
     const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, "0"), d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
@@ -450,6 +458,6 @@
   return {
     XP_BY_CAT, ATTR_OF_CAT, CAT_OF_ATTR, ATTR_LIST, ATTR_COLOR, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
-    slug, taskId, checklistId, questCheckId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
+    slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });

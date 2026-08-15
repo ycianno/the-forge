@@ -169,5 +169,30 @@ if (trainingStats.done !== 1 || trainingStats.total !== 2 || nutrition60.daysMet
   fails++; console.log("OCCURRENCE TARGET MISMATCH", { trainingStats, nutrition60, nutrition50 });
 }
 
+// ---- single-source guard --------------------------------------------------
+// Every consumer (browser app, Apple Reminders sync) must derive check ids from
+// this engine and nowhere else. A private copy silently desyncs completions:
+// sync-reminders.js once mapped Vitality→"provisions" and Craft→"projects",
+// so those quests wrote ids the app never read. Locked down here.
+const EXPECTED_CAT_OF_ATTR = { Discipline: "discipline", Body: "training", Mind: "study", Vitality: "protein", Craft: "project" };
+for (const [attr, cat] of Object.entries(EXPECTED_CAT_OF_ATTR)) {
+  if (Forge.CAT_OF_ATTR[attr] !== cat) { fails++; console.log("CAT_OF_ATTR DRIFT", { attr, got: Forge.CAT_OF_ATTR[attr], want: cat }); }
+  // A quest with no explicit category must fall back to the same id the app uses.
+  const q = { id: "q1", attr, scheduleType: "weekly", repeatDays: [3] };
+  const want = `quest-${cat}-q1-d3`;
+  if (Forge.questCheckId(q, 3) !== want) { fails++; console.log("FALLBACK CHECK-ID DRIFT", { attr, got: Forge.questCheckId(q, 3), want }); }
+}
+// No consumer may rebuild the id format as a string template.
+const fs = require("fs");
+for (const rel of ["sync-reminders.js", "public/app.js"]) {
+  const src = fs.readFileSync(path.join(ROOT, rel), "utf8");
+  const handRolled = src.match(/`quest-\$\{[^`]*\}-\$\{[^`]*\}`|["'`]quest-["'`]\s*\+/g);
+  if (handRolled) { fails++; console.log(`HAND-ROLLED CHECK ID in ${rel}`, handRolled); }
+}
+// Legacy and note ids stay byte-identical to what history was written with.
+if (Forge.taskId(3, "Make the bed") !== "day-3-make-the-bed") { fails++; console.log("LEGACY TASK-ID DRIFT", Forge.taskId(3, "Make the bed")); }
+if (Forge.checklistId("diet", "Stay hydrated") !== "diet-stay-hydrated") { fails++; console.log("CHECKLIST-ID DRIFT", Forge.checklistId("diet", "Stay hydrated")); }
+if (Forge.questNoteId({ id: "q1", scheduleType: "weekly" }, 2) !== "quest-note-q1-d2") { fails++; console.log("NOTE-ID DRIFT", Forge.questNoteId({ id: "q1", scheduleType: "weekly" }, 2)); }
+
 console.log(fails === 0 ? "\n✅ ENGINE REGRESSION PASSED — byte-identical to legacy logic." : `\n❌ ${fails} mismatch(es).`);
 process.exit(fails === 0 ? 0 : 1);
