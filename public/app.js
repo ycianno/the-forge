@@ -130,7 +130,8 @@ function applyModuleLayout() {
     if (!sec) return;
     const h2 = sec.querySelector(".summary-left h2");
     if (h2 && m.name) h2.textContent = m.name;
-    sec.style.display = (m.enabled === false) ? "none" : "";
+    // Visibility is owned solely by applySectionVisibility(), so there is one
+    // writer of `display` for both pursuit sections and the non-module ones.
     // Per-pursuit identity: an attribute-color accent on the whole card and a
     // matching icon chip in the header. Daily has no single stat → neutral accent.
     sec.classList.add("has-accent");
@@ -671,29 +672,11 @@ function getTodayDayIndex() {
 }
 
 // ===== DATE UTILITIES =====
-// A light, generic starter routine — the same simple habits every day. Meant to
-// be edited: a fresh install should feel welcoming, not like someone else's life.
-const STARTER_DAY = ["Make the bed", "Drink water", "Move your body (walk or workout)", "Eat something healthy", "Read or learn for 20 min", "Tidy one thing", "Plan tomorrow", "Lights out on time"];
-const defaultDailyBlueprint = {
-  Sunday: [...STARTER_DAY],
-  Monday: [...STARTER_DAY],
-  Tuesday: [...STARTER_DAY],
-  Wednesday: [...STARTER_DAY],
-  Thursday: [...STARTER_DAY],
-  Friday: [...STARTER_DAY],
-  Saturday: [...STARTER_DAY]
-};
-
-const defaultWorkouts = [
-  ["Monday", "Upper Body / Push-Pull"],
-  ["Tuesday", "Lower Body + Core"],
-  ["Wednesday", "Cardio + Mobility"],
-  ["Thursday", "Upper Body"],
-  ["Friday", "Lower Body + Full Body"],
-  ["Saturday", "Optional Cardio / Recovery"],
-  ["Sunday", "Reset / Light Cardio"]
-];
-function getWorkouts() { return settings.workouts || defaultWorkouts; }
+// Seed data lives in the engine (modules.js), which loads before this file and
+// is the single source of truth. Keeping private copies here is how the app and
+// the engine drift apart, so these are references, not duplicates.
+const defaultDailyBlueprint = Forge.DEFAULT_BLUEPRINT;
+const defaultWorkouts = Forge.DEFAULT_WORKOUTS;
 
 function getStartOfWeek(date) {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -894,13 +877,9 @@ function getDailyBlueprint() {
   return settings.dayTemplates || defaultDailyBlueprint;
 }
 
-function taskId(dayIndex, taskText) {
-  const slug = String(taskText).toLowerCase().trim()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
-    .slice(0, 58) || "task";
-  return `day-${dayIndex}-${slug}`;
-}
+// Legacy per-day check id, still needed to read weeks logged before the unified
+// task model. Derived by the engine so it stays byte-identical to history.
+const taskId = Forge.taskId;
 
 async function migrateLegacyIfNeeded() {
   if (database.migratedFromV1) return;
@@ -962,13 +941,6 @@ function setTaskAttr(text, attr) {
 // the task and the section's row for that day are the same checkbox.
 function taskLink(text) {
   return (window.Forge && Forge.taskLinkOf) ? Forge.taskLinkOf(settings.taskLinks, text) : null;
-}
-function setTaskLink(text, moduleId) {
-  if (!settings.taskLinks) settings.taskLinks = {};
-  const key = (window.Forge && Forge.dailyAttrKey) ? Forge.dailyAttrKey(text) : text;
-  if (moduleId) settings.taskLinks[key] = moduleId; else delete settings.taskLinks[key];
-  persistSettings();
-  applyWeekToUI();
 }
 function attrCat(attr) { return (window.Forge && Forge.CAT_OF_ATTR[attr]) || "discipline"; }
 // Attribute display name + color honor the user's overrides (Phase D). The
@@ -1387,12 +1359,7 @@ const defaultMetrics = [
 ];
 function getMetrics() { return settings.metrics || defaultMetrics; }
 
-const defaultStudyAreas = [
-  "Certification / Course",
-  "Language Learning",
-  "Reading List",
-  "Skill Practice"
-];
+const defaultStudyAreas = Forge.DEFAULT_STUDY_AREAS;
 function forgeId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -1593,24 +1560,31 @@ function getStudyGoals() { return Array.isArray(settings.studyGoals) ? settings.
 function getProjectGoals() { return Array.isArray(settings.projectGoals) ? settings.projectGoals : []; }
 function getStudyAreas() { return getStudyGoals().map((g) => g.title); }
 function getUnifiedQuests() { return Array.isArray(settings.quests) ? settings.quests : []; }
-function questCheckId(q, occurrence) {
-  const base = `quest-${q.category || attrCat(q.attr || "Discipline")}-${q.id}`;
-  if (q.scheduleType !== "weekly") return base;
-  const dayIndex = typeof occurrence === "number" ? occurrence : occurrence instanceof Date ? occurrence.getDay() : null;
-  return dayIndex == null ? base : `${base}-d${dayIndex}`;
-}
-function questNoteId(q, occurrence) {
-  const base = `quest-note-${q.id}`;
-  if (q.scheduleType !== "weekly") return base;
-  const dayIndex = typeof occurrence === "number" ? occurrence : occurrence instanceof Date ? occurrence.getDay() : null;
-  return dayIndex == null ? base : `${base}-d${dayIndex}`;
-}
+// Occurrence ids are derived by the engine only — see modules.js. These wrappers
+// exist so call sites stay short, not to hold a second copy of the format.
+const questCheckId = Forge.questCheckId;
+const questNoteId = Forge.questNoteId;
 function questDate(q) { return q && q.scheduledDate ? new Date(q.scheduledDate + "T00:00:00") : null; }
 function questWeekKey(q) { const d = q && q.scheduleType === "once" ? questDate(q) : null; return d ? iso(getStartOfWeek(d)) : ""; }
+// Minutes-since-midnight for a task's scheduled time, or null when untimed.
+// The agenda sorts and groups on this, so an untimed task never jumps the queue.
+function questMinutes(q) {
+  const t = q && q.dueTime;
+  if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
+  const [h, m] = t.split(":").map(Number);
+  if (!(h >= 0 && h <= 23 && m >= 0 && m <= 59)) return null;
+  return h * 60 + m;
+}
 function questsForDate(date) {
   const key = iso(date);
   const dayIndex = date.getDay();
-  return getUnifiedQuests().filter((q) => !q.archived && ((q.scheduleType === "weekly" && (q.repeatDays || []).includes(dayIndex)) || (q.scheduleType !== "weekly" && q.scheduledDate === key))).sort((a, b) => (a.order || 0) - (b.order || 0));
+  return getUnifiedQuests()
+    .filter((q) => !q.archived && ((q.scheduleType === "weekly" && (q.repeatDays || []).includes(dayIndex)) || (q.scheduleType !== "weekly" && q.scheduledDate === key)))
+    .sort((a, b) => {
+      const ta = questMinutes(a), tb = questMinutes(b);
+      if (ta !== tb) return ta == null ? 1 : tb == null ? -1 : ta - tb;
+      return (a.order || 0) - (b.order || 0);
+    });
 }
 function questsForSource(type, sourceId) {
   const areaId = type === "study" ? "study" : type === "project" ? "projects" : type;
@@ -1702,7 +1676,6 @@ function renderStudyAreas() {
   if (!wrap) return;
   const goals = getStudyGoals();
   wrap.innerHTML = goals.length ? goals.map(renderGoalCard).join("") : `<div class="goal-empty"><strong>No certifications or skills yet</strong>Add one, define the outcome, then build its study plan.</div>`;
-  updateCertCountdowns();
 }
 function renderProjectGoals() {
   const wrap = document.getElementById("projectGoalsGrid");
@@ -1843,18 +1816,6 @@ function renderPursuitTaskPanels() {
     const shell = document.createElement("div"); shell.innerHTML = pursuitTaskPanelHtml(m);
     panel.replaceWith(shell.firstElementChild);
   });
-}
-
-function updateCertCountdowns() {
-  const upcoming = getStudyGoals().filter((g) => g.targetDate && g.status !== "Completed").map((g) => ({ goal: g, days: Math.round((new Date(g.targetDate + "T00:00:00") - new Date().setHours(0,0,0,0)) / 86400000) })).filter((x) => x.days >= 0).sort((a, b) => a.days - b.days)[0];
-  const sum = document.getElementById("certSummary");
-  if (!sum) return;
-  if (upcoming) {
-    const wks = Math.max(1, Math.ceil(upcoming.days / 7));
-    const tgt = settings.studyTarget || 14;
-    sum.innerHTML = `⏳ Next target: <strong>${escapeHtml(upcoming.goal.title)}</strong> in <strong>${upcoming.days}</strong> day${upcoming.days === 1 ? "" : "s"} · ${wks * tgt} planned study hours at ${tgt} hrs/wk.`;
-  } else sum.innerHTML = `🎯 Add a target date to a certification to start its countdown.`;
-  sum.style.display = "";
 }
 
 let goalEditorState = null;
@@ -2091,44 +2052,12 @@ async function moveQuest(id, direction) {
 }
 
 // ===== EDITABLE LISTS: Diet / Project / Review =====
-function slugify(text) {
-  return String(text).toLowerCase().trim().normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 48) || "item";
-}
+function slugify(text) { return Forge.slug(text, 48, "item"); }
 
-const defaultDietItems = [
-  "Eat a healthy breakfast",
-  "Hit your protein target",
-  "Stay hydrated",
-  "Eat fruit or vegetables",
-  "Cook instead of takeout",
-  "Plan tomorrow's meals"
-];
+const defaultDietItems = Forge.DEFAULT_DIET;
 function getDietItems() { return settings.dietItems || defaultDietItems; }
-function dietId(text) { return `diet-${slugify(text)}`; }
-const defaultProjectChecks = [
-  "Made progress on a project",
-  "Documented what you did",
-  "Decided the next step"
-];
-function getProjectChecks() { return settings.projectChecks || defaultProjectChecks; }
-function projId(text) { return `project-${slugify(text)}`; }
-function renderProjectChecks() {
-  const wrap = document.getElementById("projectChecks");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-  const xp = (window.Game && Game.xpForCat) ? Game.xpForCat("project") : 30;
-  getProjectChecks().forEach(item => {
-    wrap.insertAdjacentHTML("beforeend", `<label class="check quest"><input id="${projId(item)}" type="checkbox" data-cat="project" data-save><span class="q-text">${escapeHtml(item)}</span><span class="q-xp">+${xp}</span></label>`);
-  });
-}
-
-const defaultReviewPrompts = [
-  "Wins this week",
-  "Missed habits / friction",
-  "What needs to change next week?",
-  "One thing I refuse to drop"
-];
+function dietId(text) { return Forge.checklistId("diet", text); }
+const defaultReviewPrompts = Forge.DEFAULT_REVIEW;
 function getReviewPrompts() { return settings.reviewPrompts || defaultReviewPrompts; }
 function renderReview() {
   const ids = ["lblWins", "lblMisses", "lblChanges", "lblRefuse"];
@@ -2142,6 +2071,57 @@ function renderScoreboard() {
   getMetrics().forEach(([id, title, subtitle, val]) => {
     wrap.insertAdjacentHTML("beforeend", `<div class="metric"><div class="top"><div><div class="metric-title">${title}</div><p class="hint">${subtitle}</p></div><span class="metric-number" id="metric-${id}">${val}</span></div><div class="bar"><div class="bar-fill" id="bar-${id}"></div></div></div>`);
   });
+}
+
+// ----- agenda: parts of the day ---------------------------------------------
+// A day card reads top-to-bottom as a real schedule: timed tasks sorted into
+// Morning / Afternoon / Evening, then everything untimed under "Anytime".
+const DAY_PARTS = [
+  { id: "morning",   label: "Morning",   until: 12 * 60, icon: `<svg viewBox="0 0 24 24" class="ic"><path d="M12 2v6M4.9 8.9l1.4 1.4M2 16h2M20 16h2M17.7 10.3l1.4-1.4M22 20H2M16 6l-4-4-4 4M16 16a4 4 0 0 0-8 0"/></svg>` },
+  { id: "afternoon", label: "Afternoon", until: 17 * 60, icon: `<svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="4"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>` },
+  { id: "evening",   label: "Evening",   until: 24 * 60, icon: `<svg viewBox="0 0 24 24" class="ic"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>` },
+  { id: "anytime",   label: "Anytime",   until: null,    icon: `<svg viewBox="0 0 24 24" class="ic"><path d="M22 12h-6l-2 3h-4l-2-3H2M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></svg>` }
+];
+function dayPartFor(minutes) {
+  if (minutes == null) return DAY_PARTS[3];
+  return DAY_PARTS.find((p) => p.until != null && minutes < p.until) || DAY_PARTS[2];
+}
+// Fallback glyph when a task belongs to no pursuit — keeps the icon column
+// meaningful instead of repeating one generic dot down the whole card.
+const ATTR_ICON = { Discipline: "check", Body: "dumbbell", Mind: "book", Vitality: "leaf", Craft: "cube" };
+function questRowIcon(q, attr) {
+  const area = questArea(q);
+  if (area) return area.icon || inferModuleIcon(area.name, area.type);
+  const guess = inferModuleIcon(q.title, null);
+  return guess === "star" ? (ATTR_ICON[attr] || "check") : guess;
+}
+function isCurrentWeek() { return weekKey() === iso(getStartOfWeek(new Date())); }
+function nowMinutes() { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+
+// Places the "now" marker and flags unchecked rows whose time has passed.
+// Cheap enough to re-run on every save and on a one-minute tick — it only
+// toggles classes and moves one element, so it never disturbs focus.
+function updateAgendaNow() {
+  document.querySelectorAll(".agenda-now").forEach((el) => el.remove());
+  document.querySelectorAll(".linked-unified.is-overdue").forEach((el) => el.classList.remove("is-overdue"));
+  if (!isCurrentWeek()) return;
+  const card = document.querySelector(".day-card.today .task-group");
+  if (!card) return;
+  const now = nowMinutes();
+  const rows = [...card.querySelectorAll(".linked-unified[data-min]")];
+  let marker = null;
+  rows.forEach((row) => {
+    const min = Number(row.dataset.min);
+    const box = row.querySelector("input[type=checkbox]");
+    if (min < now) { if (box && !box.checked) row.classList.add("is-overdue"); }
+    else if (!marker) marker = row;
+  });
+  if (!rows.length) return;
+  const line = document.createElement("div");
+  line.className = "agenda-now";
+  line.innerHTML = `<span class="agenda-now-dot"></span><span class="agenda-now-rule"></span><span class="agenda-now-label">now · ${escapeHtml(fmtTime12(String(Math.floor(now / 60)).padStart(2, "0") + ":" + String(now % 60).padStart(2, "0")))}</span>`;
+  if (marker) marker.parentNode.insertBefore(line, marker);
+  else { const last = rows[rows.length - 1]; last.parentNode.insertBefore(line, last.nextSibling); }
 }
 
 function renderDays() {
@@ -2162,21 +2142,40 @@ function renderDays() {
     const card = document.createElement("details");
     card.className = "day-card" + (isToday ? " today" : "");
     card.open = isMobile() ? isToday : true;
-    card.innerHTML = `<summary class="day-summary"><div><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="date-tag">${fmt(date)}</div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Add weekly routine for ${day}" aria-label="Add weekly routine for ${day}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
+    card.innerHTML = `<summary class="day-summary"><div class="day-heading"><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="day-subline"><span class="date-tag">${fmt(date)}</span><span class="day-remaining" id="dayLeft-${dayIndex}"></span></div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Add weekly routine for ${day}" aria-label="Add weekly routine for ${day}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
     const group = card.querySelector(".task-group");
+    // Bucket by part of day first, so each header can carry its own count.
+    const buckets = new Map();
     tasks.forEach((q) => {
-      const attr = q.attr || contextAttr(q.areaId);
-      const cat = q.category || attrCat(attr);
-      const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
-      const context = questContextLabel(q);
-      const sourceLabel = context || attrName(attr);
-      const sourceTitle = context ? `${context} · trains ${attrName(attr)}` : `Daily task · trains ${attrName(attr)}`;
-      const contextBadge = `<span class="quest-source-badge daily-source" title="${escapeHtml(sourceTitle)}"><span class="source-dot"></span><span class="source-label">${escapeHtml(sourceLabel)}</span></span>`;
-      const scheduleBadge = q.scheduleType === "weekly" ? `<span class="task-kind-badge" title="Repeats every week"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>Weekly</span>` : "";
-      const timeBadge = q.dueTime ? `<span class="task-kind-badge task-time-badge" title="Scheduled time"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${escapeHtml(fmtTime12(q.dueTime))}</span>` : "";
-      const taskMeta = `<span class="task-meta">${contextBadge}${scheduleBadge}${timeBadge}</span>`;
-      const repeatTitle = q.scheduleType === "weekly" ? "Weekly routine" : "One-time task";
-      group.insertAdjacentHTML("beforeend", `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}" title="${repeatTitle}" style="--ac:${attrColor(attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save><span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="q-xp">+${xp}</span></label>`);
+      const part = dayPartFor(questMinutes(q));
+      if (!buckets.has(part.id)) buckets.set(part.id, { part, items: [] });
+      buckets.get(part.id).items.push(q);
+    });
+    DAY_PARTS.forEach(({ id }) => {
+      const bucket = buckets.get(id);
+      if (!bucket) return;
+      const { part, items } = bucket;
+      const rows = items.map((q) => {
+        const attr = q.attr || contextAttr(q.areaId);
+        const cat = q.category || attrCat(attr);
+        const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
+        const min = questMinutes(q);
+        const context = questContextLabel(q);
+        // Two axes, no overlap: the icon says which pursuit, the pill says which
+        // attribute the XP feeds — and the pill's colour finally matches its label.
+        const rowTitle = `${context || "Daily task"} · trains ${attrName(attr)} · ${q.scheduleType === "weekly" ? "weekly routine" : "one-time task"}`;
+        const timeCell = min == null
+          ? `<span class="q-time is-untimed">Anytime</span>`
+          : `<span class="q-time">${escapeHtml(fmtTime12(q.dueTime))}</span>`;
+        const pursuitIcon = `<span class="q-pursuit" aria-hidden="true">${moduleIconSvg(questRowIcon(q, attr))}</span>`;
+        const attrBadge = `<span class="quest-source-badge daily-source" title="Trains ${escapeHtml(attrName(attr))}"><span class="source-dot"></span><span class="source-label">${escapeHtml(attrName(attr))}</span></span>`;
+        // The exception, not the rule — a weekly routine gets no badge at all,
+        // and the one-off marker is a glyph so it costs almost no width.
+        const onceBadge = q.scheduleType === "once" ? `<span class="task-kind-badge is-once" role="img" aria-label="One-off task" title="One-off — happens once, not part of a weekly routine"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>` : "";
+        const taskMeta = `<span class="task-meta">${attrBadge}${onceBadge}</span>`;
+        return `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}"${min == null ? "" : ` data-min="${min}"`} title="${escapeHtml(rowTitle)}" style="--ac:${attrColor(attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save>${timeCell}${pursuitIcon}<span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<span class="q-xp">+${xp}</span><button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></label>`;
+      }).join("");
+      group.insertAdjacentHTML("beforeend", `<div class="agenda-part" data-part="${part.id}"><div class="agenda-part-head"><span class="apart-ico">${part.icon}</span><span class="apart-label">${part.label}</span><span class="apart-rule"></span><span class="apart-count">${items.length}</span></div>${rows}</div>`);
     });
     if (!tasks.length) group.innerHTML = `<div class="day-empty">Nothing planned. Add a task or a weekly routine.</div>`;
     group.insertAdjacentHTML("beforeend", `<button class="day-quick-add" type="button" data-quest-date="${iso(date)}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button>`);
@@ -2189,7 +2188,10 @@ function renderDays() {
       renderDays(); loadWeekFields(); updateProgress();
     }, { once: true });
   }
+  updateAgendaNow();
 }
+// Keep the now-marker honest without re-rendering the board.
+setInterval(updateAgendaNow, 60000);
 
 function applyWeekToUI() {
   const weekRange = `${fmt(selectedWeekStart)} – ${fmt(addDays(selectedWeekStart, 6))}`;
@@ -2217,7 +2219,6 @@ function applyWeekToUI() {
   if (window.Game) Game.render();
   applyModuleLayout();
   applySectionVisibility();
-  updateCertCountdowns();
   renderBoss();
 
   // Apply mobile smart layout after rendering
@@ -2387,7 +2388,16 @@ function updateProgress() {
     const bar = document.getElementById(`dayBar-${d}`);
     if (badge) badge.textContent = `${dayDone}/${items.length}`;
     if (bar) bar.style.width = p + "%";
+    // "3 left · 62 xp" — what the day still owes you, not just what it holds.
+    const left = document.getElementById(`dayLeft-${d}`);
+    if (left) {
+      const open = items.filter((row) => !_wk.checks[row.id]);
+      const xpLeft = open.reduce((sum, row) => sum + ((window.Game && Game.xpForCat) ? Game.xpForCat(row.q.category || attrCat(row.q.attr || "Discipline")) : 10), 0);
+      left.textContent = !items.length ? "" : open.length ? `${open.length} left · ${xpLeft} xp` : "Cleared";
+      left.classList.toggle("is-clear", items.length > 0 && !open.length);
+    }
   }
+  updateAgendaNow();
 
   // Built-in hours sections include linked daily "sessions" (each completed day = +1 hr).
   const studySessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "study") : 0;
@@ -2740,28 +2750,19 @@ function initScrollSpy(tabBtns, moreDrawer) {
   update();
 }
 
-// ===== SETTINGS MODAL =====
 // ===== SECTION VISIBILITY =====
-const SECTIONS = [
-  ["boss", "Weekly Boss"], ["scoreboard", "Quest Log"], ["daily", "Daily Quests"],
-  ["workout", "Training"], ["diet", "Provisions"], ["study", "Scholarship"],
-  ["projects", "Workshop"], ["review", "War Council"]
-];
+// The single writer of section `display`. Covers every pursuit section (built-in
+// and custom, from the module list) plus the sections that are not pursuits and
+// so never appear in the Pursuits editor — older settings may still hide these.
+const NON_PURSUIT_SECTIONS = ["boss", "scoreboard"];
 function getHiddenSections() { return settings.hiddenSections || []; }
 function applySectionVisibility() {
   const hidden = getHiddenSections();
-  SECTIONS.forEach(([id]) => {
+  const ids = getModules().map((m) => m.id).concat(NON_PURSUIT_SECTIONS);
+  ids.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.style.display = hidden.includes(id) ? "none" : "";
   });
-}
-function renderSectionToggles() {
-  const wrap = document.getElementById("sectionToggles");
-  if (!wrap) return;
-  const hidden = getHiddenSections();
-  wrap.innerHTML = SECTIONS.map(([id, name]) =>
-    `<label class="check"><input type="checkbox" data-section="${id}" ${hidden.includes(id) ? "" : "checked"}><span>${name}</span></label>`
-  ).join("");
 }
 
 // ===== PUSH REMINDERS =====
@@ -3168,35 +3169,8 @@ function bindEvents() {
     if (path) { chooseOnboardPath(path.getAttribute("data-preset")); return; }
     if (e.target.id === "onboardSkip") startBlank();
   });
-  // Certification target dates (stored in settings.certDates, not week fields)
   document.addEventListener("change", e => {
-    if (!e.target.matches("[data-certdate]")) return;
-    if (!settings.certDates) settings.certDates = {};
-    const name = e.target.dataset.certdate;
-    if (e.target.value) settings.certDates[name] = e.target.value;
-    else delete settings.certDates[name];
-    persistSettings();
-    updateCertCountdowns();
-  });
-  document.addEventListener("change", e => { 
-    if (e.target.matches("[data-save]")) { 
-      saveWeekField(e.target); 
-      updateProgress(); 
-      
-      // Auto-archive: detect study completion
-      if (e.target.id?.startsWith('status-study-') && e.target.value === 'Completed') {
-        const idx = parseInt(e.target.id.split('-').pop());
-        const area = getStudyAreas()[idx];
-        if (area && confirm(`Archive "${area}" as a completed certification?`)) {
-          saveRecord({
-            title: area, category: 'certification',
-            notes: `Completed during week of ${document.getElementById('weekRangeText').textContent}`,
-            completed_at: new Date().toISOString(), week_key: weekKey(),
-            source: 'auto', ext_key: 'cert:' + area + ':' + weekKey(),
-          });
-        }
-      }
-    } 
+    if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateProgress(); }
   });
   document.addEventListener("click", e => {
     const btn = e.target.closest(".edit-day-btn");
@@ -3609,12 +3583,6 @@ async function resetThisWeek() {
   database.weeks[weekKey()] = { fields: {}, checks: {}, createdAt: new Date().toISOString(), schemaVersion: 2 };
   await persistDatabase();
   applyWeekToUI();
-}
-
-function copySummary() {
-  const studyHours = [...document.querySelectorAll('[data-hours="study"]')].reduce((sum, el) => sum + Number(el.value || 0), 0);
-  const summary = `THE FORGE — WEEKLY SUMMARY\n\nWeek: ${document.getElementById("weekRangeText").textContent}\nMission: ${document.getElementById("mission").value}\nWeekly Completion: ${document.getElementById("scoreValue").textContent}\nCertification Study Hours: ${studyHours}/14\nProject Hours: ${document.getElementById("projectHours").value}/2 minimum, 3 bonus\nWeekly Grade: ${document.getElementById("grade").value}\n\nCurrent Project Focus:\n${document.getElementById("projectFocus").value}\n\nWins:\n${document.getElementById("wins").value}\n\nMissed Habits / Friction:\n${document.getElementById("misses").value}\n\nChanges for Next Week:\n${document.getElementById("changes").value}\n\nOne Thing I Refuse To Drop:\n${document.getElementById("refuseDrop").value}`;
-  navigator.clipboard.writeText(summary).then(() => alert("Weekly summary copied."));
 }
 
 async function exportBackup() {
