@@ -27,6 +27,56 @@
   const CAT_OF_ATTR = { Discipline: "discipline", Body: "training", Mind: "study", Vitality: "protein", Craft: "project" };
   const ATTR_LIST = ["Discipline", "Body", "Mind", "Vitality", "Craft"];
   const ATTR_COLOR = { Discipline: "#38bdf8", Body: "#fb7185", Mind: "#a78bfa", Vitality: "#34d399", Craft: "#fbbf24" };
+  // Per-pursuit accent palette. Five shades per attribute family, first entry
+  // being that attribute's base colour — so a pursuit that has never been
+  // recoloured looks exactly as it did before, and two pursuits feeding the
+  // same stat can still be told apart at a glance.
+  const PURSUIT_PALETTE = {
+    Discipline: ["#38bdf8", "#0ea5e9", "#22d3ee", "#60a5fa", "#7dd3fc"],
+    Body:       ["#fb7185", "#f43f5e", "#ef4444", "#f87171", "#fda4af"],
+    Mind:       ["#a78bfa", "#8b5cf6", "#c084fc", "#e879f9", "#818cf8"],
+    Vitality:   ["#34d399", "#10b981", "#4ade80", "#2dd4bf", "#a3e635"],
+    Craft:      ["#fbbf24", "#f59e0b", "#facc15", "#fb923c", "#f97316"],
+  };
+  // The pursuit with no attribute (Daily) has no family — it stays neutral.
+  const NEUTRAL_ACCENT = "#8b93a7";
+
+  // ----- weekly targets ----------------------------------------------------
+  // One description of every built-in pursuit's weekly target. The value itself
+  // still lives under its original settings key so existing installs, backups
+  // and the engine's own buildBaseModules keep reading it unchanged; this is the
+  // single place that knows which key belongs to which pursuit.
+  const TARGET_SPEC = {
+    workout:  { key: "workoutMin",    kind: "count", unit: "sessions/wk", def: 5,  min: 0, max: 30 },
+    diet:     { key: "proteinMin",    kind: "days",  unit: "days/wk",     def: 7,  min: 0, max: 7 },
+    study:    { key: "studyTarget",   kind: "hours", unit: "hrs/wk",      def: 14, min: 0, max: 100 },
+    projects: { key: "projectTarget", kind: "hours", unit: "hrs/wk",      def: 2,  min: 0, max: 100 },
+  };
+  // A pursuit's weekly target, read from the descriptor. Returns null when the
+  // pursuit has no single numeric target (daily / review / plan-only lists).
+  function targetOf(m) {
+    if (!m) return null;
+    const spec = TARGET_SPEC[m.id];
+    if (spec) return { value: num(m.target && m.target.value, spec.def), kind: spec.kind, unit: spec.unit, min: spec.min, max: spec.max };
+    if (m.type === "counter") {
+      const t = m.target || {};
+      return { value: num(t.value, 1), kind: t.kind || "count", unit: `${t.unit || "count"}/wk`, min: 0, max: 9999 };
+    }
+    return null;
+  }
+  // Write a pursuit's weekly target back to wherever that pursuit stores it.
+  // Built-ins keep their legacy settings key; counters carry it on the module.
+  function setTargetOn(settings, m, value) {
+    const t = targetOf(m);
+    if (!t) return false;
+    const v = Math.max(t.min, Math.min(t.max, Number(value) || 0));
+    const spec = TARGET_SPEC[m.id];
+    if (spec) { settings[spec.key] = v; return true; }
+    const cm = (settings.customModules || []).find((x) => x.id === m.id);
+    if (cm) { cm.target = Object.assign({}, cm.target, { value: v }); return true; }
+    return false;
+  }
+
   const STUDY_HOUR_XP = 8;
   const PROJECT_HOUR_XP = 12;
   const REVIEW_XP = 15;
@@ -326,10 +376,16 @@
   function applyOverlays(modules, settings) {
     settings = settings || {};
     const names = settings.moduleNames || {};
+    const icons = settings.moduleIcons || {};
+    const colors = settings.moduleColors || {};
     const hidden = settings.hiddenSections || [];
     const order = settings.moduleOrder;
     modules.forEach((m) => {
       if (names[m.id]) m.name = names[m.id];
+      // Identity overlays: chosen icon/colour beat the built-in or inferred one.
+      // Applied uniformly to built-in and custom pursuits, exactly like names.
+      if (icons[m.id]) m.icon = icons[m.id];
+      m.color = accentFor(m, colors[m.id]);
       m.enabled = !hidden.includes(m.id);
     });
     if (Array.isArray(order) && order.length) {
@@ -339,6 +395,18 @@
     modules.forEach((m, i) => { m.order = i + 1; });
     return modules;
   }
+  // A pursuit's accent colour: an explicit choice if it is a real shade from its
+  // attribute's family, else that attribute's base colour, else neutral. Keeping
+  // the choice inside the family is what makes two pursuits on the same stat read
+  // as related rather than random.
+  function accentFor(m, chosen) {
+    if (!m || !m.attr) return NEUTRAL_ACCENT;
+    const family = PURSUIT_PALETTE[m.attr];
+    if (!family) return NEUTRAL_ACCENT;
+    if (chosen && family.indexOf(chosen) >= 0) return chosen;
+    return family[0];
+  }
+  function paletteFor(attr) { return (PURSUIT_PALETTE[attr] || []).slice(); }
   function num(v, d) { return (v == null || v === "") ? d : Number(v); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -501,7 +569,8 @@
   };
 
   return {
-    XP_BY_CAT, ATTR_OF_CAT, CAT_OF_ATTR, ATTR_LIST, ATTR_COLOR, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
+    XP_BY_CAT, ATTR_OF_CAT, CAT_OF_ATTR, ATTR_LIST, ATTR_COLOR,
+    PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };

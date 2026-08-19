@@ -96,6 +96,12 @@
   // Sum XP for a single week — delegated to the module engine (modules.js), the
   // single source of truth for ids/score/XP. Fills attrTotals (per-attribute)
   // and bySource (per-section, for the header chips) when provided.
+  // A pursuit's weekly target, resolved by the engine from its descriptor.
+  function targetValue(moduleOrId, fallback) {
+    const m = typeof moduleOrId === "string" ? modulesNow().find((x) => x.id === moduleOrId) : moduleOrId;
+    const t = (window.Forge && Forge.targetOf) ? Forge.targetOf(m) : null;
+    return t ? Number(t.value) : fallback;
+  }
   function modulesNow() {
     if (typeof getModules === "function") return getModules();
     return window.Forge ? Forge.migrateModules(typeof settings !== "undefined" ? settings : {}) : [];
@@ -864,7 +870,7 @@
             total++; if (c[questCheckId(q, date)]) done++;
           });
         }
-        if (total >= ((typeof settings !== "undefined" && settings.workoutMin) || 5) && done === total) return true;
+        if (total >= targetValue("workout", 5) && done === total) return true;
       }
       return false;
     })();
@@ -1274,12 +1280,12 @@
         if (m.id === "diet" && typeof nutritionWeekStats === "function") {
           const stats = nutritionWeekStats(week, start);
           if (!stats.total) return;
-          const target = Number((m.target && m.target.value) || settings.proteinMin || 7);
+          const target = targetValue(m, 7);
           push(m, nm + ": " + target + " nutrition day" + (target === 1 ? "" : "s"), stats.daysMet, target);
         } else if (m.id === "workout") {
           const stats = questWeekStats(week, start, m.id);
           if (!stats.total) return;
-          const target = Number((m.target && m.target.value) || settings.workoutMin || 5);
+          const target = targetValue(m, 5);
           push(m, nm + ": " + target + " session" + (target === 1 ? "" : "s"), stats.done, target);
         } else {
           const stats = questWeekStats(week, start, m.id);

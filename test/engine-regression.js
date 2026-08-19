@@ -201,6 +201,73 @@ for (const [label, taskLinks, wantScore, wantXp] of LINK_CASES) {
   }
 }
 
+// ---- pursuit descriptor: target, icon, colour ------------------------------
+// One shape for every pursuit. Targets resolve through the descriptor whatever
+// settings key they physically live under; identity overlays apply to built-in
+// and custom pursuits alike; a colour choice is only honoured inside its own
+// attribute family, so a pursuit can never drift away from the stat it feeds.
+const descMods = Forge.migrateModules({ workoutMin: 4, proteinMin: 6, studyTarget: 9, projectTarget: 3 });
+const byId = (id) => descMods.find((m) => m.id === id);
+const TARGET_CASES = [["workout", 4, "sessions/wk"], ["diet", 6, "days/wk"], ["study", 9, "hrs/wk"], ["projects", 3, "hrs/wk"]];
+for (const [id, value, unit] of TARGET_CASES) {
+  const t = Forge.targetOf(byId(id));
+  if (!t || t.value !== value || t.unit !== unit) { fails++; console.log("TARGET READ DRIFT", { id, got: t, value, unit }); }
+}
+if (Forge.targetOf(byId("daily")) !== null || Forge.targetOf(byId("review")) !== null) {
+  fails++; console.log("TARGET should be null for pursuits with no numeric target");
+}
+// Writing a target lands on the key that pursuit actually stores it under, and
+// is clamped to that pursuit's range (diet caps at 7 days a week).
+const wSettings = { workoutMin: 5, proteinMin: 7 };
+Forge.setTargetOn(wSettings, byId("workout"), 12);
+Forge.setTargetOn(wSettings, byId("diet"), 99);
+if (wSettings.workoutMin !== 12 || wSettings.proteinMin !== 7) {
+  fails++; console.log("TARGET WRITE DRIFT", wSettings);
+}
+// A counter carries its own target on the module, not in a settings key.
+// NOTE: buildBaseModules covers only the built-ins; custom pursuits are
+// concatenated by the caller (app.js getModules) before overlays are applied.
+// Compose the same way here so this exercises the real list.
+const cSettings = { customModules: [{ id: "custom-reading", name: "Reading", type: "counter", attr: "Mind", target: { kind: "count", value: 10, unit: "pages" } }] };
+const composed = (S) => Forge.applyOverlays(Forge.buildBaseModules(S).concat(S.customModules || []), S);
+const reading = composed(cSettings).find((m) => m.id === "custom-reading");
+if (!reading) { fails++; console.log("CUSTOM PURSUIT MISSING FROM COMPOSED LIST"); }
+else {
+  const rt = Forge.targetOf(reading);
+  if (!rt || rt.value !== 10 || rt.unit !== "pages/wk") { fails++; console.log("COUNTER TARGET READ DRIFT", rt); }
+  // Overlays reach custom pursuits too: colour resolves inside Mind's family.
+  if (reading.color !== Forge.PURSUIT_PALETTE.Mind[0]) { fails++; console.log("CUSTOM PURSUIT COLOUR DRIFT", reading.color); }
+  Forge.setTargetOn(cSettings, reading, 25);
+  if (cSettings.customModules[0].target.value !== 25) { fails++; console.log("COUNTER TARGET WRITE DRIFT", cSettings.customModules[0].target); }
+}
+// A chosen in-family shade must survive on a custom pursuit as well.
+const cThemed = composed({ customModules: cSettings.customModules, moduleColors: { "custom-reading": Forge.PURSUIT_PALETTE.Mind[3] } });
+if (cThemed.find((m) => m.id === "custom-reading").color !== Forge.PURSUIT_PALETTE.Mind[3]) {
+  fails++; console.log("CUSTOM PURSUIT COLOUR OVERLAY IGNORED");
+}
+
+// Identity overlays, and the family rule for colour.
+const idMods = Forge.migrateModules({ moduleIcons: { workout: "flame" }, moduleColors: { workout: "#f43f5e", diet: "#a78bfa", study: "not-a-colour" } });
+const pick = (id) => idMods.find((m) => m.id === id);
+if (pick("workout").icon !== "flame") { fails++; console.log("ICON OVERLAY DRIFT", pick("workout").icon); }
+if (pick("workout").color !== "#f43f5e") { fails++; console.log("IN-FAMILY COLOUR REJECTED", pick("workout").color); }
+// #a78bfa is a Mind shade; Provisions feeds Vitality, so it must not stick.
+if (pick("diet").color !== Forge.PURSUIT_PALETTE.Vitality[0]) { fails++; console.log("CROSS-FAMILY COLOUR ACCEPTED", pick("diet").color); }
+if (pick("study").color !== Forge.PURSUIT_PALETTE.Mind[0]) { fails++; console.log("GARBAGE COLOUR ACCEPTED", pick("study").color); }
+if (pick("daily").color !== Forge.NEUTRAL_ACCENT) { fails++; console.log("NEUTRAL DRIFT", pick("daily").color); }
+// Every family offers real, distinct shades and leads with the attribute base.
+const seen = new Set();
+for (const attr of Forge.ATTR_LIST) {
+  const fam = Forge.paletteFor(attr);
+  if (fam.length < 4) { fails++; console.log("PALETTE TOO SMALL", { attr, fam }); }
+  if (fam[0] !== Forge.ATTR_COLOR[attr]) { fails++; console.log("PALETTE HEAD MUST BE THE ATTRIBUTE BASE", { attr, head: fam[0] }); }
+  for (const hex of fam) {
+    if (!/^#[0-9a-f]{6}$/.test(hex)) { fails++; console.log("BAD SHADE", { attr, hex }); }
+    if (seen.has(hex)) { fails++; console.log("SHADE SHARED ACROSS FAMILIES", { attr, hex }); }
+    seen.add(hex);
+  }
+}
+
 // ---- single-source guard --------------------------------------------------
 // Every consumer (browser app, Apple Reminders sync) must derive check ids from
 // this engine and nowhere else. A private copy silently desyncs completions:

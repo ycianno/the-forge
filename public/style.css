@@ -3299,3 +3299,49 @@ html { scroll-padding-top: 84px; }
 .empty-state { text-align: center; padding: 28px 20px; border: 1px dashed var(--line); border-radius: 16px; background: rgba(255,255,255,0.02); }
 .empty-state-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
 .empty-state p { font-size: 13px; line-height: 1.55; color: var(--muted); max-width: 42ch; margin: 0 auto 16px; }
+
+/* ===== PURSUIT IDENTITY PICKER (Settings → Pursuits) =====
+   Icon + colour for one pursuit, opened from its icon chip. The colour set is
+   the five shades of that pursuit's attribute family (Forge.PURSUIT_PALETTE),
+   so a recoloured pursuit still reads as belonging to its stat. */
+/* The chip keeps its existing fill from .pursuit-card-ico above; it only gains
+   a pointer and an open state now that it is a button. */
+.pursuit-card-ico { cursor: pointer; padding: 0; transition: border-color .12s, box-shadow .12s; }
+.pursuit-card-ico:hover { border-color: color-mix(in srgb, var(--ac, #8b93a7) 55%, transparent); }
+.pursuit-card-ico[aria-expanded="true"] { border-color: var(--ac, #8b93a7); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ac, #8b93a7) 22%, transparent); }
+.pursuit-identity {
+  margin-top: 10px; padding: 12px; display: flex; flex-direction: column; gap: 12px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: color-mix(in srgb, var(--ac, var(--accent-primary)) 5%, transparent);
+}
+.pi-row { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.pi-label {
+  flex: 0 0 52px; padding-top: 5px; color: var(--muted);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+}
+.pi-icons { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
+.pi-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+  border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.03);
+  color: var(--muted); cursor: pointer; transition: color .12s, border-color .12s, background .12s;
+}
+.pi-icon .ic { width: 15px; height: 15px; }
+.pi-icon:hover { color: var(--text); border-color: color-mix(in srgb, var(--ac, var(--accent-primary)) 50%, transparent); }
+.pi-icon.on {
+  color: var(--ac, var(--accent-primary)); border-color: var(--ac, var(--accent-primary));
+  background: color-mix(in srgb, var(--ac, var(--accent-primary)) 14%, transparent);
+}
+.pi-colors { display: flex; flex-wrap: wrap; gap: 7px; flex: 1; }
+.pi-color {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: var(--sw); border: 2px solid transparent; box-shadow: 0 0 0 1px var(--border) inset;
+  transition: transform .12s, box-shadow .12s;
+}
+.pi-color:hover { transform: scale(1.12); }
+.pi-color.on { border-color: var(--text); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sw) 45%, transparent); }
+.pi-note { margin: 0; color: var(--muted); font-size: 12px; }
+@media (max-width: 768px) {
+  .pi-label { flex-basis: 100%; padding-top: 0; }
+  .pi-icon { width: 34px; height: 34px; }
+  .pi-color { width: 30px; height: 30px; }
+}

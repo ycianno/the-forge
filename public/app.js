@@ -135,7 +135,7 @@ function applyModuleLayout() {
     // Per-pursuit identity: an attribute-color accent on the whole card and a
     // matching icon chip in the header. Daily has no single stat → neutral accent.
     sec.classList.add("has-accent");
-    sec.style.setProperty("--ac", m.attr ? attrColor(m.attr) : "#8b93a7");
+    sec.style.setProperty("--ac", pursuitColor(m));
     const summary = sec.querySelector(":scope > summary");
     if (summary) {
       let ico = summary.querySelector(":scope > .sec-icon");
@@ -232,17 +232,13 @@ function persistSettingsSoon() {
 // Per-pursuit weekly target — reads/writes the right place for each pursuit type.
 // null → this pursuit has no single numeric weekly target (review/checklist/notes/daily).
 function pursuitTargetSpec(m) {
-  if (m.id === "workout")   return { get: () => settings.workoutMin != null ? settings.workoutMin : 5,   set: (v) => settings.workoutMin = v,   unit: "sessions/wk", min: 0, max: 30 };
-  if (m.id === "diet")      return { get: () => settings.proteinMin != null ? settings.proteinMin : 7,   set: (v) => settings.proteinMin = v,   unit: "days/wk",     min: 0, max: 7 };
-  if (m.id === "study")     return { get: () => settings.studyTarget != null ? settings.studyTarget : 14, set: (v) => settings.studyTarget = v,  unit: "hrs/wk",      min: 0, max: 100 };
-  if (m.id === "projects")  return { get: () => settings.projectTarget != null ? settings.projectTarget : 2, set: (v) => settings.projectTarget = v, unit: "hrs/wk",   min: 0, max: 100 };
-  if (m.type === "counter") return { get: () => (m.target && m.target.value) || 1, set: (v) => { const cm = (settings.customModules || []).find((x) => x.id === m.id); if (cm) { cm.target = cm.target || {}; cm.target.value = v; } }, unit: `${(m.target && m.target.unit) || "count"}/wk`, min: 0, max: 9999 };
-  return null;
+  const t = Forge.targetOf(m);
+  if (!t) return null;
+  return { get: () => t.value, unit: t.unit, min: t.min, max: t.max };
 }
 function setPursuitTarget(id, value) {
   const m = getModules().find((x) => x.id === id); if (!m) return;
-  const spec = pursuitTargetSpec(m); if (!spec) return;
-  spec.set(Math.max(spec.min || 0, Number(value) || 0));
+  if (!Forge.setTargetOn(settings, m, value)) return;
   persistSettingsSoon();
   updateProgress();            // refresh the section's pill/bar live
   renderModulesEditor();       // refresh the "N/target" readout
@@ -256,13 +252,34 @@ function pursuitWeekProgress(m) {
   all.forEach((q) => questOccurrencesInWeek(q).forEach((d) => { total++; if (wk.checks[questCheckId(q, d)]) done++; }));
   return { done, total };
 }
+// Which pursuit card currently has its icon/colour picker open. Kept outside the
+// render so re-rendering after a pick does not close the panel under the cursor.
+let openIdentityId = null;
+// The curated identity choices for one pursuit: every section glyph, and the
+// five shades of its attribute's family. A pursuit with no attribute (Daily)
+// gets icons only — it has no family to draw a colour from.
+function pursuitIdentityHtml(m) {
+  const icons = Object.keys(MODULE_ICONS).map((key) =>
+    `<button type="button" class="pi-icon${key === m.icon ? " on" : ""}" data-icon="${key}" title="${key}" aria-label="Use the ${key} icon">${moduleIconSvg(key)}</button>`
+  ).join("");
+  const palette = m.attr ? Forge.paletteFor(m.attr) : [];
+  const colors = palette.length
+    ? `<div class="pi-row"><span class="pi-label">Colour</span><div class="pi-colors">` + palette.map((hex) =>
+        `<button type="button" class="pi-color${hex === m.color ? " on" : ""}" data-color="${hex}" style="--sw:${hex}" title="${hex}" aria-label="Use ${hex}"></button>`
+      ).join("") + `</div></div>`
+    : `<p class="pi-note">Your daily agenda has no single stat, so it stays neutral.</p>`;
+  return `<div class="pursuit-identity" data-identity="${m.id}">
+    <div class="pi-row"><span class="pi-label">Icon</span><div class="pi-icons">${icons}</div></div>
+    ${colors}
+  </div>`;
+}
 function renderModulesEditor() {
   const wrap = document.getElementById("modulesEditor");
   if (!wrap) return;
   const mods = getModules();
   const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : ["Discipline", "Body", "Mind", "Vitality", "Craft"];
   const rows = mods.map((m, i) => {
-    const accent = m.attr ? attrColor(m.attr) : "#8b93a7";
+    const accent = pursuitColor(m);
     const spec = pursuitTargetSpec(m);
     const prog = m.id === "daily" ? null : pursuitWeekProgress(m);
     const targetHtml = spec
@@ -281,7 +298,7 @@ function renderModulesEditor() {
     return `
     <div class="pursuit-card" data-id="${m.id}" style="--ac:${accent}">
       <div class="pursuit-card-top">
-        <span class="pursuit-card-ico" aria-hidden="true">${moduleIconSvg(m.icon)}</span>
+        <button type="button" class="pursuit-card-ico" title="Change icon and colour" aria-label="Change icon and colour for ${escapeHtml(m.name)}" aria-expanded="${openIdentityId === m.id}">${moduleIconSvg(m.icon)}</button>
         <input class="mod-name pursuit-card-name" type="text" value="${escapeHtml(m.name)}" maxlength="28" aria-label="Pursuit name" spellcheck="false">
         <div class="pursuit-card-tools">
           <button class="mod-up" type="button" title="Move up" aria-label="Move up" ${i === 0 ? "disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
@@ -296,6 +313,7 @@ function renderModulesEditor() {
         ${progHtml}
         <button class="pursuit-plan-link" type="button" title="Open this pursuit to edit its plan">Edit plan →</button>
       </div>
+      ${openIdentityId === m.id ? pursuitIdentityHtml(m) : ""}
     </div>`;
   }).join("");
   const form = `
@@ -565,6 +583,23 @@ function moveModule(id, dir) {
   renderModulesEditor();
   applyModuleLayout();
 }
+// Icon and colour are stored overlays keyed by pursuit id, exactly like names,
+// so a built-in pursuit and a custom one are configured the same way.
+function setPursuitIcon(id, icon) {
+  if (!MODULE_ICONS[icon]) return;
+  if (!settings.moduleIcons) settings.moduleIcons = {};
+  settings.moduleIcons[id] = icon;
+  persistSettingsSoon();
+  renderModulesEditor();
+  applyWeekToUI();
+}
+function setPursuitColor(id, color) {
+  if (!settings.moduleColors) settings.moduleColors = {};
+  settings.moduleColors[id] = color;
+  persistSettingsSoon();
+  renderModulesEditor();
+  applyWeekToUI();
+}
 function renameModule(id, name) {
   if (!settings.moduleNames) settings.moduleNames = {};
   settings.moduleNames[id] = name;
@@ -589,6 +624,16 @@ function wireModulesEditor() {
     if (e.target.closest("#newModCancel")) { const f = document.getElementById("modAddForm"); if (f) f.style.display = "none"; return; }
     if (e.target.closest("#newModSave")) { addCustomModuleFromForm(); return; }
     const row = e.target.closest(".pursuit-card"); if (!row) return;
+    const id = row.dataset.id;
+    if (e.target.closest(".pursuit-card-ico")) {
+      openIdentityId = openIdentityId === id ? null : id;
+      renderModulesEditor();
+      return;
+    }
+    const ic = e.target.closest(".pi-icon");
+    if (ic) { setPursuitIcon(id, ic.dataset.icon); return; }
+    const co = e.target.closest(".pi-color");
+    if (co) { setPursuitColor(id, co.dataset.color); return; }
     if (e.target.closest(".mod-up")) moveModule(row.dataset.id, -1);
     else if (e.target.closest(".mod-down")) moveModule(row.dataset.id, 1);
     else if (e.target.closest(".mod-edit")) openSectionEditor(row.dataset.id);
@@ -948,6 +993,22 @@ function attrCat(attr) { return (window.Forge && Forge.CAT_OF_ATTR[attr]) || "di
 // working; only the label and color the user sees are customizable.
 function attrName(attr) { return (settings.attrLabels && settings.attrLabels[attr]) || attr; }
 function attrColor(attr) { return (settings.attrColors && settings.attrColors[attr]) || (window.Forge && Forge.ATTR_COLOR[attr]) || "#94a3b8"; }
+// A pursuit's accent, already resolved by the engine (chosen shade → attribute
+// family base → neutral). Read it; never recompute it from the attribute here.
+function pursuitColor(m) { return (m && m.color) || Forge.NEUTRAL_ACCENT; }
+// A pursuit's weekly target value, from the descriptor. The settings key each
+// pursuit stores it under is the engine's business, not the UI's.
+function pursuitTarget(id, fallback) {
+  const t = Forge.targetOf(getModules().find((x) => x.id === id));
+  return t ? t.value : fallback;
+}
+// A task takes its pursuit's accent, so a Training row on the agenda is visibly
+// the same colour as the Training section. Daily-only tasks fall back to the
+// attribute they train.
+function questAccent(q, attr) {
+  const area = questArea(q);
+  return area ? pursuitColor(area) : attrColor(attr || q.attr || "Discipline");
+}
 
 // ===== THEME SYSTEM =====
 function applyTheme(themeId) {
@@ -1642,7 +1703,7 @@ function renderSourceQuest(q) {
   const supportsSessionNotes = q.areaId === "workout" || (area && area.planOnly && area.type === "table");
   const noteHtml = supportsSessionNotes && checks.length ? `<details class="quest-session-notes-wrap"><summary>Session notes</summary><div class="quest-session-notes">${checks.map((x) => `<label><span>${dayNames()[x.d.getDay()].slice(0,3)}</span><input id="${questNoteId(q, x.d)}" type="text" data-save placeholder="What did you do?"></label>`).join("")}</div></details>` : "";
   const schedule = q.scheduleType === "once" ? `<button class="quest-date-badge quest-jump" type="button" data-date="${escapeHtml(q.scheduledDate || "")}" title="Open this task's week">${escapeHtml(scheduleLabel)}</button>` : `<span class="quest-date-badge is-weekly"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>${escapeHtml(scheduleLabel)}</span>`;
-  return `<div class="quest-row${occurrences.length ? "" : " is-outside-week"}" data-quest-id="${escapeHtml(q.id)}" style="--ac:${attrColor(attr)}">
+  return `<div class="quest-row${occurrences.length ? "" : " is-outside-week"}" data-quest-id="${escapeHtml(q.id)}" style="--ac:${questAccent(q, attr)}">
     <span class="q-text">${escapeHtml(q.title)}</span>
     ${occurrenceHtml}
     ${schedule}
@@ -1739,7 +1800,7 @@ function sectionHeroHtml(m) {
   if (m.id === "workout") {
     const st = sectionDayStates("workout");
     const done = st.reduce((n, d) => n + (d.done > 0 ? 1 : 0), 0);
-    const tgt = settings.workoutMin != null ? settings.workoutMin : 5;
+    const tgt = pursuitTarget("workout", 5);
     const track = `<div class="hero-track">` + st.map((d) => `<span class="ht-node ${d.done ? "done" : d.planned ? "planned" : "rest"}" title="${escapeHtml(dayNames()[d.dayIndex])}"><b>${DOW_INITIAL[d.dayIndex]}</b></span>`).join("") + `</div>`;
     return heroFrame("training", crest, "Training grounds", "This week's regimen", heroCount(done, `/ ${tgt}`), heroGauge(tgt ? done / tgt * 100 : 0, `${done} sessions cleared · target ${tgt}`) + track);
   }
@@ -1748,7 +1809,7 @@ function sectionHeroHtml(m) {
     const stats = (window.Forge && Forge.nutritionWeekStats)
       ? Forge.nutritionWeekStats(getWeekData(), getUnifiedQuests(), selectedWeekStart, settings.proteinFloorPct || 60)
       : { daysMet: 0, days: [] };
-    const tgt = settings.proteinMin != null ? settings.proteinMin : 7;
+    const tgt = pursuitTarget("diet", 7);
     const vials = `<div class="hero-vials">` + (stats.days || []).map((d) => {
       const pct = d.total ? Math.round(d.done / d.total * 100) : 0;
       return `<span class="hv ${d.met ? "met" : ""}" style="--fill:${pct}%" title="${escapeHtml(dayNames()[d.dayIndex])}: ${d.done}/${d.total}"><i></i><b>${DOW_INITIAL[d.dayIndex]}</b></span>`;
@@ -1761,7 +1822,7 @@ function sectionHeroHtml(m) {
       .map((g) => ({ g, days: Math.round((new Date(g.targetDate + "T00:00:00") - new Date().setHours(0, 0, 0, 0)) / 86400000) }))
       .filter((x) => x.days >= 0).sort((a, b) => a.days - b.days)[0];
     const wk = getWeekData(); let hrs = 0; for (const k in (wk.fields || {})) if (k.indexOf("hours-study-") === 0) hrs += Number(wk.fields[k] || 0);
-    const tgt = settings.studyTarget != null ? settings.studyTarget : 14;
+    const tgt = pursuitTarget("study", 14);
     const trial = up
       ? `<div class="hero-trial"><div class="ht-days"><b>${up.days}</b><span>day${up.days === 1 ? "" : "s"}</span></div><div class="ht-meta"><div class="ht-tlabel">Next trial</div><div class="ht-name">${escapeHtml(up.g.title)}</div></div></div>`
       : `<div class="hero-trial is-empty">No trials on the calendar — set a target date on a certification to start its countdown.</div>`;
@@ -2173,7 +2234,7 @@ function renderDays() {
         // and the one-off marker is a glyph so it costs almost no width.
         const onceBadge = q.scheduleType === "once" ? `<span class="task-kind-badge is-once" role="img" aria-label="One-off task" title="One-off — happens once, not part of a weekly routine"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>` : "";
         const taskMeta = `<span class="task-meta">${attrBadge}${onceBadge}</span>`;
-        return `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}"${min == null ? "" : ` data-min="${min}"`} title="${escapeHtml(rowTitle)}" style="--ac:${attrColor(attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save>${timeCell}${pursuitIcon}<span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<span class="q-xp">+${xp}</span><button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></label>`;
+        return `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}"${min == null ? "" : ` data-min="${min}"`} title="${escapeHtml(rowTitle)}" style="--ac:${questAccent(q, attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save>${timeCell}${pursuitIcon}<span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<span class="q-xp">+${xp}</span><button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></label>`;
       }).join("");
       group.insertAdjacentHTML("beforeend", `<div class="agenda-part" data-part="${part.id}"><div class="agenda-part-head"><span class="apart-ico">${part.icon}</span><span class="apart-label">${part.label}</span><span class="apart-rule"></span><span class="apart-count">${items.length}</span></div>${rows}</div>`);
     });
@@ -2338,10 +2399,10 @@ function setMetric(id, value) {
 }
 
 function updateProgress() {
-  const workoutMin = settings.workoutMin || 5;
-  const proteinMin = settings.proteinMin || 7;
-  const studyTarget = settings.studyTarget || 14;
-  const projectTarget = settings.projectTarget || 2;
+  const workoutMin = pursuitTarget("workout", 5);
+  const proteinMin = pursuitTarget("diet", 7);
+  const studyTarget = pursuitTarget("study", 14);
+  const projectTarget = pursuitTarget("projects", 2);
   const projectStretch = projectTarget + 1;
 
   const pillW = document.getElementById("pillWorkout"); if (pillW) pillW.textContent = `${workoutMin} sessions target`;
