@@ -146,6 +146,20 @@ function applyModuleLayout() {
         summary.insertBefore(ico, summary.firstChild);
       }
       ico.innerHTML = moduleIconSvg(m.icon);
+      // One edit affordance per pursuit, identical everywhere.
+      let pencil = summary.querySelector(":scope .edit-section-btn");
+      if (!pencil) {
+        pencil = document.createElement("button");
+        pencil.className = "icon-btn edit-section-btn";
+        pencil.type = "button";
+        pencil.innerHTML = `<svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>`;
+        const chev = summary.querySelector(".chev");
+        if (chev && chev.parentNode) chev.parentNode.insertBefore(pencil, chev);
+        else summary.appendChild(pencil);
+      }
+      pencil.dataset.moduleId = m.id;
+      pencil.title = `Edit ${m.name}`;
+      pencil.setAttribute("aria-label", `Edit ${m.name}`);
       // Attribute badge — makes "what stat this section feeds" obvious.
       // (Daily has no single attr — its tasks carry per-task dots instead.)
       if (m.attr) {
@@ -175,7 +189,7 @@ function customHint(m) {
   return "";
 }
 function customSectionHtml(m) {
-  const head = `<summary><div class="summary-left"><h2>${escapeHtml(m.name)}</h2><p class="hint">${escapeHtml(customHint(m))}</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-section-btn" type="button" data-module-id="${m.id}" title="Edit pursuit"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>`;
+  const head = `<summary><div class="summary-left"><h2>${escapeHtml(m.name)}</h2><p class="hint">${escapeHtml(customHint(m))}</p></div><span class="chev">⌄</span></summary>`;
   let body = "";
   if (m.planOnly) {
     body = `<div class="content"></div>`;
@@ -291,10 +305,8 @@ function renderModulesEditor() {
     const feeds = m.id === "daily"
       ? `<span class="pursuit-feeds muted">Your daily agenda — every pursuit's tasks land here</span>`
       : (m.attr ? `<span class="pursuit-feeds">Feeds ${escapeHtml(attrName(m.attr))}</span>` : "");
-    const customTools = m.custom
-      ? `<button class="mod-edit" type="button" title="Edit pursuit" aria-label="Edit pursuit"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>
-           <button class="mod-del" type="button" title="Delete pursuit" aria-label="Delete pursuit"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`
-      : "";
+    const customTools = `<button class="mod-edit" type="button" title="Edit pursuit" aria-label="Edit ${escapeHtml(m.name)}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button>`
+      + (m.custom ? `<button class="mod-del" type="button" title="Delete pursuit" aria-label="Delete ${escapeHtml(m.name)}"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>` : "");
     return `
     <div class="pursuit-card" data-id="${m.id}" style="--ac:${accent}">
       <div class="pursuit-card-top">
@@ -362,76 +374,166 @@ function renderModulesEditor() {
 // pencil and from Settings → Sections. Lets the user set name, stat, XP, items,
 // and the weekly target/limit.
 let editSectionId = null;
-function sectionEditBodyHtml(m) {
-  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
-  const attrOpts = attrs.map((a) => `<option value="${a}" ${a === m.attr ? "selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
-  let typeFields = "";
-  if (m.type === "checklist" && !m.planOnly) {
-    typeFields = `<label class="label">Items (one per line)</label><textarea class="es-items">${escapeHtml((m.items || []).join("\n"))}</textarea>`;
+// ----- The pursuit editor — one editor for every pursuit --------------------
+// Built-in and custom pursuits open the same dialog from the same places: the
+// pencil in the pursuit's own header, and the pencil on its card in Settings.
+// What varies is which blocks appear, driven by the descriptor — never by id.
+function pursuitEditorBodyHtml(m) {
+  const target = Forge.targetOf(m);
+  const isCustom = !!m.custom;
+  const attrs = Forge.ATTR_LIST;
+
+  const identity = `<div class="pe-block">
+    <span class="pe-legend">Identity</span>
+    <label class="label" for="peName">Name</label>
+    <input type="text" id="peName" value="${escapeHtml(m.name)}" maxlength="28" spellcheck="false">
+    ${pursuitIdentityHtml(m)}
+  </div>`;
+
+  const statField = isCustom
+    ? `<label class="label" for="peAttr">Feeds stat</label>
+       <select id="peAttr">${attrs.map((a) => `<option value="${a}"${a === m.attr ? " selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("")}</select>
+       <p class="hint">Changing this moves the pursuit and its tasks to a different stat. Everything you have already logged is carried across.</p>`
+    : `<label class="label">Feeds stat</label>
+       <p class="pe-static"><span class="pe-dot" style="background:${pursuitColor(m)}"></span>${escapeHtml(m.attr ? attrName(m.attr) : "No single stat")}</p>
+       <p class="hint">${m.attr ? "Built-in pursuits keep their stat so past weeks keep counting." : "Your daily agenda carries each task's own stat."}</p>`;
+
+  const targetField = target
+    ? `<label class="label" for="peTarget">Weekly target</label>
+       <div class="pe-target"><input type="number" id="peTarget" value="${target.value}" min="${target.min}" max="${target.max}" step="1"><em>${escapeHtml(target.unit)}</em></div>`
+    : `<p class="hint">This pursuit has no single weekly number — it is measured by how much of its plan you finish.</p>`;
+
+  let content = "";
+  if (m.type === "review") {
+    content = `<div class="pe-block"><span class="pe-legend">Reflection prompts</span>
+      <p class="hint">One per line. These are the questions you answer at the end of the week.</p>
+      <textarea id="pePrompts" rows="5">${escapeHtml(getReviewPrompts().join("\n"))}</textarea></div>`;
   } else if (m.type === "counter") {
-    typeFields = `<div class="form-row"><div class="form-col"><label class="label">Weekly target (your limit)</label><input type="number" class="es-target" min="0" step="any" value="${(m.target && m.target.value) || 0}"></div><div class="form-col"><label class="label">Unit</label><input type="text" class="es-unit" value="${escapeHtml((m.target && m.target.unit) || "")}"></div></div>`;
+    content = `<div class="pe-block"><span class="pe-legend">Counting</span>
+      <div class="form-row">
+        <div class="form-col"><label class="label" for="peUnit">Unit</label><input type="text" id="peUnit" value="${escapeHtml((m.target && m.target.unit) || "")}" placeholder="pages · km · min"></div>
+        <div class="form-col"><label class="label" for="peXp">XP per unit</label><input type="number" id="peXp" min="0" step="1" value="${m.xpPer || 0}"></div>
+      </div></div>`;
+  } else if (m.type === "checklist" && !m.planOnly) {
+    content = `<div class="pe-block"><span class="pe-legend">Items</span>
+      <p class="hint">One per line.</p>
+      <textarea id="peItems" rows="5">${escapeHtml((m.items || []).join("\n"))}</textarea>
+      <label class="label" for="peXp" style="margin-top:10px;">XP per item</label><input type="number" id="peXp" min="0" step="1" value="${m.xpPer || 0}"></div>`;
+  } else {
+    content = `<div class="pe-block"><span class="pe-legend">Plan</span>
+      <p class="hint">This pursuit's plan is its scheduled tasks — edit them on the pursuit itself, where each task carries its own schedule.</p>
+      <button type="button" class="pe-plan-link" data-jump="${escapeHtml(m.id)}">Open ${escapeHtml(m.name)} →</button></div>`;
   }
-  const economyFields = m.planOnly ? `<p class="hint">This pursuit's plan is edited task by task on its page. Each task carries its own schedule and uses this pursuit's attribute.</p>` : `<div class="form-col"><label class="label">XP per ${m.type === "counter" ? "unit" : m.type === "table" ? "day" : "item"}</label><input type="number" class="es-xp" min="0" step="1" value="${m.xpPer || 0}"></div>`;
-  return `<label class="label">Name</label><input type="text" class="es-name" value="${escapeHtml(m.name)}" maxlength="28" spellcheck="false">
-    <div class="form-row">
-      <div class="form-col"><label class="label">Feeds stat</label><select class="es-attr">${attrOpts}</select></div>
-      ${economyFields}
-    </div>
-    ${typeFields}
-    ${m.planOnly ? "" : `<label class="me-score" style="margin-top:12px;"><input type="checkbox" class="es-countscore" ${m.countScore ? "checked" : ""}><span>Count toward weekly score</span></label>`}`;
+
+  return identity
+    + `<div class="pe-block"><span class="pe-legend">Stat &amp; target</span>${statField}${targetField}</div>`
+    + content
+    + `<div class="pe-block"><span class="pe-legend">Visibility</span>
+        <label class="pe-check"><input type="checkbox" id="peShow" ${m.enabled !== false ? "checked" : ""}><span>Show this pursuit in the app</span></label>
+        <p class="hint">Hiding a pursuit only hides it. Nothing you logged is removed, and past weeks keep their score.</p></div>`;
 }
-function openSectionEditor(id) {
-  const m = (settings.customModules || []).find((x) => x.id === id);
+function openPursuitEditor(id) {
+  const m = getModules().find((x) => x.id === id);
   if (!m) return;
   editSectionId = id;
+  openIdentityId = id;                       // the picker is part of this dialog
   document.getElementById("editSectionTitle").textContent = `Edit ${m.name}`;
-  document.getElementById("editSectionBody").innerHTML = sectionEditBodyHtml(m);
+  const body = document.getElementById("editSectionBody");
+  body.innerHTML = pursuitEditorBodyHtml(m);
+  body.style.setProperty("--ac", pursuitColor(m));
+  const del = document.getElementById("editSectionDelete");
+  if (del) del.style.display = m.custom ? "" : "none";
   const md = document.getElementById("editSectionModal");
   md.classList.add("active"); md.setAttribute("aria-hidden", "false");
 }
 function closeSectionEditor() {
   editSectionId = null;
+  openIdentityId = null;
   const md = document.getElementById("editSectionModal");
   md.classList.remove("active"); md.setAttribute("aria-hidden", "true");
 }
-function saveSectionEditor() {
-  const m = (settings.customModules || []).find((x) => x.id === editSectionId);
+// Re-render the dialog in place after an icon/colour pick so the choice shows.
+function refreshPursuitEditor() {
+  if (!editSectionId) return;
+  const m = getModules().find((x) => x.id === editSectionId);
+  if (!m) return;
   const body = document.getElementById("editSectionBody");
-  if (!m || !body) { closeSectionEditor(); return; }
-  const name = (body.querySelector(".es-name").value || "").trim();
-  if (name) { m.name = name; if (settings.moduleNames) delete settings.moduleNames[m.id]; }
-  const attr = body.querySelector(".es-attr").value;
-  const assignedTasks = (settings.quests || []).filter((q) => q.areaId === m.id).map((q) => ({ q, oldBase: questCheckId(q) }));
+  body.innerHTML = pursuitEditorBodyHtml(m);
+  body.style.setProperty("--ac", pursuitColor(m));
+}
+// Moving a pursuit to another stat rewrites its tasks' check ids, so completion
+// already logged has to travel with them.
+function reassignPursuitAttr(m, attr) {
+  const assigned = (settings.quests || []).filter((q) => q.areaId === m.id).map((q) => ({ q, oldBase: questCheckId(q) }));
   m.attr = attr;
-  m.category = (window.Forge && Forge.CAT_OF_ATTR[attr]) || "discipline";
-  const touchedWeeks = new Set();
-  assignedTasks.forEach(({ q, oldBase }) => {
+  m.category = Forge.CAT_OF_ATTR[attr] || "discipline";
+  const touched = new Set();
+  assigned.forEach(({ q, oldBase }) => {
     q.attr = attr; q.category = m.category;
     const nextBase = questCheckId(q);
     if (oldBase === nextBase) return;
     Object.entries(database.weeks || {}).forEach(([key, week]) => {
       Object.keys((week && week.checks) || {}).forEach((checkId) => {
         if (checkId !== oldBase && checkId.indexOf(oldBase + "-d") !== 0) return;
-        const suffix = checkId.slice(oldBase.length);
-        week.checks[nextBase + suffix] = week.checks[checkId]; delete week.checks[checkId]; touchedWeeks.add(key);
+        week.checks[nextBase + checkId.slice(oldBase.length)] = week.checks[checkId];
+        delete week.checks[checkId];
+        touched.add(key);
       });
     });
   });
-  const xpInput = body.querySelector(".es-xp"), scoreInput = body.querySelector(".es-countscore");
-  if (xpInput) m.xpPer = Number(xpInput.value) || 0;
-  if (scoreInput) m.countScore = scoreInput.checked;
-  if (m.type === "checklist" && !m.planOnly) {
-    const items = (body.querySelector(".es-items").value || "").split("\n").map((s) => s.trim()).filter(Boolean);
-    m.items = items.length ? items : ["First item"];
-  } else if (m.type === "counter") {
-    const unit = body.querySelector(".es-unit").value || "";
-    m.target = { kind: /hour|hr|min/i.test(unit) ? "hours" : "count", value: Number(body.querySelector(".es-target").value) || 1, unit };
+  return touched;
+}
+function savePursuitEditor() {
+  const id = editSectionId;
+  const m = id ? getModules().find((x) => x.id === id) : null;
+  const body = document.getElementById("editSectionBody");
+  if (!m || !body) { closeSectionEditor(); return; }
+  const custom = (settings.customModules || []).find((x) => x.id === id);
+  const val = (sel) => { const el = body.querySelector(sel); return el ? el.value : null; };
+
+  const name = (val("#peName") || "").trim();
+  if (name && name !== m.name) renameModule(id, name);
+
+  let touched = new Set();
+  const attr = val("#peAttr");
+  if (custom && attr && attr !== m.attr) touched = reassignPursuitAttr(custom, attr);
+
+  const targetEl = body.querySelector("#peTarget");
+  if (targetEl) Forge.setTargetOn(settings, m, targetEl.value);
+
+  const unit = val("#peUnit");
+  if (custom && unit !== null) {
+    custom.target = Object.assign({}, custom.target, { unit, kind: /hour|hr|min/i.test(unit) ? "hours" : "count" });
   }
+  const xp = val("#peXp");
+  if (custom && xp !== null) custom.xpPer = Number(xp) || 0;
+  const items = val("#peItems");
+  if (custom && items !== null) {
+    const list = items.split("\n").map((x) => x.trim()).filter(Boolean);
+    custom.items = list.length ? list : ["First item"];
+  }
+  const prompts = val("#pePrompts");
+  if (prompts !== null) {
+    const list = prompts.split("\n").map((x) => x.trim()).filter(Boolean);
+    if (list.length) settings.reviewPrompts = list;
+  }
+  const show = body.querySelector("#peShow");
+  if (show) toggleModule(id, show.checked);
+
   persistSettings();
-  touchedWeeks.forEach(persistWeekByKey);
+  touched.forEach(persistWeekByKey);
   closeSectionEditor();
   renderModulesEditor();
+  renderStatic();
   applyWeekToUI();
+}
+function deletePursuitFromEditor() {
+  const id = editSectionId;
+  if (!id) return;
+  const m = getModules().find((x) => x.id === id);
+  if (!m || !m.custom) return;
+  closeSectionEditor();
+  deleteCustomModule(id);
 }
 function applyPreset(id, skipConfirm) {
   const p = (window.Forge && Forge.PRESETS) ? Forge.PRESETS[id] : null;
@@ -591,6 +693,7 @@ function setPursuitIcon(id, icon) {
   settings.moduleIcons[id] = icon;
   persistSettingsSoon();
   renderModulesEditor();
+  refreshPursuitEditor();
   applyWeekToUI();
 }
 function setPursuitColor(id, color) {
@@ -598,6 +701,7 @@ function setPursuitColor(id, color) {
   settings.moduleColors[id] = color;
   persistSettingsSoon();
   renderModulesEditor();
+  refreshPursuitEditor();
   applyWeekToUI();
 }
 function renameModule(id, name) {
@@ -634,9 +738,10 @@ function wireModulesEditor() {
     if (ic) { setPursuitIcon(id, ic.dataset.icon); return; }
     const co = e.target.closest(".pi-color");
     if (co) { setPursuitColor(id, co.dataset.color); return; }
+
     if (e.target.closest(".mod-up")) moveModule(row.dataset.id, -1);
     else if (e.target.closest(".mod-down")) moveModule(row.dataset.id, 1);
-    else if (e.target.closest(".mod-edit")) openSectionEditor(row.dataset.id);
+    else if (e.target.closest(".mod-edit")) openPursuitEditor(row.dataset.id);
     else if (e.target.closest(".mod-del")) deleteCustomModule(row.dataset.id);
     else if (e.target.closest(".pursuit-plan-link")) {
       document.getElementById("settingsModal").classList.remove("active");
@@ -3309,16 +3414,27 @@ function bindEvents() {
     const eb = e.target.closest(".edit-section-btn");
     if (!eb) return;
     e.preventDefault(); e.stopPropagation();
-    openSectionEditor(eb.dataset.moduleId);
+    openPursuitEditor(eb.dataset.moduleId);
   });
   const esClose = document.getElementById("editSectionClose");
   if (esClose) esClose.onclick = closeSectionEditor;
   const esCancel = document.getElementById("editSectionCancel");
   if (esCancel) esCancel.onclick = closeSectionEditor;
   const esSave = document.getElementById("editSectionSave");
-  if (esSave) esSave.onclick = saveSectionEditor;
+  if (esSave) esSave.onclick = savePursuitEditor;
+  const esDel = document.getElementById("editSectionDelete");
+  if (esDel) esDel.onclick = deletePursuitFromEditor;
   const esModal = document.getElementById("editSectionModal");
-  if (esModal) esModal.addEventListener("click", e => { if (e.target.id === "editSectionModal") closeSectionEditor(); });
+  if (esModal) esModal.addEventListener("click", e => {
+    if (e.target.id === "editSectionModal") { closeSectionEditor(); return; }
+    if (!editSectionId) return;
+    const ic = e.target.closest(".pi-icon");
+    if (ic) { e.preventDefault(); setPursuitIcon(editSectionId, ic.dataset.icon); return; }
+    const co = e.target.closest(".pi-color");
+    if (co) { e.preventDefault(); setPursuitColor(editSectionId, co.dataset.color); return; }
+    const jump = e.target.closest(".pe-plan-link");
+    if (jump) { e.preventDefault(); const to = jump.dataset.jump; closeSectionEditor(); scrollToSection(to); }
+  });
   document.getElementById("prevWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, -7); applyWeekToUI(); };
   document.getElementById("nextWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, 7); applyWeekToUI(); };
   document.getElementById("currentWeekBtn").onclick = () => { selectedWeekStart = getStartOfWeek(new Date()); applyWeekToUI(); };
@@ -3460,30 +3576,6 @@ function bindEvents() {
   document.getElementById("questScheduleType").addEventListener("change", syncQuestScheduleFields);
   document.getElementById("questEditorModal").addEventListener("click", (e) => { if (e.target.id === "questEditorModal") closeEditorModal("questEditorModal"); });
 
-  // Editable non-task content. Pursuit plans use the unified task editor above.
-  function wireListEditor(opts) {
-    const btn = document.querySelector(opts.btnSel);
-    if (btn) btn.onclick = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      document.getElementById(opts.textareaId).value = opts.get().join("\n");
-      document.getElementById(opts.modalId).classList.add("active");
-    };
-    const cancel = document.getElementById(opts.cancelId);
-    if (cancel) cancel.onclick = () => document.getElementById(opts.modalId).classList.remove("active");
-    const save = document.getElementById(opts.saveId);
-    if (save) save.onclick = async () => {
-      const lines = document.getElementById(opts.textareaId).value.split("\n").map(l => l.trim()).filter(Boolean);
-      if (!lines.length) { alert("Keep at least one item."); return; }
-      opts.set(lines);
-      await persistSettings();
-      document.getElementById(opts.modalId).classList.remove("active");
-      opts.rerender();
-      loadWeekFields();
-      updateProgress();
-      if (window.Game) Game.render();
-    };
-  }
-  wireListEditor({ btnSel: ".edit-review-btn", modalId: "editReviewModal", textareaId: "editReviewTextarea", cancelId: "cancelReviewBtn", saveId: "saveReviewBtn", get: getReviewPrompts, set: (l) => { settings.reviewPrompts = l; }, rerender: renderReview });
 
   // Insights Modal
   const closeInsightsBtn = document.getElementById("closeInsightsBtn");

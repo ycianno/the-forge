@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=69" />
+  <link rel="stylesheet" href="style.css?v=70" />
 </head>
 <body>
   <main class="shell">
@@ -248,7 +248,7 @@
     </details>
 
     <details id="review" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>War Council</h2><p class="hint">At the end of the week, copy this summary and paste it into ChatGPT for analysis.</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-review-btn" type="button" title="Edit Review Prompts"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
+      <summary><div class="summary-left"><h2>War Council</h2><p class="hint">At the end of the week, copy this summary and paste it into ChatGPT for analysis.</p></div><span class="chev">⌄</span></summary>
       <div class="content grid grid-2">
         <div><label class="label" id="lblWins">Wins this week</label><textarea id="wins" data-save></textarea></div>
         <div><label class="label" id="lblMisses">Missed habits / friction</label><textarea id="misses" data-save></textarea></div>
@@ -285,7 +285,7 @@
     </div>
 
     <div class="modal-backdrop" id="editSectionModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="editSectionTitle" style="max-width: 480px;">
+      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="editSectionTitle" style="max-width: 520px;">
         <div class="modal-head">
           <div class="modal-title-wrap">
             <span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></span>
@@ -294,7 +294,9 @@
           <button class="modal-close" id="editSectionClose" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <div id="editSectionBody"></div>
-        <div class="modal-actions">
+        <div class="modal-actions split-actions">
+          <button class="danger" id="editSectionDelete" type="button" style="display:none">Delete</button>
+          <span class="action-spacer"></span>
           <button id="editSectionCancel" type="button">Cancel</button>
           <button id="editSectionSave" type="button" class="primary">Save changes</button>
         </div>
@@ -563,18 +565,6 @@
     </div>
 
 
-    <!-- Edit Review Prompts Modal -->
-    <div class="modal-backdrop" id="editReviewModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true">
-        <h3>Edit Weekly Review Prompts</h3>
-        <p class="hint">Four lines — the reflection questions (wins, friction, change, refuse-to-drop).</p>
-        <textarea id="editReviewTextarea" spellcheck="false"></textarea>
-        <div class="modal-actions">
-          <button id="cancelReviewBtn" type="button">Cancel</button>
-          <button id="saveReviewBtn" type="button" class="primary">Save Prompts</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Heatmap Insights Modal -->
     <div class="modal-backdrop" id="insightsModal" aria-hidden="true">
@@ -711,7 +701,7 @@
   <script src="modules.js?v=17"></script>
   <script src="game.js?v=27"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=63"></script>
+  <script src="app.js?v=64"></script>
   <script src="extras.js?v=5"></script>
 </body>
 </html>
