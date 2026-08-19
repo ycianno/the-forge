@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=68" />
+  <link rel="stylesheet" href="style.css?v=69" />
 </head>
 <body>
   <main class="shell">
@@ -203,7 +203,7 @@
     </section>
 
     <details id="scoreboard" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>Quest Log</h2><p class="hint">Commitments are separated from bonus targets so the system stays honest.</p></div><div style="display:flex;gap:8px;align-items:center;"><button class="icon-btn edit-metrics-btn" type="button" title="Edit Metrics"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><span class="chev">⌄</span></div></summary>
+      <summary><div class="summary-left"><h2>Quest Log</h2><p class="hint">One row per pursuit — how each of them is doing against its own weekly target.</p></div><span class="chev">⌄</span></summary>
       <div class="content"><div class="grid grid-4" id="scoreboardGrid"></div></div>
     </details>
 
@@ -514,18 +514,6 @@
       </div>
     </div>
 
-    <!-- Edit Metrics Modal -->
-    <div class="modal-backdrop" id="editMetricsModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true">
-        <h3>Edit Scoreboard Labels</h3>
-        <p class="hint">One per line. Format: Title | Subtitle (Do not change the number of lines)</p>
-        <textarea id="editMetricsTextarea" spellcheck="false" style="min-height:200px;"></textarea>
-        <div class="modal-actions">
-          <button id="cancelMetricsBtn" type="button">Cancel</button>
-          <button id="saveMetricsBtn" type="button" class="primary">Save Labels</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Certification / Project editor -->
     <div class="modal-backdrop" id="goalEditorModal" aria-hidden="true">
@@ -723,7 +711,7 @@
   <script src="modules.js?v=17"></script>
   <script src="game.js?v=27"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=62"></script>
+  <script src="app.js?v=63"></script>
   <script src="extras.js?v=5"></script>
 </body>
 </html>

@@ -1408,17 +1408,6 @@ function updateStreakAndHeatmap() {
   }
 }
 
-const defaultMetrics = [
-  ["discipline", "Daily Discipline", "Basics completed", "0%"],
-  ["training", "Training", "Workout and movement", "0%"],
-  ["protein", "Provisions", "Nutrition floor", "0%"],
-  ["study", "Scholarship", "Daily study target", "0%"],
-  ["career-hours", "Scholarship Hours", "Weekly study hours", "0%"],
-  ["projects-hours", "Workshop", "Weekly output hours", "0%"],
-  ["projects-bonus", "Workshop Bonus", "Stretch hours", "0%"],
-  ["review", "War Council", "Reflection completed", "0%"]
-];
-function getMetrics() { return settings.metrics || defaultMetrics; }
 
 const defaultStudyAreas = Forge.DEFAULT_STUDY_AREAS;
 function forgeId(prefix) {
@@ -2126,12 +2115,63 @@ function renderReview() {
   ids.forEach((id, i) => { const el = document.getElementById(id); if (el && prompts[i]) el.textContent = prompts[i]; });
 }
 
+// A pursuit's week, as one comparable reading. Pursuits with a numeric weekly
+// target report progress toward it; the rest report how much of their scheduled
+// plan is done. This is the only place that decides what a pursuit's number
+// means, so the Quest Log can never disagree with the pursuit's own card.
+function pursuitMetric(m) {
+  const wk = getWeekData(), mods = getModules();
+  const target = Forge.targetOf(m);
+  const plan = () => {
+    const st = questWeekStats(wk, selectedWeekStart, m.id);
+    return { done: st.done, total: st.total, sub: `${st.done} of ${st.total} planned task${st.total === 1 ? "" : "s"}` };
+  };
+  let done, total, sub;
+  if (m.id === "daily") {
+    const st = questWeekStats(wk, selectedWeekStart);
+    done = st.done; total = st.total; sub = `${st.done} of ${st.total} scheduled this week`;
+  } else if (m.id === "diet" && target) {
+    const n = nutritionWeekStats(wk, selectedWeekStart);
+    done = n.daysMet; total = target.value; sub = `${n.daysMet} of ${target.value} days provisioned`;
+  } else if (m.id === "study" && target) {
+    let h = 0; for (const k in (wk.fields || {})) if (k.indexOf("hours-study-") === 0) h += Number(wk.fields[k] || 0);
+    done = round1(h); total = target.value; sub = `${round1(h)} of ${target.value} hrs studied`;
+  } else if (m.id === "projects" && target) {
+    const h = Number((wk.fields || {}).projectHours || 0);
+    done = round1(h); total = target.value; sub = `${round1(h)} of ${target.value} hrs on the anvil`;
+  } else if (m.type === "counter" && target) {
+    const v = (Forge.moduleCountValue(wk, mods, m) || 0) + (Forge.questSessionDays(wk, mods, m.id) || 0);
+    done = round1(v); total = target.value; sub = `${round1(v)} of ${target.value} ${(m.target && m.target.unit) || "logged"}`;
+  } else if (m.type === "review") {
+    const f = wk.fields || {};
+    done = (m.fields || []).filter((k) => f[k] && String(f[k]).trim()).length;
+    total = (m.fields || []).length; sub = `${done} of ${total} reflections logged`;
+  } else if (target) {
+    const st = questWeekStats(wk, selectedWeekStart, m.id);
+    done = st.done; total = target.value; sub = `${st.done} of ${target.value} ${target.unit.replace("/wk", "")}`;
+  } else {
+    const r = plan(); done = r.done; total = r.total; sub = r.sub;
+  }
+  return { id: m.id, title: m.name, sub, pct: percent(done, total), color: pursuitColor(m), icon: m.icon };
+}
+// The Quest Log is a projection of your pursuits — one row each, in your order,
+// honouring show/hide. Nothing here is hardcoded, so adding a pursuit adds a row
+// and renaming one renames it.
+function scoreboardMetrics() {
+  return getModules().filter((m) => m.enabled !== false).map(pursuitMetric);
+}
 function renderScoreboard() {
   const wrap = document.getElementById("scoreboardGrid");
-  wrap.innerHTML = "";
-  getMetrics().forEach(([id, title, subtitle, val]) => {
-    wrap.insertAdjacentHTML("beforeend", `<div class="metric"><div class="top"><div><div class="metric-title">${title}</div><p class="hint">${subtitle}</p></div><span class="metric-number" id="metric-${id}">${val}</span></div><div class="bar"><div class="bar-fill" id="bar-${id}"></div></div></div>`);
-  });
+  if (!wrap) return;
+  wrap.innerHTML = scoreboardMetrics().map((x) =>
+    `<button class="metric metric-jump" type="button" data-jump="${escapeHtml(x.id)}" style="--ac:${x.color}" title="Open ${escapeHtml(x.title)}">
+      <div class="top">
+        <div><div class="metric-title"><span class="metric-ico" aria-hidden="true">${moduleIconSvg(x.icon)}</span>${escapeHtml(x.title)}</div><p class="hint" id="sub-${escapeHtml(x.id)}">${escapeHtml(x.sub)}</p></div>
+        <span class="metric-number" id="metric-${escapeHtml(x.id)}">${x.pct}%</span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="bar-${escapeHtml(x.id)}"></div></div>
+    </button>`
+  ).join("");
 }
 
 // ----- agenda: parts of the day ---------------------------------------------
@@ -2429,17 +2469,13 @@ function updateProgress() {
   if (mobileRing) mobileRing.style.background = `conic-gradient(var(--accent-success) ${overall * 3.6}deg, rgba(255,255,255,0.08) 0deg)`;
   if (mobileVal) mobileVal.textContent = overall + "%";
 
-  const byCategory = (cat) => {
-    const rows = allStats.rows.filter((row) => (row.q.category || attrCat(row.q.attr || "Discipline")) === cat);
-    return { done: rows.filter((row) => !!_wk.checks[row.id]).length, total: rows.length };
-  };
-  const discipline = byCategory("discipline"), studyTasks = byCategory("study");
-  const training = questWeekStats(_wk, selectedWeekStart, "workout");
-  const nutrition = nutritionWeekStats(_wk, selectedWeekStart);
-  setMetric("discipline", percent(discipline.done, discipline.total));
-  setMetric("training", percent(training.done, workoutMin));
-  setMetric("protein", percent(nutrition.daysMet, proteinMin));
-  setMetric("study", percent(studyTasks.done, studyTasks.total));
+  // Every pursuit reports itself. Adding, hiding or renaming one needs no change
+  // here — the rows are whatever getModules() currently says they are.
+  scoreboardMetrics().forEach((x) => {
+    setMetric(x.id, x.pct);
+    const sub = document.getElementById(`sub-${x.id}`);
+    if (sub) sub.textContent = x.sub;
+  });
 
   for (let d = 0; d < 7; d++) {
     const items = allStats.rows.filter((row) => row.dayIndex === d);
@@ -2461,17 +2497,11 @@ function updateProgress() {
   updateAgendaNow();
 
   // Built-in hours sections include linked daily "sessions" (each completed day = +1 hr).
-  const studySessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "study") : 0;
   const projSessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "projects") : 0;
-
-  const studyHours = [...document.querySelectorAll('[data-hours="study"]')].reduce((sum, el) => sum + Number(el.value || 0), 0) + studySessions;
-  setMetric("career-hours", Math.round((studyHours / studyTarget) * 100));
 
   const projectHours = Number(document.getElementById("projectHours")?.value || 0) + projSessions;
   document.getElementById("projectHoursValue").textContent = projectHours;
   document.getElementById("projectBar").style.width = Math.min(100, Math.round((projectHours / projectTarget) * 100)) + "%";
-  setMetric("projects-hours", Math.round((projectHours / projectTarget) * 100));
-  setMetric("projects-bonus", Math.round((projectHours / projectStretch) * 100));
   syncSessionNotes();
 
   document.querySelectorAll("[data-plan-progress]").forEach((el) => {
@@ -2482,8 +2512,6 @@ function updateProgress() {
     el.textContent = `${completed}/${occurrences.length} this week`;
   });
 
-  const reviewDone = ["wins", "misses", "changes", "refuseDrop"].filter(id => document.getElementById(id)?.value.trim()).length;
-  setMetric("review", percent(reviewDone, 4));
   renderXpChips();
   syncLinkedProxies();
   syncCounterDisplays();
@@ -3233,6 +3261,11 @@ function bindEvents() {
   document.addEventListener("change", e => {
     if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateProgress(); }
   });
+  // A Quest Log tile is a link to the pursuit it reports on.
+  document.addEventListener("click", e => {
+    const tile = e.target.closest(".metric-jump");
+    if (tile) { e.preventDefault(); scrollToSection(tile.dataset.jump); }
+  });
   document.addEventListener("click", e => {
     const btn = e.target.closest(".edit-day-btn");
     if (btn) { e.preventDefault(); e.stopPropagation(); openQuestEditor({ scheduleType: "weekly", days: [Number(btn.dataset.dayIndex)], attr: "Discipline" }); }
@@ -3400,36 +3433,6 @@ function bindEvents() {
   if (cancelTrophyBtn) cancelTrophyBtn.onclick = () => closeRecordForm();
   const saveTrophyBtn = document.getElementById("saveTrophyBtn");
   if (saveTrophyBtn) saveTrophyBtn.onclick = () => saveRecordForm();
-
-  // Edit Metrics
-  const editMetricsBtn = document.querySelector(".edit-metrics-btn");
-  if (editMetricsBtn) {
-    editMetricsBtn.onclick = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const txt = getMetrics().map(m => `${m[1]} | ${m[2]}`).join("\n");
-      document.getElementById("editMetricsTextarea").value = txt;
-      document.getElementById("editMetricsModal").classList.add("active");
-    };
-  }
-  const cancelMetricsBtn = document.getElementById("cancelMetricsBtn");
-  if (cancelMetricsBtn) cancelMetricsBtn.onclick = () => document.getElementById("editMetricsModal").classList.remove("active");
-  const saveMetricsBtn = document.getElementById("saveMetricsBtn");
-  if (saveMetricsBtn) {
-    saveMetricsBtn.onclick = async () => {
-      const lines = document.getElementById("editMetricsTextarea").value.split("\n").map(l => l.trim()).filter(Boolean);
-      const newMetrics = structuredCloneSafe(getMetrics());
-      for (let i = 0; i < Math.min(lines.length, newMetrics.length); i++) {
-        const parts = lines[i].split("|").map(x => x.trim());
-        if (parts.length >= 1) newMetrics[i][1] = parts[0];
-        if (parts.length >= 2) newMetrics[i][2] = parts[1];
-      }
-      settings.metrics = newMetrics;
-      await persistSettings();
-      document.getElementById("editMetricsModal").classList.remove("active");
-      renderScoreboard();
-      updateProgress();
-    };
-  }
 
   // Add Scholarship / Workshop goals
   const editStudyBtn = document.querySelector(".edit-study-btn");

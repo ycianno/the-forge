@@ -3345,3 +3345,23 @@ html { scroll-padding-top: 84px; }
   .pi-icon { width: 34px; height: 34px; }
   .pi-color { width: 30px; height: 30px; }
 }
+
+/* ===== QUEST LOG TILES =====
+   One tile per pursuit, generated from the module list. Each is a button that
+   jumps to the pursuit it reports on, and carries that pursuit's accent. */
+.metric-jump {
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  cursor: pointer; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(255,255,255,0.025);
+  transition: border-color .14s, background .14s, transform .14s;
+}
+.metric-jump:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ac, var(--accent-primary)) 45%, transparent);
+  background: color-mix(in srgb, var(--ac, var(--accent-primary)) 7%, rgba(255,255,255,0.025));
+}
+.metric-jump:active { transform: translateY(0); }
+.metric-jump .metric-title { display: flex; align-items: center; gap: 7px; }
+.metric-ico { display: inline-flex; color: var(--ac, var(--muted)); }
+.metric-ico .ic { width: 15px; height: 15px; }
+.metric-jump .bar-fill { background: var(--ac, var(--accent-primary)); }
