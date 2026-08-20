@@ -532,7 +532,7 @@
       editingCallsign = false;
       if (save && typeof settings !== "undefined" && settings) {
         settings.callsign = inp.value.trim() || "Operator";
-        if (typeof persistSettings === "function") persistSettings();
+        if (typeof persistSettingsSoon === "function") persistSettingsSoon();
       }
       renderCallsign();
     };
@@ -737,7 +737,7 @@
       else run = 0;
     });
 
-    if (changed && typeof persistSettings === "function") persistSettings();
+    if (changed && typeof persistSettingsSoon === "function") persistSettingsSoon();
   }
 
   // Live snapshot for the dashboard + cabinet (counts + current-period progress).
@@ -915,7 +915,7 @@
     });
     if (changed || first) {
       settings.insignias = owned;
-      if (typeof persistSettings === "function") persistSettings();
+      if (typeof persistSettingsSoon === "function") persistSettingsSoon();
       renderInsignias(p);
     }
   }
@@ -1051,7 +1051,7 @@
     });
     if (changed || first) {
       settings.seenStreaks = seen;
-      if (typeof persistSettings === "function") persistSettings();
+      if (typeof persistSettingsSoon === "function") persistSettingsSoon();
     }
   }
 
@@ -1070,7 +1070,7 @@
     }
     if (changed || first) {
       settings.seenClasses = seen;
-      if (typeof persistSettings === "function") persistSettings();
+      if (typeof persistSettingsSoon === "function") persistSettingsSoon();
     }
   }
   function renderClassChip(p) {
@@ -1186,7 +1186,7 @@
     if (changed || first) {
       store[key] = day;
       settings.dailyMissions = store;
-      if (typeof persistSettings === "function") persistSettings();
+      if (typeof persistSettingsSoon === "function") persistSettingsSoon();
     }
   }
 
@@ -1364,7 +1364,7 @@
     if (changed || first) {
       store[key] = rec;
       settings.weeklyQuests = store;
-      if (typeof persistSettings === "function") persistSettings();
+      if (typeof persistSettingsSoon === "function") persistSettingsSoon();
     }
   }
   function renderWeeklyQuests() { renderQuests(); }   // back-compat alias

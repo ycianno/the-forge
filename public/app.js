@@ -239,6 +239,11 @@ function renderCustomSections() {
 
 // ===== SECTIONS (MODULES) EDITOR =====
 let modPersistTimer = null;
+// Coalescing writer for settings. /api/settings replaces the whole document, so
+// several callers each writing directly means several full rewrites of quests,
+// pursuits, goals and trophies. Anything that can fire more than once per render
+// — award checks especially, which run on every Game.render() — must come
+// through here so one render produces at most one write.
 function persistSettingsSoon() {
   clearTimeout(modPersistTimer);
   modPersistTimer = setTimeout(persistSettings, 350);
@@ -402,6 +407,11 @@ function pursuitEditorBodyHtml(m) {
     ? `<label class="label" for="peTarget">Weekly target</label>
        <div class="pe-target"><input type="number" id="peTarget" value="${target.value}" min="${target.min}" max="${target.max}" step="1"><em>${escapeHtml(target.unit)}</em></div>`
     : `<p class="hint">This pursuit has no single weekly number — it is measured by how much of its plan you finish.</p>`;
+  // A pursuit counted in days has to say what makes a day count.
+  const floorField = target && target.kind === "days"
+    ? `<label class="label" for="peFloor" style="margin-top:12px;">A day counts when you finish</label>
+       <div class="pe-target"><input type="number" id="peFloor" value="${dayFloorPct()}" min="1" max="100" step="1"><em>% of that day's tasks</em></div>`
+    : "";
 
   let content = "";
   if (m.type === "review") {
@@ -426,7 +436,7 @@ function pursuitEditorBodyHtml(m) {
   }
 
   return identity
-    + `<div class="pe-block"><span class="pe-legend">Stat &amp; target</span>${statField}${targetField}</div>`
+    + `<div class="pe-block"><span class="pe-legend">Stat &amp; target</span>${statField}${targetField}${floorField}</div>`
     + content
     + `<div class="pe-block"><span class="pe-legend">Visibility</span>
         <label class="pe-check"><input type="checkbox" id="peShow" ${m.enabled !== false ? "checked" : ""}><span>Show this pursuit in the app</span></label>
@@ -500,6 +510,8 @@ function savePursuitEditor() {
 
   const targetEl = body.querySelector("#peTarget");
   if (targetEl) Forge.setTargetOn(settings, m, targetEl.value);
+  const floorEl = body.querySelector("#peFloor");
+  if (floorEl) settings.proteinFloorPct = Math.min(100, Math.max(1, Number(floorEl.value) || 60));
 
   const unit = val("#peUnit");
   if (custom && unit !== null) {
@@ -1116,9 +1128,10 @@ function questAccent(q, attr) {
 }
 
 // ===== THEME SYSTEM =====
-function applyTheme(themeId) {
+function applyTheme(themeId, persist) {
   document.documentElement.setAttribute('data-theme', themeId);
   settings.theme = themeId;
+  if (persist) persistSettingsSoon();
   // Update meta theme-color for PWA
   const meta = document.querySelector('meta[name="theme-color"]');
   const theme = THEMES.find(t => t.id === themeId);
@@ -1136,7 +1149,7 @@ function renderThemeGrid() {
     swatch.style.background = `${theme.gradient}, ${theme.preview}`;
     swatch.innerHTML = `<span>${theme.name}</span>`;
     swatch.onclick = () => {
-      applyTheme(theme.id);
+      applyTheme(theme.id, true);
       renderThemeGrid();
     };
     grid.appendChild(swatch);
@@ -1384,10 +1397,10 @@ async function checkAutoRecords(p) {
   const seen = settings.seenRecords || [];
   const seenSet = new Set(seen);
   const fresh = autoMilestones(p).filter(m => !seenSet.has(m.key));
-  if (!fresh.length) { if (first) { settings.seenRecords = seen; if (typeof persistSettings === 'function') persistSettings(); } return; }
+  if (!fresh.length) { if (first) { settings.seenRecords = seen; if (typeof persistSettingsSoon === 'function') persistSettingsSoon(); } return; }
   fresh.forEach(m => seen.push(m.key));
   settings.seenRecords = seen;
-  if (typeof persistSettings === 'function') persistSettings();
+  if (typeof persistSettingsSoon === 'function') persistSettingsSoon();
   if (first) return; // silent backfill — record nothing historical
   for (const m of fresh) {
     await saveRecord({
@@ -2530,8 +2543,9 @@ function questWeekStats(week, start, areaId) {
   if (window.Forge && Forge.questWeekStats) return Forge.questWeekStats(week, getUnifiedQuests(), start || selectedWeekStart, areaId);
   return { rows: [], done: 0, total: 0, pct: 0 };
 }
+function dayFloorPct() { return Math.min(100, Math.max(1, Number(settings.proteinFloorPct) || 60)); }
 function nutritionWeekStats(week, start) {
-  const floor = Math.min(100, Math.max(1, Number(settings.proteinFloorPct) || 60));
+  const floor = dayFloorPct();
   if (window.Forge && Forge.nutritionWeekStats) return Forge.nutritionWeekStats(week, getUnifiedQuests(), start || selectedWeekStart, floor);
   return { rows: [], done: 0, total: 0, pct: 0, floor, days: [], daysMet: 0 };
 }
@@ -2865,9 +2879,6 @@ function initMobileTabBar() {
     'moreCalendarBtn': () => { moreDrawer.classList.remove('active'); openCalendar(); },
     'moreExpandBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = true); },
     'moreCollapseBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = false); },
-    'moreExportBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('exportBtn').click(); },
-    'moreImportBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('importFile').click(); },
-    'moreResetBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('resetBtn').click(); },
   };
   
   Object.entries(moreActions).forEach(([id, handler]) => {
@@ -2984,7 +2995,6 @@ async function enableReminders() {
 function openSettings() {
   // Per-pursuit weekly targets now live on each pursuit card (renderModulesEditor);
   // only the truly-global rules load here.
-  const floor = document.getElementById("cfgProteinFloorPct"); if (floor) floor.value = settings.proteinFloorPct || 60;
   const dif = document.getElementById("cfgDifficulty"); if (dif) dif.value = String(settings.gameBase || 100);
   const sg = document.getElementById("cfgStreakGrade"); if (sg) sg.value = settings.streakGrade || 75;
   const sf = document.getElementById("cfgStreakFreeze"); if (sf) sf.value = (settings.streakFreeze != null ? settings.streakFreeze : 1);
@@ -2996,7 +3006,9 @@ function openSettings() {
   const rm = document.getElementById("cfgRemindMorning"); if (rm) rm.value = rem.morning || "08:00";
   const rv = document.getElementById("cfgRemindEvening"); if (rv) rv.value = rem.evening || "19:00";
   renderThemeGrid();
-  document.getElementById("settingsModal").classList.add("active");
+  const md = document.getElementById("settingsModal");
+  md.classList.add("active");
+  md.setAttribute("aria-hidden", "false");
 }
 
 function openCabinet() {
@@ -3061,10 +3073,10 @@ function renderBoss() {
   if (!settings.bossDefeated) settings.bossDefeated = {};
   if (defeated && !settings.bossDefeated[key]) {
     settings.bossDefeated[key] = boss.name;
-    if (typeof persistSettings === "function") persistSettings();
+    if (typeof persistSettingsSoon === "function") persistSettingsSoon();
     if (!first && window.FX && FX.bossDefeated) FX.bossDefeated(boss.name);
   } else if (first) {
-    if (typeof persistSettings === "function") persistSettings();
+    if (typeof persistSettingsSoon === "function") persistSettingsSoon();
   }
 }
 
@@ -3438,9 +3450,6 @@ function bindEvents() {
   document.getElementById("prevWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, -7); applyWeekToUI(); };
   document.getElementById("nextWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, 7); applyWeekToUI(); };
   document.getElementById("currentWeekBtn").onclick = () => { selectedWeekStart = getStartOfWeek(new Date()); applyWeekToUI(); };
-  document.getElementById("resetBtn").onclick = resetThisWeek;
-  document.getElementById("exportBtn").onclick = exportBackup;
-  document.getElementById("importFile").onchange = importBackup;
   document.getElementById("expandAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = true);
   document.getElementById("collapseAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = false);
 
@@ -3456,40 +3465,50 @@ function bindEvents() {
   const openSettingsBtn = document.getElementById("openSettingsBtn");
   if (openSettingsBtn) openSettingsBtn.onclick = openSettings;
   
+  const closeSettings = () => {
+    const md = document.getElementById("settingsModal");
+    md.classList.remove("active");
+    md.setAttribute("aria-hidden", "true");
+  };
   const closeSettingsBtn = document.getElementById("closeSettingsBtn");
-  if (closeSettingsBtn) closeSettingsBtn.onclick = () => document.getElementById("settingsModal").classList.remove("active");
+  if (closeSettingsBtn) closeSettingsBtn.onclick = closeSettings;
   const closeSettingsTopBtn = document.getElementById("closeSettingsTopBtn");
-  if (closeSettingsTopBtn) closeSettingsTopBtn.onclick = () => document.getElementById("settingsModal").classList.remove("active");
+  if (closeSettingsTopBtn) closeSettingsTopBtn.onclick = closeSettings;
   
-  const saveSettingsBtn = document.getElementById("saveSettingsBtn");
-  if (saveSettingsBtn) {
-    saveSettingsBtn.onclick = async () => {
-      // Per-pursuit targets + visibility save live from the Pursuits tab; only the
-      // global rules + profile are read here.
-      const floor = document.getElementById("cfgProteinFloorPct"); if (floor) settings.proteinFloorPct = Math.min(100, Math.max(1, Number(floor.value) || 60));
-      const dif = document.getElementById("cfgDifficulty"); if (dif) settings.gameBase = Number(dif.value) || 100;
-      const sg = document.getElementById("cfgStreakGrade"); if (sg) settings.streakGrade = Math.min(100, Math.max(1, Number(sg.value) || 75));
-      const sf = document.getElementById("cfgStreakFreeze"); if (sf) settings.streakFreeze = Math.min(3, Math.max(0, Number(sf.value) || 0));
-      const cs = document.getElementById("cfgCallsign"); if (cs && cs.value.trim()) settings.callsign = cs.value.trim();
-      const reEnable = document.getElementById("cfgRemindEnable");
-      if (reEnable) {
-        const wasEnabled = (settings.reminders || {}).enabled;
-        settings.reminders = {
-          enabled: reEnable.checked,
-          morning: (document.getElementById("cfgRemindMorning") || {}).value || "08:00",
-          evening: (document.getElementById("cfgRemindEvening") || {}).value || "19:00",
-        };
-        if (reEnable.checked && !wasEnabled) await enableReminders();
-      }
-      await persistSettings();
-      document.getElementById("settingsModal").classList.remove("active");
-      applySectionVisibility();
+  // Settings saves as you change it — there is no Save button to forget.
+  const liveSettings = {
+    cfgDifficulty:    (v) => { settings.gameBase = Number(v) || 100; },
+    cfgStreakGrade:   (v) => { settings.streakGrade = Math.min(100, Math.max(1, Number(v) || 75)); },
+    cfgStreakFreeze:  (v) => { settings.streakFreeze = Math.min(3, Math.max(0, Number(v) || 0)); },
+    cfgCallsign:      (v) => { settings.callsign = String(v).trim(); },
+    cfgRemindMorning: (v) => { settings.reminders = Object.assign(getReminders(), { morning: v || "08:00" }); },
+    cfgRemindEvening: (v) => { settings.reminders = Object.assign(getReminders(), { evening: v || "19:00" }); },
+  };
+  const settingsModalEl = document.getElementById("settingsModal");
+  if (settingsModalEl) {
+    const applyLive = (el) => {
+      const fn = liveSettings[el.id];
+      if (!fn) return;
+      fn(el.value);
+      persistSettingsSoon();
       updateProgress();
       updateStreakAndHeatmap();
       if (window.Game) Game.render();
     };
+    settingsModalEl.addEventListener("input", (e) => { if (liveSettings[e.target.id]) applyLive(e.target); });
+    settingsModalEl.addEventListener("change", async (e) => {
+      if (liveSettings[e.target.id]) { applyLive(e.target); return; }
+      if (e.target.id !== "cfgRemindEnable") return;
+      const wasEnabled = (settings.reminders || {}).enabled;
+      settings.reminders = Object.assign(getReminders(), { enabled: e.target.checked });
+      if (e.target.checked && !wasEnabled) {
+        const ok = await enableReminders();
+        if (!ok) { e.target.checked = false; settings.reminders.enabled = false; }
+      }
+      persistSettingsSoon();
+    });
   }
-  
+
   // Settings Data Tab actions
   const settingsExportBtn = document.getElementById("settingsExportBtn");
   if (settingsExportBtn) settingsExportBtn.onclick = exportBackup;
@@ -3500,7 +3519,7 @@ function bindEvents() {
   
   // Close settings modal on backdrop click
   document.getElementById("settingsModal")?.addEventListener("click", e => {
-    if (e.target.id === "settingsModal") document.getElementById("settingsModal").classList.remove("active");
+    if (e.target.id === "settingsModal") closeSettings();
   });
 
   // Settings Sync Tab

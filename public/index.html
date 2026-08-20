@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#040406" />
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="stylesheet" href="style.css?v=70" />
+  <link rel="stylesheet" href="style.css?v=71" />
 </head>
 <body>
   <main class="shell">
@@ -87,9 +87,6 @@
         <button class="more-item" id="moreCalendarBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Calendar</button>
         <button class="more-item" id="moreExpandBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></span>Expand All</button>
         <button class="more-item" id="moreCollapseBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M8 5l4 4 4-4M8 19l4-4 4 4"/></svg></span>Collapse All</button>
-        <button class="more-item" id="moreExportBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></span>Export</button>
-        <button class="more-item" id="moreImportBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span>Import</button>
-        <button class="more-item" id="moreResetBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></span>Reset Week</button>
         <a href="/api/logout" class="more-item"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>Logout</a>
       </div>
     </div>
@@ -170,12 +167,6 @@
         </div>
         <div class="attr-radar" id="attrRadar"></div>
         <div class="attr-legend" id="attrLegend"></div>
-        <div class="actions util-actions">
-          <button id="exportBtn">Export</button>
-          <label class="file-label" for="importFile">Import</label>
-          <input id="importFile" type="file" accept="application/json,.json" />
-          <button class="danger" id="resetBtn">Reset Week</button>
-        </div>
       </aside>
     </section>
 
@@ -316,7 +307,7 @@
 
         <div class="settings-tabs">
           <button class="settings-tab active" data-settings-tab="modules">Pursuits</button>
-          <button class="settings-tab" data-settings-tab="goals">Rules</button>
+          <button class="settings-tab" data-settings-tab="goals">Game rules</button>
           <button class="settings-tab" data-settings-tab="profile">Profile</button>
           <button class="settings-tab" data-settings-tab="appearance">Themes</button>
           <button class="settings-tab" data-settings-tab="data">Data</button>
@@ -333,11 +324,7 @@
 
         <!-- Rules Tab (global settings that apply across every pursuit) -->
         <div class="settings-panel" id="settingsGoals" data-panel="goals" style="display:none;">
-          <p class="settings-intro">Global rules that apply across every pursuit. Each pursuit's own weekly target lives on its card in the Pursuits tab.</p>
-          <div class="set-row">
-            <div class="set-row-text"><span class="set-row-label">Nutrition floor</span><span class="set-row-hint">Percent of a day's scheduled provision tasks needed for a successful day</span></div>
-            <input type="number" id="cfgProteinFloorPct" data-cfg="true" value="60" min="1" max="100">
-          </div>
+          <p class="settings-intro">Rules for the whole game. Anything specific to one pursuit — its target, stat, icon or colour — lives in that pursuit's own editor.</p>
           <div class="set-row">
             <div class="set-row-text"><span class="set-row-label">Difficulty</span><span class="set-row-hint">How fast you level up</span></div>
             <select id="cfgDifficulty" style="width:150px;"><option value="70">Relaxed</option><option value="100">Standard</option><option value="140">Hardcore</option></select>
@@ -357,7 +344,6 @@
           <p class="settings-intro">Your hero identity and reminders.</p>
           <label class="label">Callsign</label>
           <input type="text" id="cfgCallsign" placeholder="Player One" maxlength="28">
-          <p class="hint" style="margin-top:8px;">Show or hide pursuits from the <strong>Pursuits</strong> tab — each pursuit card has its own Show toggle.</p>
 
           <label class="label" style="margin-top:18px;">Reminders (phone push)</label>
           <label class="check" style="margin:0 0 4px;"><input type="checkbox" id="cfgRemindEnable"><span>Enable push reminders on this device</span></label>
@@ -414,9 +400,9 @@
           <p class="hint" style="margin-top:8px;">Sync runs every 5 minutes while your Mac is on. To stop: <code>bash uninstall-sync.sh</code></p>
         </div>
 
-        <div class="modal-actions">
-          <button id="closeSettingsBtn" type="button">Close</button>
-          <button id="saveSettingsBtn" type="button" class="primary">Save Settings</button>
+        <div class="modal-actions settings-foot">
+          <span class="settings-autosave">Changes save as you make them.</span>
+          <button id="closeSettingsBtn" type="button" class="primary">Done</button>
         </div>
       </div>
     </div>
@@ -699,9 +685,9 @@
   </main>
 
   <script src="modules.js?v=17"></script>
-  <script src="game.js?v=27"></script>
+  <script src="game.js?v=28"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=64"></script>
+  <script src="app.js?v=66"></script>
   <script src="extras.js?v=5"></script>
 </body>
 </html>

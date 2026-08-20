@@ -3389,3 +3389,8 @@ html { scroll-padding-top: 84px; }
   color: var(--text); font-weight: 700; font-size: 13px;
 }
 .pe-plan-link:hover { border-color: var(--ac, var(--accent-primary)); }
+
+/* Settings footer: no Save button — the modal writes as you change it. */
+.settings-foot { align-items: center; justify-content: space-between; }
+.settings-autosave { color: var(--muted); font-size: 12px; }
+@media (max-width: 640px) { .settings-autosave { display: none; } }
