@@ -1883,9 +1883,13 @@ function renderProjectGoals() {
 }
 
 // The class that gives a section's plan its own personality (row styling).
+// Plan rows take their look from what the pursuit counts, not from which pursuit
+// it is — so a custom sessions-based pursuit reads like Training.
 function planVariantClass(m) {
-  if (m.id === "workout") return "training-plan";
-  if (m.id === "diet") return "nutrition-plan";
+  const kind = heroKindOf(m);
+  if (kind === "track") return "training-plan";
+  if (kind === "vials") return "nutrition-plan";
+  if (kind === "tally") return "";
   return "";
 }
 function pursuitTaskPanelHtml(m) {
@@ -1893,7 +1897,8 @@ function pursuitTaskPanelHtml(m) {
   const occurrences = tasks.flatMap((q) => questOccurrencesInWeek(q).map((d) => ({ q, d })));
   const wk = getWeekData();
   const done = occurrences.filter(({ q, d }) => !!wk.checks[questCheckId(q, d)]).length;
-  const planLabel = m.id === "workout" ? "Weekly split" : m.id === "diet" ? "Daily habits" : "Plan";
+  const kind = heroKindOf(m);
+  const planLabel = kind === "track" ? "Weekly split" : kind === "vials" ? "Daily habits" : "Plan";
   return `<div class="pursuit-task-panel pursuit-plan ${planVariantClass(m)}" data-area-id="${escapeHtml(m.id)}">
     <div class="goal-task-head pursuit-plan-head"><div><span class="goal-task-title">${planLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"}</span><p class="pursuit-plan-hint">The same tasks and completion appear in Daily Quests.</p></div><div class="pursuit-plan-actions"><span class="plan-progress" data-plan-progress="${escapeHtml(m.id)}">${done}/${occurrences.length} this week</span><button class="pursuit-task-add goal-task-add" type="button"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button></div></div>
     <div class="goal-task-list">${tasks.length ? tasks.map(renderSourceQuest).join("") : `<div class="quest-empty"><strong>No plan yet.</strong> Add the first task and choose when it should appear in Daily Quests.</div>`}</div>
@@ -1931,77 +1936,128 @@ function heroGauge(pct, cap) {
 }
 function round1(n) { return Math.round(n * 10) / 10; }
 // Each section returns a DIFFERENT widget. Empty string → no hero.
+// Which widget a pursuit shows is decided by its descriptor — what it counts and
+// how — not by its id. Adding a pursuit that counts hours gets the hours widget
+// for free; there is no ladder to extend.
+function heroKindOf(m) {
+  if (m.type === "review") return "sigil";
+  if (m.type === "notes") return "log";
+  const t = Forge.targetOf(m);
+  if (t && t.kind === "days") return "vials";     // a day counts, or it does not
+  if (t && t.kind === "hours") return "hours";
+  // A counter is a running quantity you log — 140 pages is not seven of anything,
+  // so it gets a tally rather than the per-day track that suits sessions.
+  if (m.type === "counter") return "tally";
+  if (t && t.kind === "count") return "track";    // discrete sessions across the week
+  return "habits";                                 // measured by its plan alone
+}
+// The goals a pursuit owns, for the ones that carry dated objectives.
+function pursuitGoals(m) {
+  if (m.id === "study") return getStudyGoals();
+  if (m.id === "projects") return getProjectGoals();
+  return [];
+}
+// The soonest dated, unfinished objective — drives the countdown widget.
+function nextGoalDeadline(m) {
+  const today = new Date().setHours(0, 0, 0, 0);
+  return pursuitGoals(m)
+    .filter((g) => g.targetDate && g.status !== "Completed")
+    .map((g) => ({ g, days: Math.round((new Date(g.targetDate + "T00:00:00") - today) / 86400000) }))
+    .filter((x) => x.days >= 0)
+    .sort((a, b) => a.days - b.days)[0] || null;
+}
+// Hours a pursuit has logged this week, from the model.
+function pursuitHours(m, wk) {
+  const fields = wk.fields || {};
+  if (m.hoursField) return Number(fields[m.hoursField] || 0);
+  if (m.hoursPrefix) {
+    let h = 0; const pre = m.hoursPrefix + "-";
+    for (const k in fields) if (k.indexOf(pre) === 0) h += Number(fields[k] || 0);
+    return h;
+  }
+  const mods = getModules();
+  return (Forge.moduleCountValue(wk, mods, m) || 0) + (Forge.questSessionDays(wk, mods, m.id) || 0);
+}
 function sectionHeroHtml(m) {
   const crest = moduleIconSvg(m.icon);
-  // TRAINING — a weekly campaign track of circular day-nodes that light up.
-  if (m.id === "workout") {
-    const st = sectionDayStates("workout");
+  const wk = getWeekData();
+  const kind = heroKindOf(m);
+  const target = Forge.targetOf(m);
+  const tgt = target ? target.value : 0;
+  const upcoming = nextGoalDeadline(m);
+  const trial = upcoming
+    ? `<div class="hero-trial"><div class="ht-days"><b>${upcoming.days}</b><span>day${upcoming.days === 1 ? "" : "s"}</span></div><div class="ht-meta"><div class="ht-tlabel">Next deadline</div><div class="ht-name">${escapeHtml(upcoming.g.title)}</div></div></div>`
+    : "";
+
+  if (kind === "track") {
+    const st = sectionDayStates(m.id);
     const done = st.reduce((n, d) => n + (d.done > 0 ? 1 : 0), 0);
-    const tgt = pursuitTarget("workout", 5);
     const track = `<div class="hero-track">` + st.map((d) => `<span class="ht-node ${d.done ? "done" : d.planned ? "planned" : "rest"}" title="${escapeHtml(dayNames()[d.dayIndex])}"><b>${DOW_INITIAL[d.dayIndex]}</b></span>`).join("") + `</div>`;
-    return heroFrame("training", crest, "Training grounds", "This week's regimen", heroCount(done, `/ ${tgt}`), heroGauge(tgt ? done / tgt * 100 : 0, `${done} sessions cleared · target ${tgt}`) + track);
+    return heroFrame("training", crest, m.name, "This week's regimen", heroCount(done, `/ ${tgt}`),
+      heroGauge(tgt ? done / tgt * 100 : 0, `${done} cleared · target ${tgt}`) + track);
   }
-  // PROVISIONS — supply "vials" that fill by each day's provision completion.
-  if (m.id === "diet") {
-    const stats = (window.Forge && Forge.nutritionWeekStats)
-      ? Forge.nutritionWeekStats(getWeekData(), getUnifiedQuests(), selectedWeekStart, settings.proteinFloorPct || 60)
-      : { daysMet: 0, days: [] };
-    const tgt = pursuitTarget("diet", 7);
+  if (kind === "vials") {
+    const stats = nutritionWeekStats(wk, selectedWeekStart);
     const vials = `<div class="hero-vials">` + (stats.days || []).map((d) => {
       const pct = d.total ? Math.round(d.done / d.total * 100) : 0;
       return `<span class="hv ${d.met ? "met" : ""}" style="--fill:${pct}%" title="${escapeHtml(dayNames()[d.dayIndex])}: ${d.done}/${d.total}"><i></i><b>${DOW_INITIAL[d.dayIndex]}</b></span>`;
     }).join("") + `</div>`;
-    return heroFrame("provisions", crest, "Quartermaster's stores", "Rations this week", heroCount(stats.daysMet, `/ ${tgt}`), heroGauge(tgt ? stats.daysMet / tgt * 100 : 0, `${stats.daysMet} days provisioned · target ${tgt}`) + vials);
+    return heroFrame("provisions", crest, m.name, "This week's days", heroCount(stats.daysMet, `/ ${tgt}`),
+      heroGauge(tgt ? stats.daysMet / tgt * 100 : 0, `${stats.daysMet} days met · target ${tgt}`) + vials);
   }
-  // SCHOLARSHIP — a looming "next trial" countdown + study-hours gauge.
-  if (m.id === "study") {
-    const up = getStudyGoals().filter((g) => g.targetDate && g.status !== "Completed")
-      .map((g) => ({ g, days: Math.round((new Date(g.targetDate + "T00:00:00") - new Date().setHours(0, 0, 0, 0)) / 86400000) }))
-      .filter((x) => x.days >= 0).sort((a, b) => a.days - b.days)[0];
-    const wk = getWeekData(); let hrs = 0; for (const k in (wk.fields || {})) if (k.indexOf("hours-study-") === 0) hrs += Number(wk.fields[k] || 0);
-    const tgt = pursuitTarget("study", 14);
-    const trial = up
-      ? `<div class="hero-trial"><div class="ht-days"><b>${up.days}</b><span>day${up.days === 1 ? "" : "s"}</span></div><div class="ht-meta"><div class="ht-tlabel">Next trial</div><div class="ht-name">${escapeHtml(up.g.title)}</div></div></div>`
-      : `<div class="hero-trial is-empty">No trials on the calendar — set a target date on a certification to start its countdown.</div>`;
-    return heroFrame("archives", crest, "The archives", "Studies in progress", heroCount(round1(hrs), `/ ${tgt} hrs`), trial + heroGauge(tgt ? hrs / tgt * 100 : 0, `${round1(hrs)} hrs studied this week · target ${tgt}`));
+  if (kind === "hours") {
+    const hrs = round1(pursuitHours(m, wk));
+    // A pursuit whose hours are typed rather than derived gets the input here,
+    // so the number you are editing and the gauge it moves sit together.
+    const logger = m.hoursField
+      ? `<textarea id="${escapeHtml(m.focusField || (m.id + "-focus"))}" data-save class="forge-focus" rows="2" placeholder="What are you forging this week? Name the one thing that matters."></textarea>`
+      : "";
+    const foot = m.hoursField
+      ? `<div class="forge-foot"><span class="hero-cap" id="hintProject">Minimum target: ${tgt} hrs</span><label class="forge-log"><span>Log hours</span><input id="${escapeHtml(m.hoursField)}" data-save type="number" min="0" step="0.25" value="0"></label></div>`
+      : `<div class="hero-cap">${hrs} hrs this week · target ${tgt}</div>`;
+    return heroFrame(m.hoursField ? "forge" : "archives", crest, m.name, m.hoursField ? "On the anvil" : "Hours logged",
+      `<div class="hero-count"><b id="hero-hours-${escapeHtml(m.id)}">${hrs}</b><span>/ ${tgt} hrs</span></div>`,
+      trial + `<div class="hero-gauge"><span id="hero-bar-${escapeHtml(m.id)}" style="width:${Math.max(0, Math.min(100, tgt ? hrs / tgt * 100 : 0))}%"></span></div>` + logger + foot);
   }
-  // WAR COUNCIL — a weekly grade sigil + a debrief (reflections logged) meter.
-  if (m.id === "review") {
-    const f = (getWeekData().fields) || {};
-    const filled = ["wins", "misses", "changes", "refuseDrop"].filter((k) => f[k] && String(f[k]).trim()).length;
-    const graded = f.grade && f.grade !== "Not graded yet" ? String(f.grade).trim() : "";
+  if (kind === "tally") {
+    const total = round1(pursuitHours(m, wk));   // counters: logged value + scheduled sessions
+    const unit = (m.target && m.target.unit) || "logged";
+    return heroFrame("tally", crest, m.name, "This week's tally", heroCount(total, `/ ${tgt}`),
+      heroGauge(tgt ? total / tgt * 100 : 0, `${total} ${unit} · target ${tgt}`));
+  }
+  if (kind === "sigil") {
+    const f = wk.fields || {};
+    const filled = (m.fields || []).filter((k) => f[k] && String(f[k]).trim()).length;
+    const total = (m.fields || []).length || 1;
+    const graded = f[m.gradeField] && f[m.gradeField] !== "Not graded yet" ? String(f[m.gradeField]).trim() : "";
     const letter = graded ? graded.charAt(0).toUpperCase() : "—";
     const sigil = `<div class="hero-count sigil-count"><div class="hero-sigil grade-${(letter || "x").toLowerCase()}"><span>${letter}</span></div></div>`;
-    const meter = `<div class="hero-gauge"><span style="width:${filled / 4 * 100}%"></span></div><div class="hero-cap">${filled} of 4 reflections logged${graded ? ` · grade ${escapeHtml(letter)}` : " · not graded yet"}</div>`;
-    return heroFrame("warroom", crest, "War room", "This week's debrief", sigil, meter);
+    return heroFrame("warroom", crest, m.name, "This week's debrief", sigil,
+      `<div class="hero-gauge"><span style="width:${filled / total * 100}%"></span></div><div class="hero-cap">${filled} of ${total} reflections logged${graded ? ` · grade ${escapeHtml(letter)}` : " · not graded yet"}</div>`);
   }
-  // CUSTOM pursuits — a widget chosen by TYPE, so they differ too.
-  if (m.custom) {
-    if (m.type === "counter") {
-      const wk = getWeekData(), mods = getModules();
-      const total = (Forge.moduleCountValue ? Forge.moduleCountValue(wk, mods, m) : 0) + (Forge.questSessionDays ? Forge.questSessionDays(wk, mods, m.id) : 0);
-      const tgt = (m.target && m.target.value) || 1, unit = (m.target && m.target.unit) || "count";
-      return heroFrame("tally", crest, m.name, "This week's tally", heroCount(round1(total), `/ ${tgt}`), heroGauge(tgt ? total / tgt * 100 : 0, `${round1(total)} ${unit} · target ${tgt}`));
-    }
-    if (m.type === "checklist" || m.type === "table") {
-      const st = sectionDayStates(m.id);
-      const done = st.reduce((n, d) => n + d.done, 0), planned = st.reduce((n, d) => n + d.planned, 0);
-      return heroFrame("tally", crest, m.name, "This week's habits", heroCount(done, `/ ${planned}`), heroGauge(planned ? done / planned * 100 : 0, `${done} of ${planned} completed this week`));
-    }
-    if (m.type === "notes") return heroFrame("log", crest, m.name, "Captain's log", "", `<div class="hero-cap">This week's entry — jot it below.</div>`);
+  if (kind === "log") {
+    return heroFrame("log", crest, m.name, "Captain's log", "", `<div class="hero-cap">This week's entry — jot it below.</div>`);
   }
-  return "";
+  const st = sectionDayStates(m.id);
+  const done = st.reduce((n, d) => n + d.done, 0), planned = st.reduce((n, d) => n + d.planned, 0);
+  if (!planned && !trial) return "";
+  return heroFrame("tally", crest, m.name, "This week's plan", heroCount(done, `/ ${planned}`),
+    trial + heroGauge(planned ? done / planned * 100 : 0, `${done} of ${planned} completed this week`));
 }
 // Inject each section's distinct hero. Projects (Workshop) has a static forge hero
 // in the HTML because its focus + hours inputs must not be re-rendered mid-edit.
 function renderSectionHeroes() {
   getModules().forEach((m) => {
-    if (m.id === "daily" || m.id === "projects") return;
+    if (m.id === "daily") return;
     const sec = document.getElementById(m.id); if (!sec) return;
     const content = sec.querySelector(":scope > .content"); if (!content) return;
-    const html = sectionHeroHtml(m);
     let hero = content.querySelector(":scope > .sec-hero");
-    if (html) { const s = document.createElement("div"); s.innerHTML = html; if (hero) hero.replaceWith(s.firstElementChild); else content.insertBefore(s.firstElementChild, content.firstChild); }
+    // Some heroes carry inputs (Workshop's focus and hours). Replacing one while
+    // it has the caret would drop what is being typed, so leave it in place —
+    // it refreshes on the next render once focus moves on.
+    if (hero && hero.contains(document.activeElement)) return;
+    const html = sectionHeroHtml(m);
+    if (html) { const shell = document.createElement("div"); shell.innerHTML = html; if (hero) hero.replaceWith(shell.firstElementChild); else content.insertBefore(shell.firstElementChild, content.firstChild); }
     else if (hero) hero.remove();
   });
 }
@@ -2090,7 +2146,7 @@ async function deleteGoalEditor() {
 function questSourceOptions(selected) {
   const opts = [`<option value="daily"${selected === "daily" ? " selected" : ""}>Daily only</option>`];
   getModules().filter((m) => m.id !== "daily" && m.enabled !== false).forEach((m) => {
-    const goals = m.id === "study" ? getStudyGoals() : m.id === "projects" ? getProjectGoals() : [];
+    const goals = pursuitGoals(m);
     if (goals.length) {
       goals.forEach((g) => { const v = `${m.id}::${g.id}`; opts.push(`<option value="${escapeHtml(v)}"${selected === v ? " selected" : ""}>${escapeHtml(m.name)} / ${escapeHtml(g.title)}</option>`); });
     } else {
@@ -2271,15 +2327,12 @@ function pursuitMetric(m) {
   if (m.id === "daily") {
     const st = questWeekStats(wk, selectedWeekStart);
     done = st.done; total = st.total; sub = `${st.done} of ${st.total} scheduled this week`;
-  } else if (m.id === "diet" && target) {
+  } else if (target && target.kind === "days") {
     const n = nutritionWeekStats(wk, selectedWeekStart);
-    done = n.daysMet; total = target.value; sub = `${n.daysMet} of ${target.value} days provisioned`;
-  } else if (m.id === "study" && target) {
-    let h = 0; for (const k in (wk.fields || {})) if (k.indexOf("hours-study-") === 0) h += Number(wk.fields[k] || 0);
-    done = round1(h); total = target.value; sub = `${round1(h)} of ${target.value} hrs studied`;
-  } else if (m.id === "projects" && target) {
-    const h = Number((wk.fields || {}).projectHours || 0);
-    done = round1(h); total = target.value; sub = `${round1(h)} of ${target.value} hrs on the anvil`;
+    done = n.daysMet; total = target.value; sub = `${n.daysMet} of ${target.value} days met`;
+  } else if (target && target.kind === "hours") {
+    const h = round1(pursuitHours(m, wk));
+    done = h; total = target.value; sub = `${h} of ${target.value} hrs logged`;
   } else if (m.type === "counter" && target) {
     const v = (Forge.moduleCountValue(wk, mods, m) || 0) + (Forge.questSessionDays(wk, mods, m.id) || 0);
     done = round1(v); total = target.value; sub = `${round1(v)} of ${target.value} ${(m.target && m.target.unit) || "logged"}`;
@@ -2476,11 +2529,11 @@ function renderStructure() {
 // on every change, including while a field has focus — it never replaces the
 // element being typed into.
 function updateLive() {
+  renderSectionHeroes();   // before loadWeekFields, so new hero inputs get their values
   loadWeekFields();
   updateProgress();
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
-  renderSectionHeroes();
   renderBoss();
 }
 // The debounced form for text input, where a keystroke should not pay for a
@@ -2616,7 +2669,6 @@ function updateProgress() {
   const pillS = document.getElementById("pillStudy"); if (pillS) pillS.textContent = `${studyTarget} hours/week minimum`;
   const pillP = document.getElementById("pillProject"); if (pillP) pillP.textContent = `${projectTarget} hrs minimum · ${projectStretch} bonus`;
   const hintP = document.getElementById("hintProject"); if (hintP) hintP.textContent = `Minimum target: ${projectTarget} hrs`;
-  const ptVal = document.getElementById("projectTargetValue"); if (ptVal) ptVal.textContent = projectTarget;
 
   // Plans and Daily are projections of the same occurrence model. Calculate
   // from data rather than visible DOM so mobile/lazy views cannot change score.
@@ -2666,8 +2718,10 @@ function updateProgress() {
   const projSessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "projects") : 0;
 
   const projectHours = Number((_wk.fields || {}).projectHours || 0) + projSessions;
-  document.getElementById("projectHoursValue").textContent = projectHours;
-  document.getElementById("projectBar").style.width = Math.min(100, Math.round((projectHours / projectTarget) * 100)) + "%";
+  const projHoursEl = document.getElementById("hero-hours-projects");
+  if (projHoursEl) projHoursEl.textContent = round1(projectHours);
+  const projBarEl = document.getElementById("hero-bar-projects");
+  if (projBarEl) projBarEl.style.width = Math.min(100, Math.round((projectHours / projectTarget) * 100)) + "%";
   syncSessionNotes();
 
   document.querySelectorAll("[data-plan-progress]").forEach((el) => {
