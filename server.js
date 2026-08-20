@@ -261,6 +261,61 @@ function validateWeekPayload(key, body) {
   }
   return '';
 }
+// Merge one level of checks/fields into a stored week instead of replacing it.
+// Two writers touch the same week -- the browser and the Apple Reminders sync --
+// and a whole-document POST from either silently discards whatever the other
+// just recorded.
+function mergeWeek(existing, patch) {
+  const base = isPlainObject(existing) ? existing : {};
+  const next = Object.assign({}, base);
+  next.checks = Object.assign({}, base.checks || {});
+  next.fields = Object.assign({}, base.fields || {});
+  for (const [id, value] of Object.entries(patch.checks || {})) next.checks[id] = value;
+  for (const [id, value] of Object.entries(patch.fields || {})) {
+    if (value === null) delete next.fields[id]; else next.fields[id] = value;
+  }
+  if (!next.createdAt) next.createdAt = new Date().toISOString();
+  next.schemaVersion = base.schemaVersion || 2;
+  next.updatedAt = new Date().toISOString();
+  return next;
+}
+// Assign into a nested plain object by dotted path. Used by PATCH /api/settings
+// so a rename does not have to resend quests, pursuits, goals and trophies.
+// A null value deletes the key.
+function setByPath(target, path, value) {
+  const parts = String(path).split('.');
+  if (!parts.length || parts.some((k) => !k || UNSAFE_OBJECT_KEYS.has(k) || k.length > 120)) return false;
+  let node = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (!isPlainObject(node[key])) node[key] = {};
+    node = node[key];
+  }
+  const last = parts[parts.length - 1];
+  if (value === null) delete node[last]; else node[last] = value;
+  return true;
+}
+function validateSettingsPatch(body) {
+  if (!isPlainObject(body)) return 'patch payload must be an object.';
+  if (!isPlainObject(body.set)) return 'patch must carry a set object.';
+  const entries = Object.entries(body.set);
+  if (!entries.length) return 'patch must set at least one path.';
+  if (entries.length > 200) return 'patch sets too many paths at once.';
+  if (hasUnsafeKeys(body.set)) return 'patch contains unsafe object keys.';
+  for (const [path, value] of entries) {
+    if (typeof path !== 'string' || !path || path.length > 240) return 'patch paths must be short strings.';
+    if (/(^|\.)(__proto__|constructor|prototype)(\.|$)/.test(path)) return 'patch path is not allowed.';
+    if (hasUnsafeKeys(value)) return 'patch values contain unsafe object keys.';
+    if (jsonByteLength(value) > MAX_SETTINGS_BYTES) return 'patch value is too large.';
+  }
+  return '';
+}
+function validateWeekPatch(key, body) {
+  if (!isValidDateKey(key)) return 'week key must be a valid YYYY-MM-DD date.';
+  if (!isPlainObject(body)) return 'week patch must be an object.';
+  if (!('checks' in body) && !('fields' in body)) return 'week patch must carry checks or fields.';
+  return validateWeekPayload(key, body);
+}
 function validateSettingsPayload(body) {
   if (!isPlainObject(body)) return 'settings payload must be an object.';
   if (hasUnsafeKeys(body)) return 'settings contain unsafe object keys.';
@@ -640,12 +695,45 @@ app.get('/api/settings', (req, res) => {
   res.json(getAppSettings());
 });
 
+// Partial settings write. Sends only what changed, so concurrent edits to
+// different keys from different devices no longer overwrite one another, and a
+// pursuit rename stops rewriting the entire document.
+app.patch('/api/settings', (req, res) => {
+  const invalid = validateSettingsPatch(req.body);
+  if (invalid) return validationError(res, invalid);
+  const settings = getAppSettings();
+  const applied = [];
+  for (const [path, value] of Object.entries(req.body.set)) {
+    if (!setByPath(settings, path, value)) return validationError(res, `patch path is not allowed: ${path}`);
+    applied.push(path);
+  }
+  const stored = validateSettingsPayload(settings);
+  if (stored) return validationError(res, stored);
+  db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('app_settings', JSON.stringify(settings));
+  res.json({ success: true, applied });
+});
+
 app.post('/api/settings', (req, res) => {
   const invalid = validateSettingsPayload(req.body);
   if (invalid) return validationError(res, invalid);
   const value = JSON.stringify(req.body);
   const info = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('app_settings', value);
   res.json({ success: true, changes: info.changes });
+});
+
+// Partial week write: merges the given checks/fields into the stored week.
+// The Apple Reminders sync uses this so ticking a quest on your phone cannot
+// discard a task you completed in the browser during the same cycle.
+app.patch('/api/week/:key', (req, res) => {
+  const { key } = req.params;
+  const invalid = validateWeekPatch(key, req.body);
+  if (invalid) return validationError(res, invalid);
+  const row = db.prepare('SELECT data FROM weeks WHERE week_key = ?').get(key);
+  const merged = mergeWeek(row ? parseJson(row.data) : null, req.body);
+  const stored = validateWeekPayload(key, merged);
+  if (stored) return validationError(res, stored);
+  db.prepare('INSERT OR REPLACE INTO weeks (week_key, data) VALUES (?, ?)').run(key, JSON.stringify(merged));
+  res.json({ success: true, week: merged });
 });
 
 app.get('/api/backup', (req, res) => {

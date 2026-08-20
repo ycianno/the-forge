@@ -299,6 +299,8 @@ async function sync() {
     });
 
     let forgeUpdates = false;
+    // Only the completions this cycle produced — the payload for the merge patch.
+    const completedHere = {};
 
     // 4. Reconcile Today's Forge Quests <-> Today's Reminders
     for (const checkId in activeQuests) {
@@ -326,6 +328,7 @@ async function sync() {
           // Completed in Reminders but not in Forge → mark done in Forge for Today
           console.log(`  ← Forge complete: ${q.title}`);
           checks[checkId] = true;
+          completedHere[checkId] = true;
           forgeUpdates = true;
           syncedCount++;
         } else if (q.isCompleted && !reminder.completed) {
@@ -351,11 +354,14 @@ async function sync() {
       }
     }
 
-    // Push updated week data back to Forge if anything changed
+    // Push back only the checks this cycle actually completed.
+    // A whole-week POST would carry the snapshot fetched at the top of this run
+    // and silently discard anything ticked in the browser since — which is the
+    // one thing a two-way sync must never do.
     if (forgeUpdates) {
-      console.log(`  ↑ Uploading week data to Forge...`);
-      weekData.checks = checks;
-      await fetchApi('/api/week/' + weekKey, 'POST', weekData);
+      const count = Object.keys(completedHere).length;
+      console.log(`  ↑ Sending ${count} completion${count === 1 ? '' : 's'} to Forge...`);
+      await fetchApi('/api/week/' + weekKey, 'PATCH', { checks: completedHere });
     }
 
     // Report heartbeat

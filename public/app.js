@@ -248,6 +248,45 @@ function persistSettingsSoon() {
   clearTimeout(modPersistTimer);
   modPersistTimer = setTimeout(persistSettings, 350);
 }
+// Partial settings write. The caller has already mutated `settings`; this only
+// tells the server which paths to copy across, so an edit here cannot discard an
+// edit made on another device to a different key — and a rename stops shipping
+// every quest, pursuit, goal and trophy back to the server.
+//
+// Only for paths that address plain objects. Anything structural — quests,
+// customModules, goals, the arrays inside them — still goes through
+// persistSettings(), which replaces the document wholesale.
+let pendingPatch = null;
+let patchTimer = null;
+function patchSettingsSoon(paths) {
+  pendingPatch = Object.assign(pendingPatch || {}, paths);
+  clearTimeout(patchTimer);
+  patchTimer = setTimeout(flushSettingsPatch, 350);
+}
+async function flushSettingsPatch() {
+  if (booting || !pendingPatch) return false;
+  const set = pendingPatch;
+  pendingPatch = null;
+  localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
+  const ok = await serialWrite("settings", async () => {
+    activeWrites++; setSaveState("saving");
+    try {
+      await postJson("/api/settings", { set }, "PATCH");
+      return true;
+    } catch (e) {
+      console.warn("Settings patch failed, falling back to a full write", e);
+      return false;
+    } finally {
+      activeWrites--;
+      if (!activeWrites && !Object.keys(readPendingWrites().weeks || {}).length && !readPendingWrites().settings) setSaveState("saved");
+    }
+  });
+  // The fallback has to start OUTSIDE the chain entry above: persistSettings()
+  // takes the same serialWrite("settings") lock, so calling it from inside the
+  // catch would make that entry wait on itself and the write would never land.
+  if (!ok) return persistSettings();
+  return true;
+}
 // Per-pursuit weekly target — reads/writes the right place for each pursuit type.
 // null → this pursuit has no single numeric weekly target (review/checklist/notes/daily).
 function pursuitTargetSpec(m) {
@@ -258,7 +297,9 @@ function pursuitTargetSpec(m) {
 function setPursuitTarget(id, value) {
   const m = getModules().find((x) => x.id === id); if (!m) return;
   if (!Forge.setTargetOn(settings, m, value)) return;
-  persistSettingsSoon();
+  const spec = Forge.TARGET_SPEC[m.id];
+  if (spec) patchSettingsSoon({ [spec.key]: settings[spec.key] });
+  else persistSettingsSoon();   // counter targets live inside customModules[]
   updateProgress();            // refresh the section's pill/bar live
   renderModulesEditor();       // refresh the "N/target" readout
 }
@@ -699,7 +740,7 @@ function setPursuitIcon(id, icon) {
   if (!MODULE_ICONS[icon]) return;
   if (!settings.moduleIcons) settings.moduleIcons = {};
   settings.moduleIcons[id] = icon;
-  persistSettingsSoon();
+  patchSettingsSoon({ [`moduleIcons.${id}`]: icon });
   renderModulesEditor();
   refreshPursuitEditor();
   applyWeekToUI();
@@ -707,7 +748,7 @@ function setPursuitIcon(id, icon) {
 function setPursuitColor(id, color) {
   if (!settings.moduleColors) settings.moduleColors = {};
   settings.moduleColors[id] = color;
-  persistSettingsSoon();
+  patchSettingsSoon({ [`moduleColors.${id}`]: color });
   renderModulesEditor();
   refreshPursuitEditor();
   applyWeekToUI();
@@ -716,14 +757,14 @@ function renameModule(id, name) {
   if (!settings.moduleNames) settings.moduleNames = {};
   settings.moduleNames[id] = name;
   applyModuleLayout();        // live preview of the new <h2>
-  persistSettingsSoon();      // debounced server write
+  patchSettingsSoon({ [`moduleNames.${id}`]: name });
 }
 function toggleModule(id, show) {
   let hidden = getHiddenSections().slice();
   if (show) hidden = hidden.filter(x => x !== id);
   else if (!hidden.includes(id)) hidden.push(id);
   settings.hiddenSections = hidden;
-  persistSettings();
+  patchSettingsSoon({ hiddenSections: hidden });
   applySectionVisibility();
 }
 function wireModulesEditor() {
@@ -943,9 +984,9 @@ function schedulePendingRetry() {
   clearTimeout(pendingRetryTimer);
   pendingRetryTimer = setTimeout(() => { flushPendingWrites(); }, 3000);
 }
-async function postJson(url, payload) {
+async function postJson(url, payload, method) {
   const res = await fetch(url, {
-    method: "POST",
+    method: method || "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
@@ -1127,7 +1168,7 @@ function questAccent(q, attr) {
 function applyTheme(themeId, persist) {
   document.documentElement.setAttribute('data-theme', themeId);
   settings.theme = themeId;
-  if (persist) persistSettingsSoon();
+  if (persist) patchSettingsSoon({ theme: themeId });
   // Update meta theme-color for PWA
   const meta = document.querySelector('meta[name="theme-color"]');
   const theme = THEMES.find(t => t.id === themeId);
@@ -3524,6 +3565,15 @@ function bindEvents() {
   if (closeSettingsTopBtn) closeSettingsTopBtn.onclick = closeSettings;
   
   // Settings saves as you change it — there is no Save button to forget.
+  // Which settings path each live control owns.
+  const liveSettingsPaths = (id) => ({
+    cfgDifficulty:    { gameBase: settings.gameBase },
+    cfgStreakGrade:   { streakGrade: settings.streakGrade },
+    cfgStreakFreeze:  { streakFreeze: settings.streakFreeze },
+    cfgCallsign:      { callsign: settings.callsign },
+    cfgRemindMorning: { reminders: settings.reminders },
+    cfgRemindEvening: { reminders: settings.reminders },
+  }[id] || {});
   const liveSettings = {
     cfgDifficulty:    (v) => { settings.gameBase = Number(v) || 100; },
     cfgStreakGrade:   (v) => { settings.streakGrade = Math.min(100, Math.max(1, Number(v) || 75)); },
@@ -3538,7 +3588,7 @@ function bindEvents() {
       const fn = liveSettings[el.id];
       if (!fn) return;
       fn(el.value);
-      persistSettingsSoon();
+      patchSettingsSoon(liveSettingsPaths(el.id));
       updateProgress();
       updateStreakAndHeatmap();
       if (window.Game) Game.render();
@@ -3553,7 +3603,7 @@ function bindEvents() {
         const ok = await enableReminders();
         if (!ok) { e.target.checked = false; settings.reminders.enabled = false; }
       }
-      persistSettingsSoon();
+      patchSettingsSoon({ reminders: settings.reminders });
     });
   }
 
