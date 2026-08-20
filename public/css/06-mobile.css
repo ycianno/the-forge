@@ -1,0 +1,326 @@
+/* ===========================================================================
+ * MOBILE UX POLISH PASS  (added 2026-06)
+ * Goals: real-feeling navigation (scroll-spy), thumb-friendly targets,
+ * no accidental zoom, readable tables, and a more tactile bottom bar.
+ * ======================================================================== */
+
+/* Tab-jumps and #anchor scrolls land just below the sticky context bar. */
+html { scroll-padding-top: 84px; }
+
+@media (max-width: 768px) {
+  /* Remove the 300ms tap delay + grey flash; block accidental double-tap zoom
+     on controls (pinch-zoom on content still works — see viewport meta). */
+  a, button, summary, label, select,
+  .tab-btn, .more-item, .icon-btn, .ht-open, .check {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* iOS zooms the page when focusing an input under 16px. Keep them at 16px. */
+  input, select, textarea, .mini input { font-size: 16px; }
+
+  /* Stop the rubber-band overscroll from revealing the browser chrome behind. */
+  body { overscroll-behavior-y: contain; }
+
+  /* Land in-page jumps cleanly below the sticky header. */
+  section.hero, #boss, details.section-card { scroll-margin-top: 84px; }
+
+  /* --- Keep this-week context within thumb reach while scrolling --- */
+  .mobile-context {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 900;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  }
+
+  /* --- Bottom tab bar: larger targets, active indicator, press feedback --- */
+  .tab-btn {
+    position: relative;
+    min-height: 56px;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: color 0.2s ease, transform 0.08s ease;
+  }
+  .tab-btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 26px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent-primary);
+    box-shadow: 0 0 10px var(--score-glow);
+    transform: translateX(-50%) scaleX(0);
+    transition: transform 0.24s cubic-bezier(0.4, 1.3, 0.5, 1);
+  }
+  .tab-btn.active::before { transform: translateX(-50%) scaleX(1); }
+  .tab-btn .tab-icon { transition: transform 0.2s ease; }
+  .tab-btn.active .tab-icon { transform: translateY(-1px) scale(1.08); }
+  .tab-btn:active { transform: scale(0.9); }
+
+  /* --- Thumb-sized targets for hero + section controls --- */
+  .char-actions button,
+  .ht-open,
+  .nav-icon,
+  .icon-btn { min-height: 44px; }
+  .char-actions button { padding: 10px 16px; }
+  .icon-btn { min-width: 44px; }
+
+  /* --- Tables become stacked cards (Workout + Study sections) --- */
+  .content table,
+  .content tbody,
+  .content tr,
+  .content td { display: block; width: 100%; }
+  .content thead { display: none; }
+  .content table { white-space: normal; overflow: visible; }
+  .content tbody tr {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 4px 14px 10px;
+    margin-bottom: 12px;
+  }
+  .content td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 0;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    min-height: 44px;
+  }
+  .content td:last-child { border-bottom: none; }
+  .content td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  /* First cell of each row is the title (Day name / certification). */
+  .content td:first-child {
+    font-size: 16px;
+    font-weight: 800;
+    padding-top: 8px;
+  }
+  .content td:first-child::before { display: none; }
+  /* Inputs/selects fill the right side of their stacked row. */
+  .content td input[type="text"],
+  .content td input[type="number"],
+  .content td input[type="date"],
+  .content td select {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+  }
+  .content td select { text-align: left; }
+  /* Free-text fields get a full-width input under their label (no cramping). */
+  .content td:has(input[type="text"]) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .content td:has(input[type="text"]) input[type="text"] {
+    width: 100%;
+    max-width: none;
+    text-align: left;
+  }
+  /* The "Done" toggle reads left-to-right with no empty gutter. */
+  .content td:has(.check) { justify-content: flex-start; gap: 12px; }
+}
+
+/* ===========================================================================
+ * MOBILE UX PHASE 2  (added 2026-06)
+ * Bottom-sheet modals, notch-safe header, trimmed hero.
+ * ======================================================================== */
+@media (max-width: 768px) {
+  /* --- Modals behave like native bottom sheets --- */
+  .modal-backdrop { place-items: end center; }
+  .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 88vh;
+    border-radius: 24px 24px 0 0 !important;
+    padding: 18px 18px calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateY(32px);
+  }
+  .modal-backdrop.active .modal { transform: translateY(0); }
+  /* Grab handle so it reads as a sheet you can flick down. */
+  .modal::before {
+    content: "";
+    display: block;
+    width: 38px;
+    height: 4px;
+    border-radius: 99px;
+    background: var(--line-strong);
+    margin: 2px auto 14px;
+  }
+  /* Header stays in normal flow — making it sticky let the tab row below it
+     (settings/cabinet) scroll up and overlap it. Tap the dim area or the grab
+     handle to dismiss; every sheet also has a Close button at the bottom. */
+  .modal-head {
+    margin: 0 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  /* Settings/cabinet tab rows scroll cleanly with no sticky overlap. */
+  .settings-tabs, .ins-filters { position: static; }
+
+  /* --- Calmer card headers: smaller titles, no overflowing pills/subtitles --- */
+  .summary-left h2 { font-size: 17px; line-height: 1.2; }
+  details.section-card > summary .hint { display: none; } /* cut explainer text on mobile */
+  details.section-card > summary .pill { display: none; } /* was overflowing the card */
+  details.section-card > summary .xp-chip { display: none; } /* keep mobile headers calm */
+  details.section-card > summary { padding: 16px; gap: 10px; align-items: center; }
+  .boss-name { font-size: 19px; line-height: 1.15; }
+  .boss-label { font-size: 11px; }
+
+  /* --- Trim the hero so the daily quests are a shorter scroll away --- */
+  .util-actions { display: none; } /* Export / Import / Reset moved to More */
+  .char-panel { padding: 18px; }
+  .char-panel .panel-sub { display: none; }
+
+  /* Focus timer: let the custom-minutes field wrap to its own row. */
+  .focus-durations { flex-wrap: wrap; }
+  .focus-durations input { flex: 1 1 100%; width: auto; }
+}
+
+/* Friendly empty state for a day with no quests yet. */
+.day-empty {
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+}
+
+/* ----- First-run onboarding ("Choose your path") ----- */
+.onboard-modal { max-width: 600px; }
+.onboard-hero { text-align: center; margin-bottom: 22px; }
+.onboard-mark { width: 56px; height: 56px; margin: 0 auto 12px; }
+.onboard-mark svg { width: 52px; height: 52px; fill: var(--accent-primary); filter: drop-shadow(0 0 14px var(--score-glow)); }
+.onboard-hero h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+.onboard-sub { color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 46ch; margin: 0 auto; }
+.onboard-loop { margin: 12px auto 0; max-width: 46ch; font-size: 12.5px; font-weight: 600; line-height: 1.5; color: var(--text); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; }
+.onboard-field { margin-bottom: 18px; }
+.onboard-field > label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
+#onboardCallsign { width: 100%; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--text); font-size: 15px; font-family: inherit; }
+#onboardCallsign:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--score-glow); }
+.onboard-paths { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.onboard-path {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 14px 16px; text-align: left; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 14px;
+  transition: all 0.18s cubic-bezier(0.4,0,0.2,1); justify-content: flex-start;
+}
+.onboard-path:hover { background: rgba(255,255,255,0.08); border-color: var(--accent-primary); transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,0.35); }
+.onboard-path .op-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.onboard-path .op-desc { font-size: 12px; line-height: 1.4; color: var(--muted); font-weight: 500; }
+.onboard-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+.onboard-skip { background: transparent; border: 1px solid var(--line); }
+.onboard-hint { font-size: 12px; color: var(--muted-2); }
+@media (max-width: 560px) { .onboard-paths { grid-template-columns: 1fr; } .onboard-hero h2 { font-size: 22px; } }
+
+/* Empty state — shown when a section has no items yet (e.g. after "Start blank"). */
+.empty-state { text-align: center; padding: 28px 20px; border: 1px dashed var(--line); border-radius: 16px; background: rgba(255,255,255,0.02); }
+
+/* ===== PURSUIT IDENTITY PICKER (Settings → Pursuits) =====
+   Icon + colour for one pursuit, opened from its icon chip. The colour set is
+   the five shades of that pursuit's attribute family (Forge.PURSUIT_PALETTE),
+   so a recoloured pursuit still reads as belonging to its stat. */
+/* The chip keeps its existing fill from .pursuit-card-ico above; it only gains
+   a pointer and an open state now that it is a button. */
+.pursuit-card-ico { cursor: pointer; padding: 0; transition: border-color .12s, box-shadow .12s; }
+.pursuit-card-ico:hover { border-color: color-mix(in srgb, var(--ac, #8b93a7) 55%, transparent); }
+.pursuit-card-ico[aria-expanded="true"] { border-color: var(--ac, #8b93a7); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ac, #8b93a7) 22%, transparent); }
+.pursuit-identity {
+  margin-top: 10px; padding: 12px; display: flex; flex-direction: column; gap: 12px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: color-mix(in srgb, var(--ac, var(--accent-primary)) 5%, transparent);
+}
+.pi-row { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.pi-label {
+  flex: 0 0 52px; padding-top: 5px; color: var(--muted);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+}
+.pi-icons { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
+.pi-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+  border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.03);
+  color: var(--muted); cursor: pointer; transition: color .12s, border-color .12s, background .12s;
+}
+.pi-icon .ic { width: 15px; height: 15px; }
+.pi-icon:hover { color: var(--text); border-color: color-mix(in srgb, var(--ac, var(--accent-primary)) 50%, transparent); }
+.pi-icon.on {
+  color: var(--ac, var(--accent-primary)); border-color: var(--ac, var(--accent-primary));
+  background: color-mix(in srgb, var(--ac, var(--accent-primary)) 14%, transparent);
+}
+.pi-colors { display: flex; flex-wrap: wrap; gap: 7px; flex: 1; }
+.pi-color {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: var(--sw); border: 2px solid transparent; box-shadow: 0 0 0 1px var(--border) inset;
+  transition: transform .12s, box-shadow .12s;
+}
+.pi-color:hover { transform: scale(1.12); }
+.pi-color.on { border-color: var(--text); box-shadow: 0 0 0 2px color-mix(in srgb, var(--sw) 45%, transparent); }
+.pi-note { margin: 0; color: var(--muted); font-size: 12px; }
+@media (max-width: 768px) {
+  .pi-label { flex-basis: 100%; padding-top: 0; }
+  .pi-icon { width: 34px; height: 34px; }
+  .pi-color { width: 30px; height: 30px; }
+}
+
+/* ===== QUEST LOG TILES =====
+   One tile per pursuit, generated from the module list. Each is a button that
+   jumps to the pursuit it reports on, and carries that pursuit's accent. */
+.metric-jump {
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  cursor: pointer; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(255,255,255,0.025);
+  transition: border-color .14s, background .14s, transform .14s;
+}
+.metric-jump:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ac, var(--accent-primary)) 45%, transparent);
+  background: color-mix(in srgb, var(--ac, var(--accent-primary)) 7%, rgba(255,255,255,0.025));
+}
+.metric-jump:active { transform: translateY(0); }
+.metric-jump .metric-title { display: flex; align-items: center; gap: 7px; }
+.metric-ico { display: inline-flex; color: var(--ac, var(--muted)); }
+.metric-ico .ic { width: 15px; height: 15px; }
+.metric-jump .bar-fill { background: var(--ac, var(--accent-primary)); }
+
+/* ===== PURSUIT EDITOR ===== */
+.pe-block { padding: 14px 0; border-top: 1px solid rgba(255,255,255,.06); }
+.pe-block:first-child { padding-top: 0; border-top: 0; }
+.pe-legend {
+  display: block; margin-bottom: 8px; color: var(--muted);
+  font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+}
+.pe-block .pursuit-identity { margin-top: 12px; }
+.pe-static { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; font-weight: 700; }
+.pe-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.pe-target { display: flex; align-items: center; gap: 8px; }
+.pe-target input { width: 110px; }
+.pe-target em { color: var(--muted); font-size: 12px; font-style: normal; font-weight: 700; }
+.pe-check { display: flex; align-items: center; gap: 9px; margin: 0 0 6px; cursor: pointer; font-weight: 600; }
+.pe-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac, var(--accent-primary)); cursor: pointer; }
+.pe-check span { text-decoration: none; opacity: 1; }
+.pe-plan-link {
+  margin-top: 4px; padding: 8px 14px; border-radius: 9px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--ac, var(--accent-primary)) 40%, transparent);
+  background: color-mix(in srgb, var(--ac, var(--accent-primary)) 10%, transparent);
+  color: var(--text); font-weight: 700; font-size: 13px;
+}
+.pe-plan-link:hover { border-color: var(--ac, var(--accent-primary)); }
+
+/* Settings footer: no Save button — the modal writes as you change it. */
+.settings-foot { align-items: center; justify-content: space-between; }
+.settings-autosave { color: var(--muted); font-size: 12px; }
+@media (max-width: 640px) { .settings-autosave { display: none; } }
