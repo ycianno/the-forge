@@ -453,14 +453,12 @@ function openPursuitEditor(id) {
   body.style.setProperty("--ac", pursuitColor(m));
   const del = document.getElementById("editSectionDelete");
   if (del) del.style.display = m.custom ? "" : "none";
-  const md = document.getElementById("editSectionModal");
-  md.classList.add("active"); md.setAttribute("aria-hidden", "false");
+  openModal("editSectionModal");
 }
 function closeSectionEditor() {
   editSectionId = null;
   openIdentityId = null;
-  const md = document.getElementById("editSectionModal");
-  md.classList.remove("active"); md.setAttribute("aria-hidden", "true");
+  closeModal("editSectionModal");
 }
 // Re-render the dialog in place after an icon/colour pick so the choice shows.
 function refreshPursuitEditor() {
@@ -536,7 +534,7 @@ function savePursuitEditor() {
   touched.forEach(persistWeekByKey);
   closeSectionEditor();
   renderModulesEditor();
-  renderStatic();
+  renderStructure();
   applyWeekToUI();
 }
 function deletePursuitFromEditor() {
@@ -603,14 +601,12 @@ function maybeShowOnboarding() {
   // Anyone with existing history or a tweaked setup is an established user — don't interrupt them.
   if (hasLoggedData() || isCustomized()) { settings.onboarded = true; persistSettings(); return; }
   renderOnboardingPaths();
-  const md = document.getElementById("onboardModal");
-  if (md) { md.classList.add("active"); md.setAttribute("aria-hidden", "false"); }
+  openModal("onboardModal");
 }
 function finishOnboarding() {
   settings.onboarded = true;
   persistSettings();
-  const md = document.getElementById("onboardModal");
-  if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); }
+  closeModal("onboardModal");
   applyWeekToUI();
   if (window.Game && Game.render) Game.render();
 }
@@ -756,7 +752,7 @@ function wireModulesEditor() {
     else if (e.target.closest(".mod-edit")) openPursuitEditor(row.dataset.id);
     else if (e.target.closest(".mod-del")) deleteCustomModule(row.dataset.id);
     else if (e.target.closest(".pursuit-plan-link")) {
-      document.getElementById("settingsModal").classList.remove("active");
+      closeModal("settingsModal");
       scrollToSection(row.dataset.id);
     }
   });
@@ -1412,13 +1408,6 @@ async function checkAutoRecords(p) {
 }
 
 // ===== RENDERING =====
-function renderStatic() {
-  renderScoreboard();
-  renderStudyAreas();
-  renderProjectGoals();
-  renderReview();
-}
-
 // Weekly completion % — delegated to the module engine (counts every module
 // flagged countScore). Verified byte-identical to the legacy logic.
 function calculateWeekScoreData(weekData) {
@@ -1456,7 +1445,7 @@ function openDayInsights(date, info) {
     html += info.items.map((item) => `${item.done ? "✅" : "▫️"} ${escapeHtml(item.title)}`).join("<br>");
   }
   document.getElementById("insightsContent").innerHTML = html;
-  document.getElementById("insightsModal").classList.add("active");
+  openModal("insightsModal");
 }
 function renderHeatmap() {
   const grid = document.getElementById("heatmapGrid");
@@ -1989,10 +1978,7 @@ function renderPursuitTaskPanels() {
 let goalEditorState = null;
 let questEditorState = null;
 let mobileFullWeekKey = "";
-function closeEditorModal(id) {
-  const el = document.getElementById(id);
-  if (el) { el.classList.remove("active"); el.setAttribute("aria-hidden", "true"); }
-}
+function closeEditorModal(id) { closeModal(id); }
 function openGoalEditor(type, id) {
   const list = type === "study" ? getStudyGoals() : getProjectGoals();
   const goal = id ? list.find((g) => g.id === id) : null;
@@ -2003,9 +1989,7 @@ function openGoalEditor(type, id) {
   document.getElementById("goalStatus").value = goal ? (goal.status || "Planned") : (type === "project" ? "In Progress" : "Planned");
   document.getElementById("goalTargetDate").value = goal ? (goal.targetDate || "") : "";
   document.getElementById("deleteGoalBtn").style.display = goal ? "" : "none";
-  const modal = document.getElementById("goalEditorModal");
-  modal.classList.add("active"); modal.setAttribute("aria-hidden", "false");
-  setTimeout(() => document.getElementById("goalTitle").focus(), 0);
+  openModal("goalEditorModal");
 }
 async function saveGoalEditor() {
   if (!goalEditorState) return;
@@ -2031,7 +2015,7 @@ async function saveGoalEditor() {
   if (type === "study" && !wasCompleted && goal.status === "Completed") {
     await saveRecord({ title: goal.title, category: "certification", notes: goal.objective || "Completed scholarship goal", completed_at: new Date().toISOString(), week_key: weekKey(), source: "auto", ext_key: `cert:${goal.id}` });
   }
-  renderStatic();
+  renderStructure();
   applyWeekToUI();
 }
 async function deleteGoalEditor() {
@@ -2059,7 +2043,7 @@ async function deleteGoalEditor() {
   await Promise.all([...touched].map(persistWeekByKey));
   await persistSettings();
   closeEditorModal("goalEditorModal");
-  renderStatic(); applyWeekToUI();
+  renderStructure(); applyWeekToUI();
 }
 
 function questSourceOptions(selected) {
@@ -2122,9 +2106,7 @@ function openQuestEditor(opts) {
   document.getElementById("deleteQuestBtn").style.display = q ? "" : "none";
   syncQuestScheduleFields();
   syncQuestAttrToSource();
-  const modal = document.getElementById("questEditorModal");
-  modal.classList.add("active"); modal.setAttribute("aria-hidden", "false");
-  setTimeout(() => document.getElementById("questTitle").focus(), 0);
+  openModal("questEditorModal");
 }
 function weekForQuest(q) {
   const key = questWeekKey(q);
@@ -2192,7 +2174,7 @@ async function saveQuestEditor() {
   await persistSettings();
   await Promise.all([...touched].filter(Boolean).map(persistWeekByKey));
   closeEditorModal("questEditorModal");
-  renderStatic(); applyWeekToUI();
+  renderStructure(); applyWeekToUI();
 }
 async function deleteQuestEditor() {
   const q = questEditorState && questEditorState.id ? getUnifiedQuests().find((x) => x.id === questEditorState.id) : null;
@@ -2207,7 +2189,7 @@ async function deleteQuestEditor() {
   settings.quests = getUnifiedQuests().filter((x) => x.id !== q.id);
   await persistSettings(); await Promise.all(touched.map(persistWeekByKey));
   closeEditorModal("questEditorModal");
-  renderStatic(); applyWeekToUI();
+  renderStructure(); applyWeekToUI();
 }
 async function moveQuest(id, direction) {
   const q = getUnifiedQuests().find((x) => x.id === id); if (!q) return;
@@ -2216,7 +2198,7 @@ async function moveQuest(id, direction) {
   if (i < 0 || j < 0 || j >= siblings.length) return;
   const oi = siblings[i].order || i, oj = siblings[j].order || j;
   siblings[i].order = oj; siblings[j].order = oi;
-  await persistSettings(); renderStatic(); loadWeekFields();
+  await persistSettings(); renderStructure(); loadWeekFields();
 }
 
 // ===== EDITABLE LISTS: Diet / Project / Review =====
@@ -2426,22 +2408,46 @@ function applyWeekToUI() {
   if (mobileToday) mobileToday.textContent = new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   
   ensureQuestOccurrencesForWeek();
+  renderStructure();
+  updateLive();
+  applyMobileSmartLayout();
+}
+
+// Rebuilding DOM vs. refreshing the numbers in it are different jobs at very
+// different costs. Splitting them is what lets a keystroke stop re-rendering
+// every pursuit's hero widget.
+//
+// renderStructure() throws DOM away and rebuilds it. Call it when the shape of
+// the week changed: a task added or moved, a pursuit renamed, recoloured,
+// reordered, shown or hidden, the selected week changed.
+function renderStructure() {
   renderDays();
   renderStudyAreas();
   renderProjectGoals();
   renderCustomSections();
   renderPursuitTaskPanels();
-  renderSectionHeroes();
+  applyModuleLayout();
+  applySectionVisibility();
+  renderScoreboard();
+  renderReview();
+}
+// updateLive() only refreshes values in DOM that already exists. Safe to call
+// on every change, including while a field has focus — it never replaces the
+// element being typed into.
+function updateLive() {
   loadWeekFields();
   updateProgress();
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
-  applyModuleLayout();
-  applySectionVisibility();
+  renderSectionHeroes();
   renderBoss();
-
-  // Apply mobile smart layout after rendering
-  applyMobileSmartLayout();
+}
+// The debounced form for text input, where a keystroke should not pay for a
+// full widget refresh. Checkboxes stay immediate so the XP pop feels instant.
+let liveUpdateTimer = null;
+function updateLiveSoon() {
+  clearTimeout(liveUpdateTimer);
+  liveUpdateTimer = setTimeout(updateLive, 200);
 }
 
 // ===== MOBILE SMART LAYOUT =====
@@ -2618,7 +2624,7 @@ function updateProgress() {
   // Built-in hours sections include linked daily "sessions" (each completed day = +1 hr).
   const projSessions = (window.Forge && Forge.linkedCountDays) ? Forge.linkedCountDays(_wk, _mods, "projects") : 0;
 
-  const projectHours = Number(document.getElementById("projectHours")?.value || 0) + projSessions;
+  const projectHours = Number((_wk.fields || {}).projectHours || 0) + projSessions;
   document.getElementById("projectHoursValue").textContent = projectHours;
   document.getElementById("projectBar").style.width = Math.min(100, Math.round((projectHours / projectTarget) * 100)) + "%";
   syncSessionNotes();
@@ -2634,8 +2640,6 @@ function updateProgress() {
   renderXpChips();
   syncLinkedProxies();
   syncCounterDisplays();
-  if (typeof renderSectionHeroes === "function") renderSectionHeroes(); // live-update the section widgets
-  if (typeof renderBoss === "function") renderBoss();
 }
 
 // ===== CALENDAR (month view) =====
@@ -2643,12 +2647,10 @@ let calViewDate = null;
 function openCalendar() {
   calViewDate = new Date();
   renderCalendarMonth();
-  const md = document.getElementById("calendarModal");
-  if (md) { md.classList.add("active"); md.setAttribute("aria-hidden", "false"); }
+  openModal("calendarModal");
 }
 function closeCalendar() {
-  const md = document.getElementById("calendarModal");
-  if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); }
+  closeModal("calendarModal");
 }
 function calShiftMonth(delta) {
   if (!calViewDate) calViewDate = new Date();
@@ -2871,7 +2873,7 @@ function initMobileTabBar() {
   // More drawer items
   const moreActions = {
     'moreScoreboardBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('scoreboard'); },
-    'moreReportsBtn': () => { moreDrawer.classList.remove('active'); document.getElementById('reportsModal').classList.add('active'); },
+    'moreReportsBtn': () => { moreDrawer.classList.remove('active'); openModal("reportsModal"); },
     'moreSettingsBtn': () => { moreDrawer.classList.remove('active'); openSettings(); },
     'moreProjectsBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('projects'); },
     'moreDietBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('diet'); },
@@ -3006,17 +3008,63 @@ function openSettings() {
   const rm = document.getElementById("cfgRemindMorning"); if (rm) rm.value = rem.morning || "08:00";
   const rv = document.getElementById("cfgRemindEvening"); if (rv) rv.value = rem.evening || "19:00";
   renderThemeGrid();
-  const md = document.getElementById("settingsModal");
-  md.classList.add("active");
-  md.setAttribute("aria-hidden", "false");
+  openModal("settingsModal");
 }
 
 function openCabinet() {
   if (window.Game && Game.renderCabinet) Game.renderCabinet();
   renderTrophyCase();
-  document.getElementById("cabinetModal").classList.add("active");
+  openModal("cabinetModal");
 }
-function closeCabinet() { document.getElementById("cabinetModal").classList.remove("active"); window.dispatchEvent(new Event("scroll")); }
+function closeCabinet() { closeModal("cabinetModal"); }
+
+// ===== MODALS =====
+// One controller for every dialog. Before this, each modal hand-toggled .active
+// and only some of them also set aria-hidden, so most stayed aria-hidden="true"
+// while visible — invisible to a screen reader. Escape and backdrop clicks were
+// wired per-modal too, or not at all.
+function isModalOpen(id) {
+  const md = document.getElementById(id);
+  return !!(md && md.classList.contains("active"));
+}
+function openModal(id) {
+  const md = document.getElementById(id);
+  if (!md) return null;
+  md.classList.add("active");
+  md.setAttribute("aria-hidden", "false");
+  // Focus the first thing worth typing in — never the header's close button,
+  // which is earlier in document order but not where anyone wants the caret.
+  const field = md.querySelector(".modal :is(input:not([type=hidden]):not([type=file]):not([disabled]), select, textarea):not(.modal-head *)");
+  if (field) setTimeout(() => { try { field.focus({ preventScroll: true }); } catch (e) {} }, 0);
+  return md;
+}
+function closeModal(id) {
+  const md = document.getElementById(id);
+  if (!md) return;
+  md.classList.remove("active");
+  md.setAttribute("aria-hidden", "true");
+  window.dispatchEvent(new Event("scroll"));   // re-sync the mobile tab bar
+}
+function topOpenModal() {
+  const open = [...document.querySelectorAll(".modal-backdrop.active")];
+  return open.length ? open[open.length - 1] : null;
+}
+// Escape closes the frontmost dialog, and a click on the dimmed area closes the
+// one that was clicked — wired once here instead of per modal.
+function initModals() {
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const md = topOpenModal();
+    if (!md) return;
+    e.preventDefault();
+    if (md.id === "editSectionModal") closeSectionEditor(); else closeModal(md.id);
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.classList || !e.target.classList.contains("modal-backdrop")) return;
+    if (!e.target.classList.contains("active")) return;
+    if (e.target.id === "editSectionModal") closeSectionEditor(); else closeModal(e.target.id);
+  });
+}
 
 // ===== EVENT BINDING =====
 // ===== WEEKLY BOSS =====
@@ -3142,8 +3190,8 @@ function renderSeason() {
     sync();
   }
 }
-function openSeason() { seasonOffset = 0; renderSeason(); const md = document.getElementById("seasonModal"); if (md) { md.classList.add("active"); md.setAttribute("aria-hidden", "false"); } }
-function closeSeason() { const md = document.getElementById("seasonModal"); if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); } }
+function openSeason() { seasonOffset = 0; renderSeason(); openModal("seasonModal"); }
+function closeSeason() { closeModal("seasonModal"); }
 function addSeasonGoalFromForm() {
   const type = (document.getElementById("sgType") || {}).value || "xp";
   const target = Math.max(1, Number((document.getElementById("sgTarget") || {}).value) || 1);
@@ -3192,8 +3240,8 @@ function renderYear() {
   const attrBlock = attrs.length ? `<div class="tr-block"><div class="tr-title">XP by attribute</div><div class="ya-bars">${attrBars}</div></div>` : "";
   body.innerHTML = statsHtml + monthly + attrBlock;
 }
-function openYear() { yearOffset = 0; renderYear(); const md = document.getElementById("yearModal"); if (md) { md.classList.add("active"); md.setAttribute("aria-hidden", "false"); } }
-function closeYear() { const md = document.getElementById("yearModal"); if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); } }
+function openYear() { yearOffset = 0; renderYear(); openModal("yearModal"); }
+function closeYear() { closeModal("yearModal"); }
 
 // ===== FOCUS TIMER =====
 let focusState = null;
@@ -3205,7 +3253,7 @@ function openFocus() {
   document.querySelectorAll(".focus-dur").forEach((b) => b.classList.remove("active"));
   const def = document.querySelector('.focus-dur[data-min="25"]'); if (def) def.classList.add("active");
   const c = document.getElementById("focusCustom"); if (c) c.value = "";
-  document.getElementById("focusModal").classList.add("active");
+  openModal("focusModal");
 }
 function focusLabel(sel) {
   if (sel && sel.indexOf("study:") === 0) return getStudyAreas()[Number(sel.split(":")[1])] || "Study";
@@ -3236,7 +3284,7 @@ function startFocus(minutes) {
   }, 1000);
 }
 function endFocus(completed) {
-  if (!focusState) { document.getElementById("focusModal").classList.remove("active"); return; }
+  if (!focusState) { closeModal("focusModal"); return; }
   const elapsed = focusState.totalSec - Math.max(0, focusState.remainSec);
   const hours = Math.round(elapsed / 3600 * 100) / 100;
   if (hours > 0) {
@@ -3248,7 +3296,7 @@ function endFocus(completed) {
   const label = focusLabel(focusState.sel);
   if (focusState.timer) clearInterval(focusState.timer);
   focusState = null;
-  document.getElementById("focusModal").classList.remove("active");
+  closeModal("focusModal");
   if (window.FX && FX.focusDone) FX.focusDone(hours, label, completed);
 }
 
@@ -3353,7 +3401,11 @@ function renderTrends() {
 }
 
 function bindEvents() {
-  document.addEventListener("input", e => { if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateProgress(); } });
+  document.addEventListener("input", e => {
+    if (!e.target.matches("[data-save]")) return;
+    saveWeekField(e.target);
+    if (e.target.type === "checkbox") updateLive(); else updateLiveSoon();
+  });
   // Linked daily-task proxy → writes the section's shared check id (counts once).
   document.addEventListener("change", e => {
     if (!e.target.matches || !e.target.matches("input[data-link-id]")) return;
@@ -3367,7 +3419,7 @@ function bindEvents() {
     if (secEl && secEl.type === "checkbox") secEl.checked = e.target.checked;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { persistWeekByKey(key); updateStreakAndHeatmap(); if (window.Game) Game.render(); }, 80);
-    updateProgress();
+    updateLive();
   });
   // First-run onboarding: pick a path or start blank.
   document.addEventListener("click", e => {
@@ -3376,7 +3428,7 @@ function bindEvents() {
     if (e.target.id === "onboardSkip") startBlank();
   });
   document.addEventListener("change", e => {
-    if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateProgress(); }
+    if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateLive(); }
   });
   // A Quest Log tile is a link to the pursuit it reports on.
   document.addEventListener("click", e => {
@@ -3465,11 +3517,7 @@ function bindEvents() {
   const openSettingsBtn = document.getElementById("openSettingsBtn");
   if (openSettingsBtn) openSettingsBtn.onclick = openSettings;
   
-  const closeSettings = () => {
-    const md = document.getElementById("settingsModal");
-    md.classList.remove("active");
-    md.setAttribute("aria-hidden", "true");
-  };
+  const closeSettings = () => closeModal("settingsModal");
   const closeSettingsBtn = document.getElementById("closeSettingsBtn");
   if (closeSettingsBtn) closeSettingsBtn.onclick = closeSettings;
   const closeSettingsTopBtn = document.getElementById("closeSettingsTopBtn");
@@ -3518,9 +3566,6 @@ function bindEvents() {
   if (settingsResetBtn) settingsResetBtn.onclick = resetThisWeek;
   
   // Close settings modal on backdrop click
-  document.getElementById("settingsModal")?.addEventListener("click", e => {
-    if (e.target.id === "settingsModal") closeSettings();
-  });
 
   // Settings Sync Tab
   initSyncPanel();
@@ -3539,8 +3584,6 @@ function bindEvents() {
   if (calNext) calNext.onclick = () => calShiftMonth(1);
   const calTodayBtn = document.getElementById("calToday");
   if (calTodayBtn) calTodayBtn.onclick = () => { calViewDate = new Date(); renderCalendarMonth(); };
-  const calModal = document.getElementById("calendarModal");
-  if (calModal) calModal.addEventListener("click", (e) => { if (e.target.id === "calendarModal") closeCalendar(); });
   const calGrid = document.getElementById("calGrid");
   if (calGrid) calGrid.addEventListener("click", (e) => {
     const cell = e.target.closest(".cal-cell[data-date]");
@@ -3557,9 +3600,6 @@ function bindEvents() {
   if (closeCabinetBtn) closeCabinetBtn.onclick = closeCabinet;
   const closeCabinetTopBtn = document.getElementById("closeCabinetTopBtn");
   if (closeCabinetTopBtn) closeCabinetTopBtn.onclick = closeCabinet;
-  document.getElementById("cabinetModal")?.addEventListener("click", e => {
-    if (e.target.id === "cabinetModal") closeCabinet();
-  });
 
   // Records form (add + edit)
   const addTrophyBtn = document.getElementById("addTrophyBtn");
@@ -3586,26 +3626,24 @@ function bindEvents() {
   document.getElementById("cancelGoalEditorBtn").onclick = () => closeEditorModal("goalEditorModal");
   document.getElementById("saveGoalEditorBtn").onclick = saveGoalEditor;
   document.getElementById("deleteGoalBtn").onclick = deleteGoalEditor;
-  document.getElementById("goalEditorModal").addEventListener("click", (e) => { if (e.target.id === "goalEditorModal") closeEditorModal("goalEditorModal"); });
   document.getElementById("closeQuestEditorBtn").onclick = () => closeEditorModal("questEditorModal");
   document.getElementById("cancelQuestEditorBtn").onclick = () => closeEditorModal("questEditorModal");
   document.getElementById("saveQuestEditorBtn").onclick = saveQuestEditor;
   document.getElementById("deleteQuestBtn").onclick = deleteQuestEditor;
   document.getElementById("questSource").addEventListener("change", syncQuestAttrToSource);
   document.getElementById("questScheduleType").addEventListener("change", syncQuestScheduleFields);
-  document.getElementById("questEditorModal").addEventListener("click", (e) => { if (e.target.id === "questEditorModal") closeEditorModal("questEditorModal"); });
 
 
   // Insights Modal
   const closeInsightsBtn = document.getElementById("closeInsightsBtn");
-  if (closeInsightsBtn) closeInsightsBtn.onclick = () => document.getElementById("insightsModal").classList.remove("active");
+  if (closeInsightsBtn) closeInsightsBtn.onclick = () => closeModal("insightsModal");
 
   // Reports Modal
   // Focus timer
   const openFocusBtn = document.getElementById("openFocusBtn");
   if (openFocusBtn) openFocusBtn.onclick = openFocus;
   const closeFocusBtn = document.getElementById("closeFocusBtn");
-  if (closeFocusBtn) closeFocusBtn.onclick = () => { if (focusState) endFocus(false); else document.getElementById("focusModal").classList.remove("active"); };
+  if (closeFocusBtn) closeFocusBtn.onclick = () => { if (focusState) endFocus(false); else closeModal("focusModal"); };
   document.querySelectorAll(".focus-dur").forEach((b) => b.onclick = () => {
     document.querySelectorAll(".focus-dur").forEach((x) => x.classList.remove("active"));
     b.classList.add("active");
@@ -3626,11 +3664,11 @@ function bindEvents() {
 
   const openReportBtn = document.getElementById("openReportBtn");
   if (openReportBtn) openReportBtn.onclick = () => {
-    document.getElementById("reportsModal").classList.add("active");
+    openModal("reportsModal");
     renderTrends();
   };
   const closeReportBtn = document.getElementById("closeReportBtn");
-  if (closeReportBtn) closeReportBtn.onclick = () => document.getElementById("reportsModal").classList.remove("active");
+  if (closeReportBtn) closeReportBtn.onclick = () => closeModal("reportsModal");
 
   // ----- Season modal -----
   const openSeasonBtn = document.getElementById("openSeasonBtn");
@@ -3735,6 +3773,7 @@ function bindEvents() {
   const copyRep = document.getElementById("copyReportBtn");
   if (copyRep) copyRep.onclick = () => navigator.clipboard.writeText(document.getElementById("reportContent").innerText).then(() => alert("Report copied."));
 
+  initModals();
   // Init settings tabs
   initSettingsTabs();
   wireModulesEditor();
@@ -3832,7 +3871,7 @@ async function init() {
     // pure render getters never have to mutate state; server data replaces it.
     migrateQuestModelIfNeeded();
     if (settings.theme) applyTheme(settings.theme);
-    renderStatic();
+    renderStructure();
     applyWeekToUI();
   }
 
@@ -3861,7 +3900,7 @@ async function init() {
   }
   cacheState();
   if (settings.theme) applyTheme(settings.theme);
-  renderStatic();
+  renderStructure();
   applyWeekToUI();
   await flushPendingWrites();
   maybeShowOnboarding();
