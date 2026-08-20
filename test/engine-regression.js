@@ -69,9 +69,17 @@ try {
   const srow = db.prepare("SELECT value FROM settings WHERE key='app_settings'").get();
   const settings = srow ? JSON.parse(srow.value) : {};
   db.close();
+  // The oracle above is the PRE-ENGINE logic, which only understands the old
+  // blueprint/table/checklist ids. A week written after the unified task model
+  // (taskModelVersion 4) holds quest-* ids the oracle cannot see, so comparing
+  // them reports a mismatch for every healthy modern install. Compare only the
+  // weeks the oracle is actually able to score, and say how many were skipped.
   const keys = Object.keys(weeks);
-  keys.forEach((k) => { if (compare(weeks[k], settings)) { fails++; console.log("REAL MISMATCH", k); } });
-  console.log(`Real DB: ${keys.length} week(s) checked — ${fails === 0 ? "OK" : fails + " mismatch(es)"}`);
+  const legacyKeys = keys.filter((k) => !Object.keys((weeks[k] || {}).checks || {}).some((id) => id.indexOf("quest-") === 0));
+  const skipped = keys.length - legacyKeys.length;
+  legacyKeys.forEach((k) => { if (compare(weeks[k], settings)) { fails++; console.log("REAL MISMATCH", k); } });
+  console.log(`Real DB: ${legacyKeys.length} legacy week(s) checked — ${fails === 0 ? "OK" : fails + " mismatch(es)"}`
+    + (skipped ? ` (${skipped} post-migration week(s) skipped: the legacy oracle predates quest ids)` : ""));
 } catch (e) {
   console.log("Real DB: skipped (" + e.message.split("\n")[0] + ")");
 }
