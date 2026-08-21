@@ -773,13 +773,24 @@
 
   function buildInsignias(p) {
     const out = [];
-    const add = (id, name, req, tier, cat, icon, owned) => out.push({ id, name, req, tier, cat, icon, owned: !!owned });
+    // Every insignia is a `cur >= target` threshold and both numbers are live
+    // at the call site. Keeping them (rather than collapsing to a boolean) is
+    // what lets a locked tile show "37 / 40" and lets the pane rank what you
+    // are closest to earning. Binary feats simply pass no numbers.
+    const add = (id, name, req, tier, cat, icon, owned, cur, target) => {
+      const b = { id, name, req, tier, cat, icon, owned: !!owned };
+      if (typeof cur === "number" && typeof target === "number" && target > 0 && isFinite(cur)) {
+        b.cur = cur; b.target = target;
+        b.pct = Math.max(0, Math.min(100, Math.round(cur / target * 100)));
+      }
+      out.push(b);
+    };
 
     // Ascension (level) — named through 50, then ∞ every +10
     const lvlNames = { 2: "Initiate", 5: "Apprentice", 10: "Journeyman", 15: "Artisan", 20: "Veteran", 30: "Elite", 40: "Master", 50: "Grandmaster" };
     rungs([2, 5, 10, 15, 20, 30, 40, 50], p.level, 10, 2).forEach(L => {
       const nm = lvlNames[L] || ("Ascension " + roman(Math.floor((L - 50) / 10) + 1));
-      add("lvl-" + L, nm, "Reach level " + L, gradeByVal(L, 5, 15, 30), "ascension", IP.asc, p.level >= L);
+      add("lvl-" + L, nm, "Reach level " + L, gradeByVal(L, 5, 15, 30), "ascension", IP.asc, p.level >= L, p.level, L);
     });
 
     // Attribute mastery (×5) — flavorful chain per attribute. 3/5/10/15/20 named,
@@ -797,62 +808,88 @@
       const lbl = a.label || a.key;
       rungs([3, 5, 10, 15, 20], a.level, 5, 1).forEach(L => {
         const nm = fl[L] || (L === 3 ? (lbl + " Initiate") : (lbl + " Ascendant " + roman(Math.floor((L - 20) / 5))));
-        add("attr-" + a.key + "-" + L, nm, lbl + " level " + L, gradeByVal(L, 5, 10, 20), "attributes", attrIcon[a.key] || IP.star, a.level >= L);
+        add("attr-" + a.key + "-" + L, nm, lbl + " level " + L, gradeByVal(L, 5, 10, 20), "attributes", attrIcon[a.key] || IP.star, a.level >= L, a.level, L);
       });
     });
-    add("poly", "Jack of All", "All attributes level 3+", "epic", "attributes", IP.star, p.attrs.every(a => a.level >= 3));
-    add("renai", "Renaissance", "All attributes level 5+", "epic", "attributes", IP.star, p.attrs.every(a => a.level >= 5));
-    add("virt", "Virtuoso", "All attributes level 10+", "legendary", "attributes", IP.star, p.attrs.every(a => a.level >= 10));
+    add("poly", "Jack of All", "All attributes level 3+", "epic", "attributes", IP.star, p.attrs.every(a => a.level >= 3), p.attrs.filter(a => a.level >= 3).length, p.attrs.length);
+    add("renai", "Renaissance", "All attributes level 5+", "epic", "attributes", IP.star, p.attrs.every(a => a.level >= 5), p.attrs.filter(a => a.level >= 5).length, p.attrs.length);
+    add("virt", "Virtuoso", "All attributes level 10+", "legendary", "attributes", IP.star, p.attrs.every(a => a.level >= 10), p.attrs.filter(a => a.level >= 10).length, p.attrs.length);
 
     // Hero classes — collect every archetype you embody (Soul Evolution).
     const seenC = (settings && settings.seenClasses) ? settings.seenClasses.slice() : [];
     const embodied = {}; seenC.forEach(id => embodied[id] = 1);
     if (p.heroClass && p.heroClass.id !== "initiate") embodied[p.heroClass.id] = 1;
     CLASS_LIST.forEach(c => add("class-" + c.id, "Embodied: " + c.name, "Reach the " + c.name + " class", c.id === "polymath" ? "legendary" : "rare", "class", c.icon, embodied[c.id]));
-    add("class-shift", "Shapeshifter", "Reach 3 different classes", "epic", "class", IP.star, Object.keys(embodied).length >= 3);
+    add("class-shift", "Shapeshifter", "Reach 3 different classes", "epic", "class", IP.star, Object.keys(embodied).length >= 3, Object.keys(embodied).length, 3);
 
     // Daily missions — banked all-clear days (settings.dailyMissions[*].bonus).
     const md = (settings && settings.dailyMissions) ? settings.dailyMissions : null;
     let missionDays = 0; if (md) for (const k in md) { if (md[k] && md[k].bonus) missionDays++; }
-    add("tm-1", "Mission Cleared", "Clear all of a day's missions", "common", "missions", IP.check, missionDays >= 1);
+    add("tm-1", "Mission Cleared", "Clear all of a day's missions", "common", "missions", IP.check, missionDays >= 1, missionDays, 1);
     const tmName = { 7: "Taskmaster I", 30: "Taskmaster II", 100: "Taskmaster III" };
-    rungs([7, 30, 100], missionDays, 100, 1).forEach(N => add("tm-" + N, tmName[N] || ("Taskmaster " + roman(Math.floor((N - 100) / 100) + 3)), "Clear all daily missions on " + N + " days", gradeByVal(N, 30, 100, 300), "missions", IP.check, missionDays >= N));
+    rungs([7, 30, 100], missionDays, 100, 1).forEach(N => add("tm-" + N, tmName[N] || ("Taskmaster " + roman(Math.floor((N - 100) / 100) + 3)), "Clear all daily missions on " + N + " days", gradeByVal(N, 30, 100, 300), "missions", IP.check, missionDays >= N, missionDays, N));
 
     // Consistency — natural byproducts only (never rewards a miss)
     const pd = trophyCount("bronze"), cw = trophyCount("silver");
     const pdName = { 10: "Spotless", 30: "Immaculate", 100: "Flawless Hundred", 365: "Perfect Year" };
-    rungs([10, 30, 100, 365], pd, 365, 1).forEach(N => add("pd-" + N, pdName[N] || ("Spotless " + roman(Math.floor((N - 365) / 365) + 1)), N + " perfect days earned", gradeByVal(N, 30, 100, 365), "consistency", IP.flame, pd >= N));
+    rungs([10, 30, 100, 365], pd, 365, 1).forEach(N => add("pd-" + N, pdName[N] || ("Spotless " + roman(Math.floor((N - 365) / 365) + 1)), N + " perfect days earned", gradeByVal(N, 30, 100, 365), "consistency", IP.flame, pd >= N, pd, N));
     const cwName = { 4: "Consistent", 13: "Quarterly", 26: "Half-Year", 52: "Yearlong" };
-    rungs([4, 13, 26, 52], cw, 52, 1).forEach(N => add("cw-" + N, cwName[N] || ("Yearlong " + roman(Math.floor((N - 52) / 52) + 1)), N + " weeks completed", gradeByVal(N, 13, 26, 52), "consistency", IP.calendar, cw >= N));
-    add("flaw", "Flawless Week", "Hit a 100% week", "rare", "consistency", IP.check, p.bestWeekPct >= 100);
+    rungs([4, 13, 26, 52], cw, 52, 1).forEach(N => add("cw-" + N, cwName[N] || ("Yearlong " + roman(Math.floor((N - 52) / 52) + 1)), N + " weeks completed", gradeByVal(N, 13, 26, 52), "consistency", IP.calendar, cw >= N, cw, N));
+    add("flaw", "Flawless Week", "Hit a 100% week", "rare", "consistency", IP.check, p.bestWeekPct >= 100, p.bestWeekPct, 100);
     const dsName = { 7: "Kindling", 30: "Wildfire", 100: "Inferno", 365: "Eternal Flame" };
-    rungs([7, 30, 100, 365], p.dayStreak, 365, 1).forEach(N => add("ds-" + N, dsName[N] || ("Eternal Flame " + roman(Math.floor((N - 365) / 365) + 1)), N + "-day streak reached", gradeByVal(N, 30, 100, 365), "consistency", IP.flame, p.dayStreak >= N));
+    rungs([7, 30, 100, 365], p.dayStreak, 365, 1).forEach(N => add("ds-" + N, dsName[N] || ("Eternal Flame " + roman(Math.floor((N - 365) / 365) + 1)), N + "-day streak reached", gradeByVal(N, 30, 100, 365), "consistency", IP.flame, p.dayStreak >= N, p.dayStreak, N));
 
-    // Boss
-    const boss = (settings && settings.bossDefeated) ? Object.keys(settings.bossDefeated).length : 0;
-    add("boss-1", "Giant Slayer", "Defeat a weekly boss", "rare", "boss", IP.boss, boss >= 1);
-    const bossName = { 5: "Dragonsbane", 25: "Worldbreaker" };
-    rungs([5, 25], boss, 25, 1).forEach(N => add("boss-" + N, bossName[N] || ("Worldbreaker " + roman(Math.floor((N - 25) / 25) + 1)), "Defeat " + N + " weekly bosses", gradeByVal(N, 5, 25, 75), "boss", IP.boss, boss >= N));
+    // Boss — the thinnest category in the game until now: three badges with a
+    // 1 → 5 → 25 gap, roughly six months of silence after your first kill. The
+    // bestiary (derived in app.js) supplies per-boss kills, the losses, and the
+    // consecutive run, so the chain can reward variety and nerve, not just count.
+    const bh = (typeof bossHistory === "function") ? bossHistory() : null;
+    const boss = bh ? bh.slain
+      : ((settings && settings.bossDefeated) ? Object.keys(settings.bossDefeated).length : 0);
+    add("boss-1", "Giant Slayer", "Defeat a weekly boss", "rare", "boss", IP.boss, boss >= 1, boss, 1);
+    const bossName = { 3: "Bruiser", 5: "Dragonsbane", 10: "Champion", 25: "Worldbreaker", 50: "Myth Ender" };
+    rungs([3, 5, 10, 25, 50], boss, 50, 1).forEach(N => add("boss-" + N, bossName[N] || ("Myth Ender " + roman(Math.floor((N - 50) / 50) + 1)), "Defeat " + N + " weekly bosses", gradeByVal(N, 5, 25, 75), "boss", IP.boss, boss >= N, boss, N));
+
+    if (bh) {
+      // One badge per challenger — the names have been sitting in
+      // settings.bossDefeated since day one with nothing reading them.
+      bh.rows.forEach(r => add(
+        "boss-slay-" + r.boss.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        "Slayer: " + r.boss.name, "Defeat " + r.boss.name, "rare", "boss", IP.boss,
+        r.slain > 0, Math.min(r.slain, 1), 1));
+      add("boss-bestiary", "Bestiary Complete", "Defeat all " + bh.total + " bosses at least once",
+        "mythic", "boss", IP.gem, bh.distinct >= bh.total, bh.distinct, bh.total);
+      const runName = { 4: "Unbeaten Month", 12: "Unbeaten Quarter", 26: "Unbeaten Half-Year" };
+      rungs([4, 12, 26], bh.bestStreak, 26, 1).forEach(N => add("boss-run-" + N,
+        runName[N] || ("Unbeaten " + roman(Math.floor((N - 26) / 26) + 1)),
+        N + " weeks without losing a boss", gradeByVal(N, 4, 12, 26), "boss", IP.flame,
+        bh.bestStreak >= N, bh.bestStreak, N));
+      // A boss that beat you and then went down. Only reachable if you have
+      // actually lost one — which is the point.
+      const avenged = bh.rows.filter(r => r.slain > 0 && r.escaped > 0).length;
+      add("boss-nemesis", "Nemesis", "Defeat a boss that beat you before", "epic", "boss", IP.boss,
+        avenged >= 1, avenged, 1);
+    }
 
     // Study & focus (hour-based)
     const shName = { 10: "Apprentice Scholar", 50: "Dedicated", 100: "Centurion of Study", 250: "Erudite", 500: "Master Scholar", 1000: "Living Library" };
-    rungs([10, 50, 100, 250, 500, 1000], p.lifetimeStudyHours, 500, 1).forEach(N => add("sh-" + N, shName[N] || ("Living Library " + roman(Math.floor((N - 1000) / 500) + 1)), "Log " + N + " study hours", gradeByVal(N, 50, 250, 1000), "study", IP.study, p.lifetimeStudyHours >= N));
+    rungs([10, 50, 100, 250, 500, 1000], p.lifetimeStudyHours, 500, 1).forEach(N => add("sh-" + N, shName[N] || ("Living Library " + roman(Math.floor((N - 1000) / 500) + 1)), "Log " + N + " study hours", gradeByVal(N, 50, 250, 1000), "study", IP.study, p.lifetimeStudyHours >= N, p.lifetimeStudyHours, N));
 
     // Volume
     const checks = p.lifetimeChecks || 0;
     const qcName = { 100: "Grinder", 500: "Relentless", 1000: "Unstoppable", 5000: "The Machine" };
-    rungs([100, 500, 1000, 5000], checks, 5000, 1).forEach(N => add("qc-" + N, qcName[N] || ("The Machine " + roman(Math.floor((N - 5000) / 5000) + 1)), N + " quests completed", gradeByVal(N, 500, 1000, 5000), "volume", IP.check, checks >= N));
+    rungs([100, 500, 1000, 5000], checks, 5000, 1).forEach(N => add("qc-" + N, qcName[N] || ("The Machine " + roman(Math.floor((N - 5000) / 5000) + 1)), N + " quests completed", gradeByVal(N, 500, 1000, 5000), "volume", IP.check, checks >= N, checks, N));
 
     // Records — keepable real-life wins (manual + auto), read from app.js's list.
     const recs = (typeof achievements !== "undefined" && Array.isArray(achievements)) ? achievements : [];
     const recCount = recs.length;
     const rkName = { 1: "First Record", 10: "Record Keeper", 25: "Archivist", 50: "Curator" };
-    rungs([1, 10, 25, 50], recCount, 50, 1).forEach(N => add("rec-" + N, rkName[N] || ("Curator " + roman(Math.floor((N - 50) / 50) + 1)), N + " record" + (N > 1 ? "s" : "") + " logged", gradeByVal(N, 10, 25, 50), "records", IP.star, recCount >= N));
+    rungs([1, 10, 25, 50], recCount, 50, 1).forEach(N => add("rec-" + N, rkName[N] || ("Curator " + roman(Math.floor((N - 50) / 50) + 1)), N + " record" + (N > 1 ? "s" : "") + " logged", gradeByVal(N, 10, 25, 50), "records", IP.star, recCount >= N, recCount, N));
     const byCat = c => recs.filter(r => r.category === c).length;
-    add("rec-fit", "Iron PR", "Log a fitness record", "rare", "records", IP.body, byCat("fitness") >= 1);
-    add("rec-learn", "Lifelong Learner", "Log 5 learning/certification records", "epic", "records", IP.mind, (byCat("learning") + byCat("certification")) >= 5);
-    add("rec-ship", "Shipper", "Log 5 project records", "epic", "records", IP.craft, byCat("project") >= 5);
-    add("rec-wealth", "Wealth Builder", "Log a finance record", "rare", "records", IP.gem, byCat("finance") >= 1);
+    add("rec-fit", "Iron PR", "Log a fitness record", "rare", "records", IP.body, byCat("fitness") >= 1, byCat("fitness"), 1);
+    add("rec-learn", "Lifelong Learner", "Log 5 learning/certification records", "epic", "records", IP.mind, (byCat("learning") + byCat("certification")) >= 5, byCat("learning") + byCat("certification"), 5);
+    add("rec-ship", "Shipper", "Log 5 project records", "epic", "records", IP.craft, byCat("project") >= 5, byCat("project"), 5);
+    add("rec-wealth", "Wealth Builder", "Log a finance record", "rare", "records", IP.gem, byCat("finance") >= 1, byCat("finance"), 1);
 
     // Extra derived one-offs
     const lvls = p.attrs.map(a => a.level);
@@ -877,9 +914,9 @@
     add("pww", "Perfect Workout Week", "Check all 7 workouts in a week", "rare", "consistency", IP.body, perfWorkoutWeek);
 
     // Mythic capstones — the rarest feats.
-    add("myth-forge", "Forgemaster", "Reach level 60", "mythic", "ascension", IP.gem, p.level >= 60);
-    add("myth-legend", "Living Legend", "Reach level 75, or max every attribute", "mythic", "ascension", IP.gem, p.level >= 75 || p.attrs.every(a => a.level >= 20));
-    add("myth-year", "Unbroken Year", "Reach a 365-day streak", "mythic", "consistency", IP.flame, p.dayStreak >= 365);
+    add("myth-forge", "Forgemaster", "Reach level 60", "mythic", "ascension", IP.gem, p.level >= 60, p.level, 60);
+    add("myth-legend", "Living Legend", "Reach level 75, or max every attribute", "mythic", "ascension", IP.gem, p.level >= 75 || p.attrs.every(a => a.level >= 20), p.level, 75);
+    add("myth-year", "Unbroken Year", "Reach a 365-day streak", "mythic", "consistency", IP.flame, p.dayStreak >= 365, p.dayStreak, 365);
     add("myth-poly", "True Polymath", "Embody the Polymath class", "mythic", "class", IP.star, !!embodied.polymath);
 
     // Custom pursuits — every user-made pursuit earns its OWN milestone chain,
@@ -894,9 +931,9 @@
         "cust-" + cs.id + "-" + N,
         rankName[N] || (nm + " Eternal " + roman(Math.floor((N - 52) / 52) + 1)),
         N === 1 ? ("Log " + nm + " in any week") : ("Stay active in " + nm + " for " + N + " weeks"),
-        gradeByVal(N, 4, 13, 52), "pursuits", ic, aw >= N));
-      add("cust-" + cs.id + "-perfect", nm + " Perfected", "Hit the " + nm + " target in a week", "rare", "pursuits", ic, tw >= 1);
-      add("cust-" + cs.id + "-flawless", nm + " Flawless", "Hit the " + nm + " target in 13 weeks", "epic", "pursuits", ic, tw >= 13);
+        gradeByVal(N, 4, 13, 52), "pursuits", ic, aw >= N, aw, N));
+      add("cust-" + cs.id + "-perfect", nm + " Perfected", "Hit the " + nm + " target in a week", "rare", "pursuits", ic, tw >= 1, tw, 1);
+      add("cust-" + cs.id + "-flawless", nm + " Flawless", "Hit the " + nm + " target in 13 weeks", "epic", "pursuits", ic, tw >= 13, tw, 13);
     });
 
     return out;
@@ -922,6 +959,29 @@
 
   // ----- Rendering: cabinet, hero summary ----------------------------------
   let insigniaFilter = "all";
+
+  // Study hours are fractional; everything else is a count. Keep tiles narrow.
+  function insNum(v) {
+    if (!isFinite(v)) return "0";
+    const r = Math.round(v * 10) / 10;
+    return (r % 1 === 0 ? String(r) : r.toFixed(1));
+  }
+  // The nearest wins, ranked. A collection of 107 is a wall of noise until it
+  // tells you which three are within reach.
+  function nearestLocked(list, owned, n) {
+    return list
+      .filter(b => !owned[b.id] && typeof b.pct === "number" && b.target > 0)
+      .sort((a, b) => (b.pct - a.pct) || (a.target - b.target))
+      .slice(0, n || 3);
+  }
+  // A feat can be satisfied a render before checkInsignias banks it, so clamp
+  // the readout — "2 / 2" reads as about to land, "7 / 2" reads as a bug.
+  function progressText(b) { return insNum(Math.min(b.cur, b.target)) + " / " + insNum(b.target); }
+  function progressHtml(b) {
+    if (typeof b.pct !== "number") return "";
+    return `<span class="badge-prog"><span class="badge-prog-bar"><span style="width:${b.pct}%"></span></span>` +
+      `<span class="badge-prog-n">${progressText(b)}</span></span>`;
+  }
   function renderInsignias(p) {
     const grid = document.getElementById("insigniaGrid");
     if (!grid) return;
@@ -952,15 +1012,35 @@
       ch.innerHTML = `${ch.dataset.base} <span class="ins-filter-n">${o}/${items.length}</span>`;
     });
 
-    grid.innerHTML = list.filter(b => insigniaFilter === "all" || b.cat === insigniaFilter).map(b => {
+    // Next up — ranked across the whole collection, not the active filter, so
+    // it stays put while you browse categories.
+    const nextEl = document.getElementById("insigniaNext");
+    if (nextEl) {
+      const near = nearestLocked(list, owned, 3);
+      nextEl.innerHTML = near.length
+        ? `<p class="cab-next-k">Next up</p><div class="cab-next-row">` + near.map(b => `
+            <div class="cab-next-card" style="--bc:${TIER[b.tier]}" title="${escapeHtml(b.req)}">
+              <span class="cab-next-ic"><svg viewBox="0 0 24 24" class="ic"><path d="${b.icon}"/></svg></span>
+              <span class="cab-next-body">
+                <span class="cab-next-name">${escapeHtml(b.name)}</span>
+                <span class="cab-next-req">${escapeHtml(b.req)}</span>
+                <span class="badge-prog"><span class="badge-prog-bar"><span style="width:${b.pct}%"></span></span><span class="badge-prog-n">${progressText(b)}</span></span>
+              </span>
+            </div>`).join("") + `</div>`
+        : "";
+    }
+
+    const shown = list.filter(b => insigniaFilter === "all" || b.cat === insigniaFilter);
+    grid.innerHTML = shown.length ? shown.map(b => {
       const on = !!owned[b.id];
       const ic = `<svg viewBox="0 0 24 24" class="ic"><path d="${on ? b.icon : IP.lock}"/></svg>`;
       return `<div class="badge-tile ${on ? "unlocked" : "locked"}" data-tier="${b.tier}" title="${escapeHtml(b.name)} — ${escapeHtml(b.req)}" style="${on ? `--bc:${TIER[b.tier]}` : ""}">
         <span class="badge-ic">${ic}</span>
-        <span class="badge-name">${on ? escapeHtml(b.name) : escapeHtml(b.name)}</span>
+        <span class="badge-name">${escapeHtml(b.name)}</span>
         <span class="badge-req">${escapeHtml(on ? b.tier : b.req)}</span>
+        ${on ? "" : progressHtml(b)}
       </div>`;
-    }).join("");
+    }).join("") : `<p class="badge-wall-empty">Nothing in this category yet — it fills in as you play.</p>`;
     const chips = document.getElementById("insigniaFilters");
     if (chips && !chips._wired) {
       chips._wired = true;
@@ -992,7 +1072,68 @@
         tierCardHtml("gold", s.counts.gold, s.gold.pct, "month at " + s.gold.pct + "% · need " + GOLD_GOAL + "%") +
         tierCardHtml("platinum", s.counts.platinum, s.platinum.run / PLAT_RUN * 100, s.platinum.run + " / " + PLAT_RUN + " gold months");
     }
+    renderJourney(p);
     renderInsignias(p);
+  }
+
+  // settings.insignias is { id: earnedISO } and settings.trophies[grade] is
+  // { key: earnedISO } — a fully timestamped history that nothing read except
+  // todayAwards(), which throws away everything before midnight. Replaying it
+  // turns the cabinet from a checklist into a record of how you got here.
+  function dayLabel(d, today) {
+    const days = Math.round((today - d) / 86400000);
+    if (days <= 0) return "Today";
+    if (days === 1) return "Yesterday";
+    if (days < 7) return days + " days ago";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  function recentUnlocks(p, limit) {
+    const out = [];
+    const ins = (settings && settings.insignias) ? settings.insignias : null;
+    if (ins) buildInsignias(p).forEach(b => {
+      const at = ins[b.id];
+      if (at) out.push({ label: b.name, sub: b.tier, color: TIER[b.tier], at: String(at), icon: b.icon });
+    });
+    const T = settings && settings.trophies;
+    if (T) ["bronze", "silver", "gold", "platinum"].forEach(g => {
+      const o = T[g] || {};
+      Object.keys(o).forEach(k => out.push({
+        label: GRADE_LABEL[g] + " trophy", sub: "trophy", color: GRADE[g], at: String(o[k]), icon: null,
+      }));
+    });
+    out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    return { items: out.slice(0, limit || 8), total: out.length };
+  }
+  function renderJourney(p) {
+    const host = document.getElementById("cabJourney");
+    if (!host) return;
+    const LIMIT = 8;
+    const { items, total } = recentUnlocks(p, LIMIT);
+    if (!items.length) {
+      host.innerHTML = `<p class="cab-jr-k">Your journey</p>` +
+        `<p class="cab-jr-none">Nothing banked yet. Clear today's quests to earn your first bronze.</p>`;
+      return;
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let lastLabel = null;
+    const rows = items.map(x => {
+      const d = new Date(String(x.at).slice(0, 10) + "T00:00:00");
+      const lbl = isNaN(d) ? "" : dayLabel(d, today);
+      const head = lbl && lbl !== lastLabel ? `<span class="cab-jr-when">${escapeHtml(lbl)}</span>` : `<span class="cab-jr-when"></span>`;
+      lastLabel = lbl || lastLabel;
+      const ic = x.icon
+        ? `<svg viewBox="0 0 24 24" class="ic"><path d="${x.icon}"/></svg>`
+        : `<svg viewBox="0 0 24 24" class="ic"><path d="${IP.star}"/></svg>`;
+      return `<li class="cab-jr-row" style="--bc:${x.color}">
+        ${head}
+        <span class="cab-jr-dot"></span>
+        <span class="cab-jr-ic">${ic}</span>
+        <span class="cab-jr-name">${escapeHtml(x.label)}</span>
+        <span class="cab-jr-sub">${escapeHtml(x.sub)}</span>
+      </li>`;
+    }).join("");
+    const more = total > items.length ? `<p class="cab-jr-more">+ ${total - items.length} more banked</p>` : "";
+    host.innerHTML = `<p class="cab-jr-k">Your journey</p><ul class="cab-jr-list">${rows}</ul>${more}`;
   }
 
   function miniTier(g, count, pct, need) {
@@ -1372,5 +1513,13 @@
   // XP earned in a single week (for the trends view)
   function weekXp(week) { return addWeekXp(week, {}); }
 
-  window.Game = { render, computeProfile, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, weekXpByAttr, seasonSummary, yearSummary, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
+  // Nearest unearned insignia in one category — lets a pane point at the badge
+  // its own content feeds (Records showing "1 more → Record Keeper").
+  function nextInCategory(cat, p) {
+    const owned = (settings && settings.insignias) ? settings.insignias : {};
+    const list = buildInsignias(p || computeProfile()).filter(b => b.cat === cat);
+    return nearestLocked(list, owned, 1)[0] || null;
+  }
+
+  window.Game = { render, computeProfile, nextInCategory, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, weekXpByAttr, seasonSummary, yearSummary, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
 })();

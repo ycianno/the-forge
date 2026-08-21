@@ -907,6 +907,7 @@ async function loadDatabase() {
     try { database = JSON.parse(localStorage.getItem(APP_DB_KEY)) || { version: 2, weeks: {} }; }
     catch { database = { version: 2, weeks: {} }; }
   }
+  invalidateBestiary();   // a sync can replace whole weeks under the replay
 }
 
 async function loadSettings() {
@@ -1242,6 +1243,38 @@ function computePRs() {
   return pr;
 }
 
+// Starter chips. An empty box with "Real-life wins worth keeping" over it asks
+// the user to invent both the format and the content; these seed the form so
+// the first record costs one tap.
+const RECORD_STARTERS = [
+  { label: 'A certification', title: '', category: 'certification', tags: '' },
+  { label: 'A lift PR', title: '', category: 'fitness', unit: 'kg', tags: 'bench' },
+  { label: 'A race or distance', title: '', category: 'fitness', unit: 'km', tags: 'running' },
+  { label: 'Something you shipped', title: '', category: 'project', tags: '' },
+  { label: 'A course finished', title: '', category: 'learning', tags: '' },
+  { label: 'A savings milestone', title: '', category: 'finance', unit: '$', tags: 'savings' },
+];
+
+// The best entry per tracked metric. computePRs() answers "is this row a PR"
+// for the green chip; this answers "what is the bar to beat", which is the
+// thing that brings you back. Grouped by category + first tag so a 100kg bench
+// never competes with a 100km ride.
+function recordBests() {
+  const groups = {};
+  achievements.forEach(a => {
+    if (a.value == null || a.value === '' || !isFinite(Number(a.value))) return;
+    const key = (a.category || 'personal') + '|' + ((recTags(a)[0] || a.title || '').toLowerCase());
+    (groups[key] = groups[key] || []).push(a);
+  });
+  const best = {};
+  Object.values(groups).forEach(arr => {
+    arr.sort((x, y) => Number(x.value) - Number(y.value));
+    const top = arr[arr.length - 1], prev = arr[arr.length - 2];
+    if (top) best[top.id] = { value: Number(top.value), prev: prev ? Number(prev.value) : null, n: arr.length };
+  });
+  return best;
+}
+
 function renderTrophyCase() {
   const list = document.getElementById('trophyList');
   if (!list) return;
@@ -1251,6 +1284,10 @@ function renderTrophyCase() {
   const pinnedN = achievements.filter(a => a.pinned).length;
   const countEl = document.getElementById('recordCount');
   if (countEl) countEl.textContent = total ? `${total} record${total === 1 ? '' : 's'}${pinnedN ? ` · ${pinnedN} pinned` : ''}` : 'Real-life wins worth keeping';
+  const tabN = document.getElementById('recordCountTab');
+  if (tabN) tabN.textContent = total ? String(total) : '';
+
+  renderRecordNudge();
 
   if (total === 0) {
     list.innerHTML = `
@@ -1258,11 +1295,18 @@ function renderTrophyCase() {
         <div class="trophy-empty-icon">${recSvg(RECORD_ICONS.milestone)}</div>
         <p>No records yet.</p>
         <p class="hint">Log a certification, a PR, a launch — anything worth keeping.</p>
+        <div class="rec-starters">${RECORD_STARTERS.map((s, i) =>
+          `<button class="rec-starter" data-starter="${i}" type="button">${escapeHtml(s.label)}</button>`).join('')}</div>
       </div>`;
+    list.querySelectorAll('[data-starter]').forEach(btn => btn.onclick = () => {
+      const seed = RECORD_STARTERS[Number(btn.dataset.starter)];
+      if (seed) openRecordForm({ title: seed.title, category: seed.category, unit: seed.unit || '', tags: seed.tags || '' });
+    });
     return;
   }
 
   const pr = computePRs();
+  const bests = recordBests();
   const rows = achievements
     .filter(a => recordFilter === 'all' || a.category === recordFilter)
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || new Date(b.completed_at) - new Date(a.completed_at));
@@ -1294,6 +1338,7 @@ function renderTrophyCase() {
         </div>
         ${tags.length ? `<div class="rec-tags">${tags.map(t => `<span class="rec-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
         ${a.notes ? `<p class="rec-notes">${escapeHtml(a.notes)}</p>` : ''}
+        ${bestLine(a, bests[a.id])}
       </div>
       <div class="rec-actions">
         <button class="rec-btn rec-pin ${a.pinned ? 'on' : ''}" data-id="${a.id}" title="${a.pinned ? 'Unpin' : 'Pin'}">${recSvg(REC_BTN.star)}</button>
@@ -1306,6 +1351,10 @@ function renderTrophyCase() {
   list.querySelectorAll('.rec-pin').forEach(btn => btn.onclick = async () => {
     const a = achievements.find(x => String(x.id) === btn.dataset.id);
     if (a) await updateRecord(a.id, { pinned: a.pinned ? 0 : 1 });
+  });
+  list.querySelectorAll('.rec-beat').forEach(btn => btn.onclick = () => {
+    const a = achievements.find(x => String(x.id) === btn.dataset.beat);
+    if (a) openRecordForm({ title: beatTitle(a), category: a.category, unit: a.unit || '', tags: a.tags || '' }, 'trophyValue');
   });
   list.querySelectorAll('.rec-edit').forEach(btn => btn.onclick = () => {
     const a = achievements.find(x => String(x.id) === btn.dataset.id);
@@ -1320,6 +1369,46 @@ function renderTrophyCase() {
       renderTrophyCase();
     } catch (err) { alert('Failed to delete: ' + err.message); }
   });
+}
+
+// "Bench press 100kg" is the wrong title for the attempt that beats it. Strip a
+// trailing value+unit, but only when it is this record's own number, so titles
+// that merely end in a digit ("Marathon 2026") survive untouched.
+function beatTitle(a) {
+  const t = String(a.title || '');
+  if (a.value == null || a.value === '') return t;
+  const esc = v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const num = esc(Math.round(Number(a.value) * 100) / 100);
+  const unit = a.unit ? esc(a.unit) : '';
+  const stripped = t.replace(new RegExp('[\\s\u00b7\u2014-]*' + num + '\\s*' + unit + '\\s*$', 'i'), '').trim();
+  return stripped || t;
+}
+
+// Only the current best of a metric gets the rematch line, so a long history
+// shows one "beat it" per thing you track rather than one per row.
+function bestLine(a, best) {
+  if (!best) return '';
+  const unit = a.unit ? ' ' + escapeHtml(a.unit) : '';
+  const was = (best.prev != null)
+    ? `<span class="rec-best-prev">was ${escapeHtml(String(Math.round(best.prev * 100) / 100))}${unit}</span>`
+    : '';
+  return `<div class="rec-best">
+    <span class="rec-best-k">best ${escapeHtml(String(Math.round(best.value * 100) / 100))}${unit}</span>
+    ${was}
+    <button class="rec-beat" data-beat="${a.id}" type="button">beat it →</button>
+  </div>`;
+}
+
+// Records is the only pane you have to fill by hand, and it already feeds eight
+// insignias it never mentioned. Naming the next one turns the ask into a reason.
+function renderRecordNudge() {
+  const host = document.getElementById('recordNudge');
+  if (!host) return;
+  const next = (window.Game && Game.nextInCategory) ? Game.nextInCategory('records') : null;
+  if (!next || typeof next.cur !== 'number') { host.innerHTML = ''; return; }
+  const left = Math.max(1, Math.ceil(next.target - next.cur));
+  host.innerHTML = `<span class="rec-nudge-bar"><span style="width:${next.pct}%"></span></span>` +
+    `<span class="rec-nudge-txt">${left} more → <strong>${escapeHtml(next.name)}</strong></span>`;
 }
 
 function renderRecordFilters() {
@@ -1367,12 +1456,15 @@ async function addAchievement(title, category, notes) {
 }
 
 // ----- Record add/edit form ----------------------------------------------
-function openRecordForm(record) {
+// `record` is either a stored record (has an id → edit) or a bare seed object
+// from a starter chip / "beat it" button (no id → prefilled new record).
+function openRecordForm(record, focusField) {
   const form = document.getElementById('addTrophyForm');
   const addBtn = document.getElementById('addTrophyBtn');
   if (!form) return;
   const g = id => document.getElementById(id);
-  g('trophyEditId').value = record ? record.id : '';
+  const isEdit = !!(record && record.id);
+  g('trophyEditId').value = isEdit ? record.id : '';
   g('trophyTitle').value = record ? record.title : '';
   g('trophyCategory').value = record ? (record.category || 'personal') : 'certification';
   g('trophyDate').value = (record && record.completed_at) ? String(record.completed_at).slice(0, 10) : new Date().toISOString().slice(0, 10);
@@ -1380,10 +1472,11 @@ function openRecordForm(record) {
   g('trophyUnit').value = record ? (record.unit || '') : '';
   g('trophyTags').value = record ? (record.tags || '') : '';
   g('trophyNotes').value = record ? (record.notes || '') : '';
-  g('saveTrophyBtn').textContent = record ? 'Save Changes' : 'Save Record';
+  g('saveTrophyBtn').textContent = isEdit ? 'Save Changes' : 'Save Record';
   form.classList.add('active');
   if (addBtn) addBtn.style.display = 'none';
-  g('trophyTitle').focus();
+  const focusEl = g(focusField || 'trophyTitle');
+  (focusEl || g('trophyTitle')).focus();
 }
 function closeRecordForm() {
   const form = document.getElementById('addTrophyForm');
@@ -2529,6 +2622,7 @@ function renderStructure() {
 // on every change, including while a field has focus — it never replaces the
 // element being typed into.
 function updateLive() {
+  invalidateBestiary();
   renderSectionHeroes();   // before loadWeekFields, so new hero inputs get their values
   loadWeekFields();
   updateProgress();
@@ -2835,6 +2929,38 @@ function initSettingsTabs() {
   });
 }
 
+// ===== CABINET TABS =====
+// The cabinet is three panes rather than one long scroll. Panes are cheap to
+// re-render, so switching re-runs the matching renderer and the pane always
+// reflects state banked while the sheet was open.
+let cabinetTab = "trophies";
+function showCabinetTab(target) {
+  const tabs = document.querySelectorAll("[data-cab-tab]");
+  const panes = document.querySelectorAll("[data-cab-pane]");
+  if (!tabs.length) return;
+  cabinetTab = target;
+  tabs.forEach(t => {
+    const on = t.dataset.cabTab === target;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  panes.forEach(p => { p.hidden = p.dataset.cabPane !== target; });
+  const modal = document.querySelector(".cabinet-modal");
+  if (modal) modal.scrollTop = 0;
+  if (target === "insignias" && window.Game && Game.renderInsignias) Game.renderInsignias();
+  if (target === "records") renderTrophyCase();
+  if (target === "bestiary") renderBestiary();
+}
+function initCabinetTabs() {
+  const bar = document.querySelector(".cab-tabs");
+  if (!bar || bar._wired) return;
+  bar._wired = true;
+  bar.addEventListener("click", e => {
+    const t = e.target.closest("[data-cab-tab]");
+    if (t) showCabinetTab(t.dataset.cabTab);
+  });
+}
+
 // ===== REMINDERS SYNC SETTINGS =====
 async function loadSyncStatus() {
   try {
@@ -3107,8 +3233,11 @@ function openSettings() {
 }
 
 function openCabinet() {
+  initCabinetTabs();
   if (window.Game && Game.renderCabinet) Game.renderCabinet();
   renderTrophyCase();
+  renderBestiary();
+  showCabinetTab(cabinetTab);
   openModal("cabinetModal");
 }
 function closeCabinet() { closeModal("cabinetModal"); }
@@ -3174,53 +3303,310 @@ const BOSSES = [
   { name: "The Couch Wraith", emoji: "👻", weak: "training", taunt: "Skip the workout. Stay cozy." },
 ];
 const BOSS_ATTR = { discipline: "Discipline", training: "Body", study: "Mind", protein: "Vitality", project: "Craft" };
-function bossForWeek(key) {
+function bossKeyHash(key) {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return BOSSES[h % BOSSES.length];
+  return h;
 }
-function computeBossDamage() {
-  const boss = bossForWeek(weekKey());
-  const checks = getWeekData().checks || {};
-  let totW = 0, doneW = 0;
+function bossForWeek(key) { return BOSSES[bossKeyHash(key) % BOSSES.length]; }
+
+// Which boss a given week actually fields. The order matters: a stored pick
+// wins, then the name banked when you beat it, and only then the old date hash.
+// That last step is what keeps history honest — weeks fought before adaptive
+// selection existed have no pick, so they still resolve to the boss you
+// actually faced instead of being retroactively reassigned.
+function resolveBossFor(weekStart) {
+  const key = iso(weekStart);
+  const byName = (n) => BOSSES.find((b) => b.name === n);
+  const pick = (settings && settings.bossPick) ? settings.bossPick[key] : null;
+  if (pick) {
+    const b = byName(typeof pick === "string" ? pick : pick.n);
+    if (b) return b;
+  }
+  const won = (settings && settings.bossDefeated) ? settings.bossDefeated[key] : null;
+  if (won) { const b = byName(won); if (b) return b; }
+  return bossForWeek(key);
+}
+function bossPickFor(weekStart) {
+  const pick = (settings && settings.bossPick) ? settings.bossPick[iso(weekStart)] : null;
+  return (pick && typeof pick === "object") ? pick : null;
+}
+
+// Per-category completion over the weeks BEFORE the given one. Everything the
+// pick depends on is already in the past, so ticking a quest cannot change the
+// boss you are currently fighting.
+function categoryRates(weekStart, lookback) {
+  const tot = {}, done = {};
+  let weeksSeen = 0;
+  for (let w = 1; w <= lookback; w++) {
+    const ws = addDays(weekStart, -7 * w);
+    const wk = database.weeks[iso(ws)];
+    if (!wk) continue;
+    const checks = wk.checks || {};
+    let any = false;
+    for (let d = 0; d < 7; d++) {
+      const date = addDays(ws, d);
+      questsForDate(date).forEach((q) => {
+        const cat = q.category || attrCat(q.attr || "Discipline");
+        tot[cat] = (tot[cat] || 0) + 1;
+        if (checks[questCheckId(q, date)]) done[cat] = (done[cat] || 0) + 1;
+        any = true;
+      });
+    }
+    if (any) weeksSeen++;
+  }
+  const list = Object.keys(tot)
+    .filter((c) => tot[c] > 0)
+    .map((c) => ({ cat: c, rate: (done[c] || 0) / tot[c], total: tot[c] }));
+  return { weeksSeen, list };
+}
+
+// Pick a challenger for a week from the fronts you have been losing. Falls back
+// to null (and therefore the hash) when there is not enough history to read.
+const BOSS_LOOKBACK = 4;
+function adaptiveBossPick(weekStart) {
+  const stats = categoryRates(weekStart, BOSS_LOOKBACK);
+  if (!stats.weeksSeen || stats.list.length < 2) return null;
+  const ranked = stats.list.slice().sort((a, b) => a.rate - b.rate);
+  // The two weakest fronts, so a persistent weak spot does not field the exact
+  // same monster every week for months.
+  const targets = ranked.slice(0, 2).map((x) => x.cat);
+  const pool = BOSSES.filter((b) => targets.indexOf(b.weak) !== -1);
+  if (!pool.length) return null;
+
+  const recent = [];
+  for (let w = 1; w <= BOSS_LOOKBACK; w++) {
+    const b = resolveBossFor(addDays(weekStart, -7 * w));
+    if (b) recent.push(b.name);
+  }
+  const slain = {};
+  const hist = (typeof bossHistory === "function") ? bossHistory() : null;
+  if (hist) hist.rows.forEach((r) => { slain[r.boss.name] = r.slain; });
+
+  const score = (b) => {
+    let sc = 0;
+    if (!slain[b.name]) sc += 100;                       // never put down
+    if (b.weak === ranked[0].cat) sc += 25;              // the single weakest front
+    const seen = recent.indexOf(b.name);
+    if (seen !== -1) sc -= (40 - seen * 8);              // met lately, step aside
+    return sc;
+  };
+  const h = bossKeyHash(iso(weekStart));
+  const chosen = pool.slice().sort((a, b) =>
+    score(b) - score(a) ||
+    ((h + BOSSES.indexOf(a)) % 7) - ((h + BOSSES.indexOf(b)) % 7))[0];
+  const front = ranked.find((x) => x.cat === chosen.weak);
+  // Record whether this really was the worst front. Recency can bump the pick
+  // to the second weakest, and the card must not then call 80% "your weakest".
+  return {
+    n: chosen.name, c: chosen.weak,
+    r: front ? Math.round(front.rate * 100) : null,
+    w: !!front && front.cat === ranked[0].cat,
+  };
+}
+
+// Pick once, for the live week only, and never again. Past weeks are left to
+// the fallback chain so browsing history cannot reassign old fights, and a week
+// already picked is never re-rolled mid-week.
+let _bossPickToPersist = null;
+function ensureBossPick(weekStart) {
+  if (!settings) return;
+  const key = iso(weekStart);
+  if (_bossPickToPersist && !booting) {
+    const k = _bossPickToPersist;
+    _bossPickToPersist = null;
+    if (settings.bossPick && settings.bossPick[k]) patchSettingsSoon({ ["bossPick." + k]: settings.bossPick[k] });
+  }
+  if (key !== iso(getStartOfWeek(new Date()))) return;
+  if (settings.bossPick && settings.bossPick[key]) return;
+  const pick = adaptiveBossPick(weekStart);
+  if (!pick) return;
+  if (!settings.bossPick) settings.bossPick = {};
+  settings.bossPick[key] = pick;
+  // Persistence is suppressed during the startup cache-paint; remember the key
+  // and flush it on the next render rather than losing the roll.
+  if (booting) _bossPickToPersist = key;
+  else patchSettingsSoon({ ["bossPick." + key]: pick });
+}
+// Damage for an arbitrary week, so the bestiary can replay history and the card
+// can break the number down. The 2x weighting lands in both sums, which is what
+// makes neglecting the weak category actually cost you: the same 15-of-20 week
+// deals 80% with the weak quests included and 60% without.
+function computeBossDamageFor(weekStart) {
+  const key = iso(weekStart);
+  const boss = resolveBossFor(weekStart);
+  const wk = database.weeks[key];
+  const checks = (wk && wk.checks) ? wk.checks : {};
+  let weakTot = 0, weakDone = 0, otherTot = 0, otherDone = 0;
   for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-    const date = addDays(selectedWeekStart, dayIndex);
+    const date = addDays(weekStart, dayIndex);
     questsForDate(date).forEach((q) => {
       const category = q.category || attrCat(q.attr || "Discipline");
-      const weight = category === boss.weak ? 2 : 1;
-      totW += weight;
-      if (checks[questCheckId(q, date)]) doneW += weight;
+      const on = !!checks[questCheckId(q, date)];
+      if (category === boss.weak) { weakTot++; if (on) weakDone++; }
+      else { otherTot++; if (on) otherDone++; }
     });
   }
-  return { boss, dmg: totW ? Math.round(doneW / totW * 100) : 0 };
+  const totW = weakTot * 2 + otherTot;
+  const pct = n => (totW ? Math.round(n / totW * 100) : 0);
+  return {
+    boss, key,
+    dmg: pct(weakDone * 2 + otherDone),
+    weakDmg: pct(weakDone * 2),
+    otherDmg: pct(otherDone),
+    weakTot, weakDone, otherTot, otherDone,
+    // What finishing the remaining weak-category quests would still be worth.
+    weakLeft: weakTot - weakDone,
+    weakLeftWorth: pct((weakTot - weakDone) * 2),
+    hasQuests: totW > 0,
+  };
+}
+function computeBossDamage() {
+  const d = computeBossDamageFor(selectedWeekStart);
+  getWeekData();   // preserve the side effect callers relied on
+  return d;
 }
 function renderBoss() {
   const panel = document.getElementById("boss");
   if (!panel) return;
-  const { boss, dmg } = computeBossDamage();
+  ensureBossPick(selectedWeekStart);
+  const d = computeBossDamage();
+  const boss = d.boss, dmg = d.dmg;
   const grade = settings.streakGrade || 75;
   const defeated = dmg >= grade;
+  const attrName = BOSS_ATTR[boss.weak] || boss.weak;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set("bossEmoji", boss.emoji);
   set("bossName", boss.name);
-  set("bossWeak", "Weak to " + (BOSS_ATTR[boss.weak] || boss.weak) + " · those quests hit 2×");
   set("bossStatus", defeated ? "DEFEATED" : Math.max(0, grade - dmg) + "% to defeat");
   set("bossTaunt", defeated ? "Defeated. Next week, a new challenger." : boss.taunt);
+  // Say out loud that the boss came for a specific weak spot. Adaptive
+  // selection you cannot see is just a different hash.
+  const huntEl = document.getElementById("bossHunt");
+  if (huntEl) {
+    const pick = bossPickFor(selectedWeekStart);
+    if (pick && pick.c) {
+      const front = BOSS_ATTR[pick.c] || pick.c;
+      huntEl.textContent = pick.r == null
+        ? `· hunting ${front}`
+        : (pick.w ? `· hunting ${front} — weakest at ${pick.r}%` : `· hunting ${front} — ${pick.r}%`);
+      huntEl.hidden = false;
+    } else {
+      huntEl.textContent = "";
+      huntEl.hidden = true;
+    }
+  }
   const fill = document.getElementById("bossHpFill");
   if (fill) { const hp = Math.max(0, Math.round((1 - dmg / grade) * 100)); fill.style.width = (defeated ? 100 : hp) + "%"; }
   panel.classList.toggle("defeated", defeated);
 
-  // Defeat celebration — once per week; silent backfill on first ever run
+  // The 2x weighting decides most fights and used to be a static line of text.
+  // Show where the damage actually came from, and what the weak quests you have
+  // not done yet are still worth.
+  const segW = document.getElementById("bossDmgWeak");
+  const segO = document.getElementById("bossDmgOther");
+  if (segW) segW.style.width = Math.min(100, Math.round(d.weakDmg / grade * 100)) + "%";
+  if (segO) segO.style.width = Math.min(100, Math.round(d.otherDmg / grade * 100)) + "%";
+  set("bossDmgSplit", d.hasQuests
+    ? `${d.weakDmg}% from ${attrName} · ${d.otherDmg}% from the rest`
+    : "No quests scheduled this week.");
+  const hint = document.getElementById("bossWeak");
+  if (hint) {
+    if (defeated) hint.textContent = `${attrName} carried it — ${d.weakDmg} of ${dmg}% damage.`;
+    else if (d.weakLeft > 0) hint.textContent =
+      `${attrName} hits 2× — ${d.weakLeft} left, worth +${d.weakLeftWorth}%`;
+    else if (d.weakTot > 0) hint.textContent = `Every ${attrName} quest cleared. The rest is on you.`;
+    else hint.textContent = `Weak to ${attrName} · those quests hit 2×`;
+  }
+
+  // Defeat celebration — once per week; silent backfill on first ever run.
+  // Browsing history banks the win but stays quiet: firing the overlay for a
+  // week you finished months ago queues confetti you never asked for.
   const key = weekKey();
+  const isThisWeek = key === iso(getStartOfWeek(new Date()));
   const first = !settings.bossDefeated;
   if (!settings.bossDefeated) settings.bossDefeated = {};
   if (defeated && !settings.bossDefeated[key]) {
     settings.bossDefeated[key] = boss.name;
     if (typeof persistSettingsSoon === "function") persistSettingsSoon();
-    if (!first && window.FX && FX.bossDefeated) FX.bossDefeated(boss.name);
+    if (!first && isThisWeek && window.FX && FX.bossDefeated) FX.bossDefeated(boss.name);
   } else if (first) {
     if (typeof persistSettingsSoon === "function") persistSettingsSoon();
   }
+}
+
+// ===== BESTIARY =====
+// Derived, not stored. settings.bossDefeated records wins but is only written
+// for weeks you actually opened, so a week you crushed and never revisited
+// would read as a loss. Replaying every week with data settles both columns
+// honestly, and the current week is excluded — it has not been lost yet.
+let _bestiaryCache = null;
+function invalidateBestiary() { _bestiaryCache = null; }
+function bossHistory() {
+  if (_bestiaryCache) return _bestiaryCache;
+  const thisWeek = iso(getStartOfWeek(new Date()));
+  const banked = (settings && settings.bossDefeated) ? settings.bossDefeated : {};
+  const tally = {};
+  BOSSES.forEach(b => { tally[b.name] = { boss: b, slain: 0, escaped: 0, last: null }; });
+  let slain = 0, escaped = 0, streak = 0, bestStreak = 0;
+  Object.keys(database.weeks || {}).sort().forEach(key => {
+    if (key >= thisWeek) return;                    // in progress, not yet lost
+    const d = computeBossDamageFor(getStartOfWeek(new Date(key + "T00:00:00")));
+    if (!d.hasQuests) return;                       // nothing was scheduled
+    const grade = (settings && settings.streakGrade) || 75;
+    const won = !!banked[key] || d.dmg >= grade;
+    const row = tally[d.boss.name];
+    if (!row) return;
+    if (won) { row.slain++; slain++; streak++; if (streak > bestStreak) bestStreak = streak; }
+    else { row.escaped++; escaped++; streak = 0; }
+    row.last = key;
+  });
+  // The live week counts as a win the moment it clears, so the card and the
+  // bestiary never disagree about the boss you are currently looking at.
+  if (banked[thisWeek]) {
+    const row = tally[banked[thisWeek]];
+    if (row) { row.slain++; slain++; streak++; if (streak > bestStreak) bestStreak = streak; }
+  }
+  const rows = BOSSES.map(b => tally[b.name]);
+  _bestiaryCache = {
+    rows, slain, escaped, streak, bestStreak,
+    distinct: rows.filter(r => r.slain > 0).length,
+    total: BOSSES.length,
+  };
+  return _bestiaryCache;
+}
+
+function renderBestiary() {
+  const host = document.getElementById('bestiaryList');
+  if (!host) return;
+  const h = bossHistory();
+  const sum = document.getElementById('bestiarySummary');
+  if (sum) {
+    const pct = Math.round(h.distinct / h.total * 100);
+    sum.innerHTML =
+      `<div class="cab-prog"><div class="cab-prog-bar"><span style="width:${pct}%"></span></div>` +
+      `<span class="cab-prog-txt">${h.distinct} / ${h.total} slain</span></div>` +
+      `<p class="bst-tallies">${h.slain} victor${h.slain === 1 ? 'y' : 'ies'}` +
+      (h.escaped ? ` · ${h.escaped} got away` : '') +
+      (h.bestStreak > 1 ? ` · best run ${h.bestStreak} weeks` : '') + `</p>`;
+  }
+  const tabN = document.getElementById('bestiaryCountTab');
+  if (tabN) tabN.textContent = h.distinct ? `${h.distinct}/${h.total}` : '';
+
+  host.innerHTML = h.rows.map(r => {
+    const state = r.slain > 0 ? 'slain' : (r.escaped > 0 ? 'nemesis' : 'unmet');
+    const note = r.slain > 0
+      ? `slain ×${r.slain}` + (r.escaped ? ` · escaped ×${r.escaped}` : '')
+      : (r.escaped > 0 ? `escaped you ×${r.escaped}` : 'not yet faced');
+    return `<div class="bst-row ${state}">
+      <span class="bst-emoji">${r.boss.emoji}</span>
+      <span class="bst-body">
+        <span class="bst-name">${escapeHtml(r.boss.name)}</span>
+        <span class="bst-weak">weak to ${escapeHtml(BOSS_ATTR[r.boss.weak] || r.boss.weak)}</span>
+      </span>
+      <span class="bst-note">${escapeHtml(note)}</span>
+    </div>`;
+  }).join('');
 }
 
 // ===== SEASONS (monthly goals + shareable recap) =====
@@ -3880,6 +4266,7 @@ function bindEvents() {
   initModals();
   // Init settings tabs
   initSettingsTabs();
+  initCabinetTabs();
   wireModulesEditor();
   wireStatsEditor();
   

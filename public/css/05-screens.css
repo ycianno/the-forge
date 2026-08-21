@@ -1107,47 +1107,6 @@
 .section-toggles .check { margin: 0; padding: 8px 10px; }
 .section-toggles .check span { font-size: 13px; }
 
-/* ===========================================================================
- * BADGES & ACHIEVEMENTS 2.0
- * ======================================================================== */
-
-.badge-count { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; color: var(--muted); }
-.badge-wall { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.badge-tile {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
-  min-height: 108px; padding: 14px 8px; border-radius: 14px;
-  border: 1px solid var(--line); background: rgba(255,255,255,0.02);
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-.badge-tile.locked:hover { border-color: var(--line-strong); background: rgba(255,255,255,0.035); }
-.badge-tile.unlocked { border-color: var(--bc); background: color-mix(in srgb, var(--bc) 6%, rgba(255,255,255,0.02)); box-shadow: 0 0 20px -8px var(--bc), inset 0 0 0 1px color-mix(in srgb, var(--bc) 25%, transparent); }
-.badge-tile.unlocked:hover { transform: translateY(-3px); }
-.badge-ic { display: grid; place-items: center; width: 34px; height: 34px; }
-.badge-ic .ic { width: 30px; height: 30px; }
-.badge-tile.unlocked .badge-ic { color: var(--bc); filter: drop-shadow(0 0 6px var(--bc)); }
-.badge-tile.locked .badge-ic { color: var(--muted-2); opacity: 0.45; }
-.badge-name { font-weight: 800; font-size: 12px; }
-.badge-tile.locked .badge-name { color: var(--muted-2); }
-.badge-req { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.3; }
-.badge-tile.unlocked .badge-req { color: var(--bc); font-weight: 700; }
-/* Mythic — rarest tier gets an animated sheen + stronger halo */
-.badge-tile.unlocked[data-tier="mythic"] {
-  border-color: var(--bc);
-  box-shadow: 0 0 26px -6px var(--bc), inset 0 0 0 1px color-mix(in srgb, var(--bc) 40%, transparent);
-  background:
-    linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--bc) 22%, transparent) 50%, transparent 70%),
-    rgba(255,255,255,0.02);
-  background-size: 220% 100%, auto;
-}
-.badge-tile.unlocked[data-tier="mythic"] .badge-req { letter-spacing: 0.1em; }
-@media (prefers-reduced-motion: no-preference) {
-  .badge-tile.unlocked[data-tier="mythic"] { animation: mythic-sheen 3.6s ease-in-out infinite; }
-}
-@keyframes mythic-sheen {
-  0%, 100% { background-position: 120% 0, 0 0; }
-  50%      { background-position: -20% 0, 0 0; }
-}
-
 .fx-badge-toast {
   position: fixed; top: 84px; left: 50%;
   transform: translateX(-50%) translateY(-20px);
@@ -1295,78 +1254,274 @@
 }
 
 /* ===========================================================================
- * CABINET MODAL — trophy showcase + insignia collection + records
+ * CABINET MODAL — three panes: trophies, insignias, records
+ *
+ * The cabinet used to stack all three sections into one 4000px scroll, laid
+ * out in two desktop columns. Because the insignia wall is ~4x taller than the
+ * records list, everything past the first screen had an empty right half. It
+ * is now tabbed (same idiom as the settings sheet) so each pane is about one
+ * screen on both desktop and mobile.
  * ======================================================================== */
-.cab-section-label { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 22px 0 12px; }
-.cab-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 22px 0 12px; }
-.cab-section-head .cab-section-label { margin: 0; }
+.cabinet-modal { max-width: 900px; }
+.cab-tabs { margin: 0 0 18px; }
+/* Four tabs wrap to 3 + 1 under the shared .settings-tabs flex rules, which
+   leaves the last one stretched across its own row. A 2x2 grid stays even. */
+@media (max-width: 560px) {
+  .cab-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .cab-tabs .settings-tab { min-width: 0; }
+}
+.cab-tab-n {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.02em;
+  opacity: 0.6; margin-left: 4px; white-space: nowrap;
+}
+.settings-tab.active .cab-tab-n { opacity: 0.9; }
+.cab-tab-n:empty { display: none; }
+
+.cab-pane { animation: slideDown 0.25s ease-out; }
+.cab-pane[hidden] { display: none; }
+.cab-pane-note { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.cab-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.cab-foot { margin-top: 22px; }
+
 .cab-section-sub { font-size: 12px; color: var(--muted-2); }
 
-.tro-showcase { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+/* ===== TROPHIES PANE ===== */
+.tro-showcase { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (min-width: 700px) { .tro-showcase { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .tro-tier {
-  display: flex; flex-direction: column; gap: 6px; padding: 14px;
+  display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px;
   border-radius: 16px; border: 1px solid color-mix(in srgb, var(--mc) 35%, var(--line));
-  background: color-mix(in srgb, var(--mc) 8%, transparent);
+  background:
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--mc) 16%, transparent), transparent 70%),
+    color-mix(in srgb, var(--mc) 7%, transparent);
 }
-.tro-tier-top { display: flex; align-items: center; justify-content: space-between; }
+.tro-tier-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tro-ic { width: 30px; height: 30px; display: grid; place-items: center; color: var(--mc); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--mc) 60%, transparent)); }
 .tro-ic .ic { width: 28px; height: 28px; }
 .tro-count { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 26px; line-height: 1; color: var(--text); }
 .tro-grade { font-size: 12px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--mc); }
-.tro-bar { height: 6px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
-.tro-bar > span { display: block; height: 100%; border-radius: 6px; background: var(--mc); box-shadow: 0 0 8px color-mix(in srgb, var(--mc) 60%, transparent); transition: width 0.4s ease; }
-.tro-need { font-size: 10px; color: var(--muted); line-height: 1.3; }
-@media (max-width: 768px) { .tro-showcase { grid-template-columns: repeat(2, 1fr); } }
+/* The old track was rgba(255,255,255,.08) on a tinted card — invisible, so a
+   0% tier read as "no bar at all" rather than "no progress yet". */
+.tro-bar { height: 6px; border-radius: 6px; background: rgba(0,0,0,0.45); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mc) 22%, transparent); overflow: hidden; }
+.tro-bar > span { display: block; height: 100%; min-width: 3px; border-radius: 6px; background: var(--mc); box-shadow: 0 0 8px color-mix(in srgb, var(--mc) 60%, transparent); transition: width 0.4s ease; }
+.tro-need { font-size: 10.5px; color: var(--muted); line-height: 1.35; }
 
-.ins-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
-.ins-filter {
-  font-size: 12px; font-weight: 600; color: var(--muted);
-  padding: 6px 12px; border-radius: 99px;
-  background: transparent; border: 1px solid var(--line);
+/* Your journey — the unlock history that settings.insignias has always held. */
+.cab-journey { margin-top: 18px; padding: 14px 16px 12px; border-radius: 14px; background: rgba(255,255,255,0.022); border: 1px solid var(--line); }
+.cab-jr-k { margin: 0 0 10px; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-2); }
+.cab-jr-none { margin: 0; font-size: 12.5px; color: var(--muted); }
+.cab-jr-list { list-style: none; margin: 0; padding: 0; }
+.cab-jr-row {
+  display: grid; grid-template-columns: 62px 10px 20px minmax(0, 1fr) auto;
+  align-items: center; gap: 8px; padding: 5px 0; min-width: 0;
 }
-.ins-filter:hover { color: var(--text); border-color: var(--line-strong); transform: none; box-shadow: none; }
-.ins-filter.on { color: var(--text); border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 12%, transparent); }
-.cabinet-modal .badge-wall { grid-template-columns: repeat(4, 1fr); }
-@media (max-width: 768px) { .cabinet-modal .badge-wall { grid-template-columns: repeat(3, 1fr); } }
-
-/* ===== CABINET: desktop multi-column + summary ===== */
-.cab-cols { margin-top: 4px; }
-@media (min-width: 769px) {
-  .cabinet-modal { max-width: 1060px !important; }
-  .cab-cols { display: grid; grid-template-columns: 1.65fr 1fr; gap: 20px; align-items: start; }
-  .cab-col { background: rgba(255,255,255,0.018); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 18px; }
-  .cab-col > .cab-section-head:first-child { margin-top: 2px; }
-  .cabinet-modal .badge-wall { grid-template-columns: repeat(5, 1fr); }
+.cab-jr-when { font-size: 10px; font-weight: 700; color: var(--muted-2); text-align: right; white-space: nowrap; }
+/* One continuous rail: the dot is the node, the pseudo-element is the line. */
+.cab-jr-dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--bc); box-shadow: 0 0 7px -1px var(--bc); }
+.cab-jr-row + .cab-jr-row .cab-jr-dot::before {
+  content: ""; position: absolute; left: 50%; top: -14px; width: 1px; height: 14px;
+  transform: translateX(-50%); background: var(--line-strong);
 }
-.cab-col { min-width: 0; }
+.cab-jr-ic { display: grid; place-items: center; width: 20px; height: 20px; color: var(--bc); }
+.cab-jr-ic .ic { width: 17px; height: 17px; }
+.cab-jr-name { font-size: 12.5px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cab-jr-sub { font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bc); opacity: 0.85; white-space: nowrap; }
+.cab-jr-more { margin: 9px 0 0; font-size: 11px; color: var(--muted-2); text-align: center; }
+/* Dropping the icon removes a grid ITEM, so the track list has to lose a
+   column too — otherwise every cell shifts left and the name lands in the
+   zero-width track meant for the icon. */
+@media (max-width: 460px) {
+  .cab-jr-row { grid-template-columns: 52px 10px minmax(0, 1fr) auto; }
+  .cab-jr-ic { display: none; }
+}
 
+/* ===== INSIGNIAS PANE ===== */
 /* completion bar + rarity legend */
 .cab-summary {
-  margin: 4px 0 14px; padding: 12px 14px; border-radius: 12px;
-  background: rgba(0,0,0,0.22); border: 1px solid var(--line);
+  margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--line);
 }
+.cab-summary:empty { display: none; }
 .cab-prog { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.cab-prog-bar { flex: 1; height: 9px; border-radius: 99px; background: rgba(255,255,255,0.06); overflow: hidden; }
+.cab-prog-bar { flex: 1; min-width: 0; height: 9px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
 .cab-prog-bar span { display: block; height: 100%; border-radius: inherit; background: var(--gradient-brand); box-shadow: 0 0 12px var(--score-glow); transition: width 0.6s cubic-bezier(0.34,1.4,0.5,1); }
 .cab-prog-txt { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); white-space: nowrap; }
 .rarity-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; }
 .rl-item { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; color: var(--muted); }
 .rl-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 6px -1px currentColor; }
 
-/* per-filter count */
+/* Eleven category chips wrapped to four rows on a phone and pushed the wall
+   off the first screen. One swipeable row instead, edge-faded so it reads as
+   scrollable. */
+.ins-filters {
+  display: flex; gap: 7px; margin-bottom: 14px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 18px), transparent 100%);
+}
+.ins-filters::-webkit-scrollbar { display: none; }
+.ins-filter {
+  flex: 0 0 auto; scroll-snap-align: start;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  padding: 6px 12px; border-radius: 99px; white-space: nowrap;
+  background: transparent; border: 1px solid var(--line);
+}
+.ins-filter:hover { color: var(--text); border-color: var(--line-strong); transform: none; box-shadow: none; }
+.ins-filter.on { color: var(--text); border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 12%, transparent); }
 .ins-filter-n { font-size: 10px; font-weight: 800; opacity: 0.55; margin-left: 3px; }
 .ins-filter.on .ins-filter-n { opacity: 0.95; }
 
-/* records column header add-button + count */
+/* Next up — the three you are closest to earning. A wall of 107 tiles cannot
+   tell you where you stand; this can. */
+.cab-next { margin-bottom: 14px; }
+.cab-next:empty { display: none; }
+.cab-next-k { margin: 0 0 9px; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-2); }
+.cab-next-row { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 620px) { .cab-next-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.cab-next-card {
+  display: flex; align-items: center; gap: 11px; min-width: 0;
+  padding: 11px 13px; border-radius: 13px;
+  border: 1px solid color-mix(in srgb, var(--bc) 32%, var(--line));
+  background: color-mix(in srgb, var(--bc) 7%, transparent);
+}
+.cab-next-ic { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; color: var(--bc); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bc) 55%, transparent)); }
+.cab-next-ic .ic { width: 24px; height: 24px; }
+.cab-next-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.cab-next-name { font-size: 12.5px; font-weight: 800; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cab-next-req { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cab-next-card .badge-prog { margin-top: 3px; }
+.cab-next-card .badge-prog-bar > span { background: var(--bc); box-shadow: 0 0 7px color-mix(in srgb, var(--bc) 55%, transparent); }
+
+/* Progress on a locked tile. A lock icon says "not yet"; "37 / 40" says how
+   much further, which is the only version anyone acts on. */
+.badge-prog { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
+.badge-prog-bar { flex: 1; min-width: 0; height: 3px; border-radius: 99px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.badge-prog-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--muted); transition: width 0.5s ease; }
+.badge-prog-n { font-size: 9px; font-weight: 800; color: var(--muted-2); white-space: nowrap; letter-spacing: 0.02em; }
+
+/* The wall used repeat(N, 1fr). `1fr` is minmax(auto, 1fr), so a long name
+   ("Embodied: Gladiator") or requirement ("REACH THE SPELLBLADE CLASS") raised
+   that track's floor and the columns came out unequal — and on a phone the
+   three tracks summed wider than the sheet, clipping the last column off the
+   screen. auto-fill + a hard minimum keeps every track identical and lets the
+   count follow the width. */
+.badge-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+@media (min-width: 560px) { .badge-wall { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; } }
+.badge-tile {
+  position: relative; min-width: 0; overflow: hidden;
+  display: grid; grid-template-rows: 34px auto 1fr auto; justify-items: center;
+  gap: 6px; text-align: center;
+  min-height: 116px; padding: 13px 8px 11px; border-radius: 14px;
+  border: 1px solid var(--line); background: rgba(255,255,255,0.02);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.badge-tile.locked:hover { border-color: var(--line-strong); background: rgba(255,255,255,0.035); }
+.badge-tile.unlocked { border-color: var(--bc); background: color-mix(in srgb, var(--bc) 6%, rgba(255,255,255,0.02)); box-shadow: 0 0 20px -8px var(--bc), inset 0 0 0 1px color-mix(in srgb, var(--bc) 25%, transparent); }
+.badge-tile.unlocked:hover { transform: translateY(-3px); }
+.badge-ic { display: grid; place-items: center; width: 34px; height: 34px; }
+.badge-ic .ic { width: 30px; height: 30px; }
+.badge-tile.unlocked .badge-ic { color: var(--bc); filter: drop-shadow(0 0 6px var(--bc)); }
+.badge-tile.locked .badge-ic { color: var(--muted-2); opacity: 0.45; }
+/* Names and requirements are user-facing prose of unpredictable length; clamp
+   them so one long entry cannot set the height of its whole row. */
+.badge-name {
+  font-weight: 800; font-size: 12px; line-height: 1.25;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere; hyphens: auto;
+}
+.badge-tile.locked .badge-name { color: var(--muted-2); }
+.badge-req {
+  align-self: start;
+  font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.3;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.badge-tile.unlocked .badge-req { color: var(--bc); font-weight: 700; letter-spacing: 0.07em; }
+/* Mythic — rarest tier gets an animated sheen + stronger halo */
+.badge-tile.unlocked[data-tier="mythic"] {
+  border-color: var(--bc);
+  box-shadow: 0 0 26px -6px var(--bc), inset 0 0 0 1px color-mix(in srgb, var(--bc) 40%, transparent);
+  background:
+    linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--bc) 22%, transparent) 50%, transparent 70%),
+    rgba(255,255,255,0.02);
+  background-size: 220% 100%, auto;
+}
+.badge-tile.unlocked[data-tier="mythic"] .badge-req { letter-spacing: 0.1em; }
+@media (prefers-reduced-motion: no-preference) {
+  .badge-tile.unlocked[data-tier="mythic"] { animation: mythic-sheen 3.6s ease-in-out infinite; }
+}
+@keyframes mythic-sheen {
+  0%, 100% { background-position: 120% 0, 0 0; }
+  50%      { background-position: -20% 0, 0 0; }
+}
+.badge-wall-empty { padding: 26px 14px; text-align: center; font-size: 13px; color: var(--muted); border: 1px dashed var(--line); border-radius: 14px; }
+
+/* ===== BESTIARY PANE ===== */
+.bst-tallies { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); }
+.bst-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 640px) { .bst-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bst-row {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 11px 14px; border-radius: 13px;
+  border: 1px solid var(--line); background: rgba(255,255,255,0.02);
+}
+.bst-emoji { font-size: 26px; line-height: 1; flex-shrink: 0; }
+.bst-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.bst-name { font-size: 13.5px; font-weight: 800; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bst-weak { font-size: 10.5px; color: var(--muted-2); }
+.bst-note { font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; color: var(--muted); white-space: nowrap; text-align: right; }
+/* Slain reads as a trophy, a nemesis reads as unfinished business, and one you
+   have never met stays quiet so the board is not all noise on week one. */
+.bst-row.slain { border-color: color-mix(in srgb, var(--accent-success, #22c55e) 40%, var(--line)); background: color-mix(in srgb, var(--accent-success, #22c55e) 7%, transparent); }
+.bst-row.slain .bst-note { color: var(--gradient-success-text, #4ade80); }
+.bst-row.nemesis { border-color: rgba(239,68,68,0.42); background: rgba(239,68,68,0.06); }
+.bst-row.nemesis .bst-note { color: #fca5a5; }
+.bst-row.unmet { opacity: 0.55; }
+.bst-row.unmet .bst-emoji { filter: grayscale(1); }
+
+/* ===== RECORDS PANE ===== */
 .rec-add-btn {
-  font-size: 12px; font-weight: 700; padding: 5px 13px; border-radius: 99px;
-  color: var(--text); background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+  flex-shrink: 0;
+  font-size: 12px; font-weight: 800; color: var(--text);
+  padding: 7px 14px; border-radius: 99px;
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 .rec-add-btn:hover { background: color-mix(in srgb, var(--accent-primary) 28%, transparent); transform: none; box-shadow: 0 0 16px -8px var(--accent-primary); }
-.cab-col-records #recordCount { display: block; margin: 0 0 14px; }
+/* Starter chips — the first record is the whole battle; make it one tap. */
+.rec-starters { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-top: 14px; }
+.rec-starter {
+  font-size: 12px; font-weight: 700; color: var(--text-dim);
+  padding: 7px 13px; border-radius: 99px;
+  background: rgba(255,255,255,0.03); border: 1px dashed var(--line-strong);
+}
+.rec-starter:hover { color: var(--text); border-style: solid; border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 12%, transparent); transform: none; box-shadow: none; }
 
-/* ===== RECORD CARDS ===== */
+/* The record → insignia link, which the pane never used to mention. */
+.rec-nudge { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.rec-nudge:empty { display: none; }
+.rec-nudge-bar { flex: 1; min-width: 0; max-width: 160px; height: 5px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
+.rec-nudge-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--gradient-brand); box-shadow: 0 0 10px var(--score-glow); transition: width 0.6s ease; }
+.rec-nudge-txt { font-size: 11.5px; color: var(--muted); }
+.rec-nudge-txt strong { color: var(--text-dim); font-weight: 800; }
+
+/* Rematch line — only on the current best of a metric. */
+.rec-best { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 7px; }
+.rec-best-k { font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; color: var(--rc, var(--accent-primary)); }
+.rec-best-prev { font-size: 10.5px; color: var(--muted-2); }
+.rec-beat {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.02em; color: var(--text-dim);
+  padding: 3px 9px; border-radius: 99px;
+  background: transparent; border: 1px solid var(--line-strong);
+}
+.rec-beat:hover { color: var(--text); border-color: var(--rc, var(--accent-primary)); background: color-mix(in srgb, var(--rc) 14%, transparent); transform: none; box-shadow: none; }
+
 .rec-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .rec-filters:empty { display: none; }
 .rec-filter { font-size: 11px; font-weight: 700; color: var(--muted); padding: 4px 10px; border-radius: 99px; background: transparent; border: 1px solid var(--line); }
@@ -1374,12 +1529,14 @@
 .rec-filter.on { color: var(--text); border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 12%, transparent); }
 
 #trophyList { display: flex; flex-direction: column; gap: 10px; }
+@media (min-width: 700px) { #trophyList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+/* Empty and no-match states are messages, not cards — they span the grid. */
+#trophyList > .trophy-empty { grid-column: 1 / -1; }
 .rec-card {
-  position: relative; display: flex; gap: 12px; align-items: flex-start;
-  padding: 12px 14px; border-radius: 14px;
-  background: rgba(255,255,255,0.02); border: 1px solid var(--line);
-  border-left: 3px solid var(--rc, var(--accent-primary));
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  display: flex; align-items: flex-start; gap: 12px; min-width: 0;
+  padding: 13px 14px; border-radius: 14px;
+  border: 1px solid var(--line); background: rgba(255,255,255,0.022);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 .rec-card:hover { transform: translateY(-2px); border-color: var(--line-strong); }
 .rec-card.pinned { background: color-mix(in srgb, var(--rc) 7%, transparent); }
@@ -1388,7 +1545,7 @@
 .rec-ic .ic { width: 26px; height: 26px; }
 .rec-body { flex: 1; min-width: 0; }
 .rec-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.rec-title { font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.25; }
+.rec-title { font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
 .rec-metric { flex-shrink: 0; font-size: 12px; font-weight: 800; color: var(--rc, var(--accent-primary)); background: color-mix(in srgb, var(--rc) 14%, transparent); padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
 .rec-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; color: var(--muted); }
 .rec-meta .rec-cat { color: var(--text-dim); font-weight: 700; }
@@ -1396,7 +1553,7 @@
 .rec-pr { font-size: 9px; font-weight: 900; letter-spacing: 0.06em; color: #052e16; background: #34d399; border-radius: 5px; padding: 1px 6px; }
 .rec-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .rec-tag { font-size: 10px; font-weight: 700; color: var(--muted); background: rgba(255,255,255,0.04); border-radius: 6px; padding: 2px 7px; }
-.rec-notes { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.rec-notes { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
 .rec-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 .rec-btn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: transparent; border: 1px solid transparent; color: var(--muted-2); }
 .rec-btn .ic { width: 15px; height: 15px; }
@@ -1514,16 +1671,32 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .boss-emoji { font-size: 44px; line-height: 1; flex-shrink: 0; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
 .boss-body { flex: 1; min-width: 0; }
 .boss-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.boss-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.boss-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); min-width: 0; }
+/* Why this boss, and not another one. */
+.boss-hunt { margin-left: 6px; letter-spacing: 0.06em; color: var(--accent-primary); }
+.boss-hunt[hidden] { display: none; }
+@media (max-width: 560px) { .boss-hunt { display: none; } }
 .boss-status { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; color: #fca5a5; white-space: nowrap; }
 .boss-name { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 24px; letter-spacing: -0.02em; margin: 2px 0 10px; }
 .boss-hp { height: 14px; border-radius: 99px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.06); overflow: hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,0.6); }
 .boss-hp-fill { height: 100%; width: 100%; border-radius: inherit; background: linear-gradient(90deg, #ef4444, #f97316); box-shadow: 0 0 12px rgba(239,68,68,0.5); transition: width 0.6s cubic-bezier(0.34,1.4,0.5,1); }
+/* Damage breakdown. The HP bar says how close the boss is to dying; this says
+   where that damage came from, which is the part the 2x weighting decides. */
+.boss-dmg { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+.boss-dmg-bar { display: flex; flex: 1; min-width: 0; height: 4px; border-radius: 99px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.boss-dmg-seg { display: block; height: 100%; transition: width 0.5s ease; }
+.boss-dmg-weak { background: var(--accent-primary); box-shadow: 0 0 8px var(--score-glow); }
+.boss-dmg-other { background: var(--muted-2); opacity: 0.7; }
+.boss-dmg-split { font-size: 10.5px; font-weight: 700; color: var(--muted-2); white-space: nowrap; }
 .boss-meta { display: flex; gap: 10px; justify-content: space-between; margin-top: 8px; font-size: 12px; }
-.boss-weak { color: var(--accent-primary); font-weight: 700; white-space: nowrap; }
+.boss-weak { color: var(--accent-primary); font-weight: 700; min-width: 0; }
 .boss-taunt { color: var(--muted); font-style: italic; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .boss-card.defeated { opacity: 0.9; }
 .boss-card.defeated .boss-status { color: var(--gradient-success-text); }
 .boss-card.defeated .boss-hp-fill { background: linear-gradient(90deg, #22c55e, #4ade80); box-shadow: 0 0 12px var(--glow-green); }
 .boss-card.defeated .boss-emoji { filter: grayscale(0.5) drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
-@media (max-width: 768px) { .boss-taunt { display: none; } .boss-emoji { font-size: 36px; } }
+@media (max-width: 768px) {
+  .boss-taunt { display: none; }
+  .boss-emoji { font-size: 36px; }
+  .boss-dmg-split { display: none; }   /* the hint line below already says it */
+}

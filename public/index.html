@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=1" />
   <link rel="stylesheet" href="css/03-components.css?v=1" />
   <link rel="stylesheet" href="css/04-responsive.css?v=1" />
-  <link rel="stylesheet" href="css/05-screens.css?v=1" />
+  <link rel="stylesheet" href="css/05-screens.css?v=9" />
   <link rel="stylesheet" href="css/06-mobile.css?v=1" />
 </head>
 <body>
@@ -195,9 +195,16 @@
     <section class="section boss-card glass" id="boss">
       <div class="boss-emoji" id="bossEmoji">🪨</div>
       <div class="boss-body">
-        <div class="boss-top"><span class="boss-kicker">⚔️ Weekly Boss</span><span class="boss-status" id="bossStatus">—</span></div>
+        <div class="boss-top"><span class="boss-kicker">⚔️ Weekly Boss<span class="boss-hunt" id="bossHunt" hidden></span></span><span class="boss-status" id="bossStatus">—</span></div>
         <div class="boss-name" id="bossName">—</div>
         <div class="boss-hp"><div class="boss-hp-fill" id="bossHpFill"></div></div>
+        <div class="boss-dmg">
+          <span class="boss-dmg-bar" aria-hidden="true">
+            <span class="boss-dmg-seg boss-dmg-weak" id="bossDmgWeak"></span>
+            <span class="boss-dmg-seg boss-dmg-other" id="bossDmgOther"></span>
+          </span>
+          <span class="boss-dmg-split" id="bossDmgSplit"></span>
+        </div>
         <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
       </div>
     </section>
@@ -407,94 +414,108 @@
 
     <!-- Cabinet Modal -->
     <div class="modal-backdrop" id="cabinetModal" aria-hidden="true">
-      <div class="modal glass cabinet-modal" role="dialog" aria-modal="true" style="max-width: 640px;">
+      <div class="modal glass cabinet-modal" role="dialog" aria-modal="true" aria-labelledby="cabinetTitle">
         <div class="modal-head">
           <div class="modal-title-wrap">
             <span class="modal-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0V4zM6 6H3v1a3 3 0 0 0 3 3M18 6h3v1a3 3 0 0 1-3 3"/></svg></span>
-            <h3>Cabinet</h3>
+            <h3 id="cabinetTitle">Cabinet</h3>
           </div>
           <button class="modal-close" id="closeCabinetTopBtn" type="button" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
 
-        <p class="cab-section-label">Trophies</p>
-        <div class="tro-showcase" id="cabinetTrophies"></div>
-
-        <div class="cab-cols">
-          <section class="cab-col cab-col-insignias">
-            <div class="cab-section-head">
-              <p class="cab-section-label" style="margin:0;">Insignias</p>
-              <span class="badge-count" id="insigniaCount">0 / 0</span>
-            </div>
-            <div class="cab-summary" id="cabSummary"></div>
-            <div class="ins-filters" id="insigniaFilters">
-              <button class="ins-filter on" data-filter="all" type="button">All</button>
-              <button class="ins-filter" data-filter="ascension" type="button">Ascension</button>
-              <button class="ins-filter" data-filter="attributes" type="button">Attributes</button>
-              <button class="ins-filter" data-filter="pursuits" type="button">Pursuits</button>
-              <button class="ins-filter" data-filter="class" type="button">Classes</button>
-              <button class="ins-filter" data-filter="missions" type="button">Missions</button>
-              <button class="ins-filter" data-filter="records" type="button">Records</button>
-              <button class="ins-filter" data-filter="consistency" type="button">Consistency</button>
-              <button class="ins-filter" data-filter="boss" type="button">Boss</button>
-              <button class="ins-filter" data-filter="study" type="button">Study</button>
-              <button class="ins-filter" data-filter="volume" type="button">Volume</button>
-            </div>
-            <div class="badge-wall" id="insigniaGrid"></div>
-          </section>
-
-          <section class="cab-col cab-col-records">
-            <div class="cab-section-head">
-              <p class="cab-section-label" style="margin:0;">Records</p>
-              <button id="addTrophyBtn" class="rec-add-btn" type="button">+ Add</button>
-            </div>
-            <span class="cab-section-sub" id="recordCount">Real-life wins worth keeping</span>
-            <div class="add-trophy-form" id="addTrophyForm">
-              <input type="hidden" id="trophyEditId" value="">
-              <label class="label">Title</label>
-              <input type="text" id="trophyTitle" placeholder="e.g., AWS Certified · Bench 100kg">
-              <div class="form-row">
-                <div class="form-col">
-                  <label class="label">Category</label>
-                  <select id="trophyCategory">
-                    <option value="certification">Certification</option>
-                    <option value="learning">Learning</option>
-                    <option value="career">Career</option>
-                    <option value="fitness">Fitness PR</option>
-                    <option value="project">Project</option>
-                    <option value="finance">Finance</option>
-                    <option value="personal">Personal</option>
-                  </select>
-                </div>
-                <div class="form-col">
-                  <label class="label">Date</label>
-                  <input type="date" id="trophyDate">
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-col">
-                  <label class="label">Value <span class="muted">(optional)</span></label>
-                  <input type="number" id="trophyValue" step="any" placeholder="100">
-                </div>
-                <div class="form-col">
-                  <label class="label">Unit</label>
-                  <input type="text" id="trophyUnit" placeholder="kg · km · $ · %">
-                </div>
-              </div>
-              <label class="label">Tags <span class="muted">(comma separated)</span></label>
-              <input type="text" id="trophyTags" placeholder="bench, strength">
-              <label class="label">Notes <span class="muted">(optional)</span></label>
-              <textarea id="trophyNotes" style="min-height:60px;" placeholder="Any notes about this record..."></textarea>
-              <div class="modal-actions" style="margin-top:12px;">
-                <button id="cancelTrophyBtn" type="button">Cancel</button>
-                <button id="saveTrophyBtn" type="button" class="primary">Save Record</button>
-              </div>
-            </div>
-            <div class="rec-filters" id="recordFilters"></div>
-            <div id="trophyList"></div>
-          </section>
+        <!-- Three panes, one screen each. Before this the cabinet was a single
+             4000px scroll whose desktop two-column layout left the right half
+             empty for everything past the first screen. -->
+        <div class="settings-tabs cab-tabs" role="tablist">
+          <button class="settings-tab active" data-cab-tab="trophies" role="tab" aria-selected="true" aria-controls="cabPaneTrophies" id="cabTabTrophies" type="button">Trophies</button>
+          <button class="settings-tab" data-cab-tab="insignias" role="tab" aria-selected="false" aria-controls="cabPaneInsignias" id="cabTabInsignias" type="button">Insignias <span class="cab-tab-n" id="insigniaCount"></span></button>
+          <button class="settings-tab" data-cab-tab="records" role="tab" aria-selected="false" aria-controls="cabPaneRecords" id="cabTabRecords" type="button">Records <span class="cab-tab-n" id="recordCountTab"></span></button>
+          <button class="settings-tab" data-cab-tab="bestiary" role="tab" aria-selected="false" aria-controls="cabPaneBestiary" id="cabTabBestiary" type="button">Bestiary <span class="cab-tab-n" id="bestiaryCountTab"></span></button>
         </div>
 
-        <div class="modal-actions">
+        <div class="cab-pane" id="cabPaneTrophies" data-cab-pane="trophies" role="tabpanel" aria-labelledby="cabTabTrophies">
+          <p class="cab-pane-note">Trophies bank themselves as you clear quests — daily, weekly, monthly.</p>
+          <div class="tro-showcase" id="cabinetTrophies"></div>
+          <div class="cab-journey" id="cabJourney"></div>
+        </div>
+
+        <div class="cab-pane" id="cabPaneInsignias" data-cab-pane="insignias" role="tabpanel" aria-labelledby="cabTabInsignias" hidden>
+          <div class="cab-summary" id="cabSummary"></div>
+          <div class="cab-next" id="insigniaNext"></div>
+          <div class="ins-filters" id="insigniaFilters">
+            <button class="ins-filter on" data-filter="all" type="button">All</button>
+            <button class="ins-filter" data-filter="ascension" type="button">Ascension</button>
+            <button class="ins-filter" data-filter="attributes" type="button">Attributes</button>
+            <button class="ins-filter" data-filter="pursuits" type="button">Pursuits</button>
+            <button class="ins-filter" data-filter="class" type="button">Classes</button>
+            <button class="ins-filter" data-filter="missions" type="button">Missions</button>
+            <button class="ins-filter" data-filter="records" type="button">Records</button>
+            <button class="ins-filter" data-filter="consistency" type="button">Consistency</button>
+            <button class="ins-filter" data-filter="boss" type="button">Boss</button>
+            <button class="ins-filter" data-filter="study" type="button">Study</button>
+            <button class="ins-filter" data-filter="volume" type="button">Volume</button>
+          </div>
+          <div class="badge-wall" id="insigniaGrid"></div>
+        </div>
+
+        <div class="cab-pane" id="cabPaneRecords" data-cab-pane="records" role="tabpanel" aria-labelledby="cabTabRecords" hidden>
+          <div class="cab-pane-head">
+            <span class="cab-section-sub" id="recordCount">Real-life wins worth keeping</span>
+            <button id="addTrophyBtn" class="rec-add-btn" type="button">+ Add</button>
+          </div>
+          <div class="rec-nudge" id="recordNudge"></div>
+          <div class="add-trophy-form" id="addTrophyForm">
+            <input type="hidden" id="trophyEditId" value="">
+            <label class="label">Title</label>
+            <input type="text" id="trophyTitle" placeholder="e.g., AWS Certified · Bench 100kg">
+            <div class="form-row">
+              <div class="form-col">
+                <label class="label">Category</label>
+                <select id="trophyCategory">
+                  <option value="certification">Certification</option>
+                  <option value="learning">Learning</option>
+                  <option value="career">Career</option>
+                  <option value="fitness">Fitness PR</option>
+                  <option value="project">Project</option>
+                  <option value="finance">Finance</option>
+                  <option value="personal">Personal</option>
+                </select>
+              </div>
+              <div class="form-col">
+                <label class="label">Date</label>
+                <input type="date" id="trophyDate">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-col">
+                <label class="label">Value <span class="muted">(optional)</span></label>
+                <input type="number" id="trophyValue" step="any" placeholder="100">
+              </div>
+              <div class="form-col">
+                <label class="label">Unit</label>
+                <input type="text" id="trophyUnit" placeholder="kg · km · $ · %">
+              </div>
+            </div>
+            <label class="label">Tags <span class="muted">(comma separated)</span></label>
+            <input type="text" id="trophyTags" placeholder="bench, strength">
+            <label class="label">Notes <span class="muted">(optional)</span></label>
+            <textarea id="trophyNotes" style="min-height:60px;" placeholder="Any notes about this record..."></textarea>
+            <div class="modal-actions" style="margin-top:12px;">
+              <button id="cancelTrophyBtn" type="button">Cancel</button>
+              <button id="saveTrophyBtn" type="button" class="primary">Save Record</button>
+            </div>
+          </div>
+          <div class="rec-filters" id="recordFilters"></div>
+          <div id="trophyList"></div>
+        </div>
+
+        <div class="cab-pane" id="cabPaneBestiary" data-cab-pane="bestiary" role="tabpanel" aria-labelledby="cabTabBestiary" hidden>
+          <p class="cab-pane-note">Every challenger you have met. A boss stays on the board until you put it down.</p>
+          <div class="cab-summary" id="bestiarySummary"></div>
+          <div class="bst-list" id="bestiaryList"></div>
+        </div>
+
+        <div class="modal-actions cab-foot">
           <button id="closeCabinetBtn" type="button">Close</button>
         </div>
       </div>
@@ -683,9 +704,9 @@
   </main>
 
   <script src="modules.js?v=17"></script>
-  <script src="game.js?v=28"></script>
+  <script src="game.js?v=33"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=71"></script>
+  <script src="app.js?v=80"></script>
   <script src="extras.js?v=5"></script>
 </body>
 </html>
