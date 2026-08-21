@@ -11,7 +11,11 @@ body {
     radial-gradient(circle at 90% 15%, var(--body-gradient-2), transparent 30%),
     radial-gradient(circle at 50% 100%, var(--body-gradient-3), transparent 40%),
     linear-gradient(180deg, var(--body-bg-top) 0%, var(--body-bg-mid) 50%, var(--body-bg-bot) 100%);
-  background-attachment: fixed;
+  /* `fixed` repaints the whole gradient on every scroll frame and, combined
+     with a blurred surface on every card, is the main cost of scrolling this
+     page on a phone. The gradient is soft enough that scrolling with the
+     content is not noticeable. */
+  background-attachment: scroll;
   color: var(--text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -42,13 +46,18 @@ h1, h2, h3, .brand {
   padding: 24px 0 72px;
 }
 
+/* A card is a surface, not a pane of frosted glass. It used to carry a 145°
+   gradient, a 90px-blur shadow and backdrop-filter: blur(24px) — on every card
+   on the page, over a fixed background attachment. That combination is what
+   made every section read as the same soft lozenge, and it is expensive: each
+   blurred surface forces its own compositing layer, on a page that is mostly
+   surfaces. The blur now lives only where something genuinely passes behind:
+   the sticky topbar, modal backdrops and the mobile drawer. */
 .glass {
-  background: linear-gradient(145deg, rgba(30, 30, 35, 0.6), rgba(15, 15, 20, 0.4));
+  background: var(--glass);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  box-shadow: var(--e-2), var(--edge);
 }
 
 /* ===== TOPBAR ===== */
@@ -87,7 +96,7 @@ h1, h2, h3, .brand {
   border-radius: 99px;
   background: rgba(245, 158, 11, 0.15);
   border: 1px solid rgba(245, 158, 11, 0.3);
-  font-size: 12px;
+  font-size: var(--t-xs);
   font-weight: 700;
   color: #fcd34d;
 }
@@ -120,7 +129,7 @@ h1, h2, h3, .brand {
   padding: 10px 16px;
   font-family: 'Inter', sans-serif;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--t-sm);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: inline-flex;
   align-items: center;
@@ -128,9 +137,9 @@ h1, h2, h3, .brand {
   user-select: none;
 }
 .nav a:hover, button:hover, .file-label:hover { 
-  background: rgba(255, 255, 255, 0.12); 
-  transform: translateY(-2px); 
-  box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+  box-shadow: var(--e-1);
   border-color: var(--line-strong);
 }
 button:active { transform: translateY(0); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
@@ -142,9 +151,9 @@ button.primary {
   box-shadow: 0 4px 15px var(--primary-shadow);
 }
 button.primary:hover {
-  box-shadow: 0 8px 25px var(--primary-shadow-hover);
-  filter: brightness(1.15);
-  transform: translateY(-3px);
+  box-shadow: 0 6px 18px var(--primary-shadow-hover);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
 button.danger { 
   background: rgba(239, 68, 68, 0.15); 
@@ -156,7 +165,7 @@ button.danger:hover {
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
 }
 button.ghost { background: transparent; border-color: transparent; }
-button.ghost:hover { background: rgba(255,255,255,0.08); border-color: transparent; transform: translateY(-2px); }
+button.ghost:hover { background: rgba(255,255,255,0.08); border-color: transparent; transform: translateY(-1px); }
 
 /* ===== MOBILE CONTEXT BAR ===== */
 .mobile-context {
@@ -195,7 +204,7 @@ button.ghost:hover { background: rgba(255,255,255,0.08); border-color: transpare
   color: var(--eyebrow-text);
   background: var(--eyebrow-bg);
   border: 1px solid var(--eyebrow-border);
-  font-size: 11px;
+  font-size: var(--t-2xs);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -215,7 +224,7 @@ h1 {
 
 .mini { 
   padding: 16px 20px; 
-  border-radius: 20px; 
+  border-radius: var(--r-md); 
   background: rgba(255, 255, 255, 0.03); 
   border: 1px solid var(--line); 
   transition: all 0.3s ease;
@@ -223,7 +232,7 @@ h1 {
 .mini:hover {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 .mini .label { margin-bottom: 6px; }
 .mini strong { display: block; font-size: 17px; font-weight: 700; }
@@ -272,16 +281,16 @@ h1 {
 }
 .score-label { color: var(--muted); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.1em; }
 .status-line { margin-top: 8px; color: var(--text); font-size: 14px; opacity: 0.8; }
-.save-state { display:inline-flex; align-items:center; margin-left:8px; padding:3px 7px; border:1px solid rgba(255,255,255,.08); border-radius:999px; color:var(--muted); font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+.save-state { display:inline-flex; align-items:center; margin-left:8px; padding:3px 7px; border:1px solid rgba(255,255,255,.08); border-radius:999px; color:var(--muted); font-size: var(--t-2xs); font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
 .save-state[data-state="saving"] { color:var(--accent-primary); border-color:color-mix(in srgb, var(--accent-primary) 35%, transparent); }
 .save-state[data-state="queued"] { color:#fbbf24; border-color:rgba(251,191,36,.35); }
 .save-state[data-state="failed"] { color:#f87171; border-color:rgba(248,113,113,.4); }
 .quest-session-notes-wrap { grid-column:1/-1; margin-top:4px; border-top:1px solid rgba(255,255,255,.06); }
-.quest-session-notes-wrap > summary { width:max-content; padding:8px 0 2px; color:var(--muted); font-size:11px; font-weight:800; cursor:pointer; list-style:none; }
+.quest-session-notes-wrap > summary { width:max-content; padding:8px 0 2px; color:var(--muted); font-size: var(--t-2xs); font-weight:800; cursor:pointer; list-style:none; }
 .quest-session-notes-wrap > summary::before { content:"+ "; color:var(--ac, var(--accent-primary)); }
 .quest-session-notes-wrap[open] > summary::before { content:"− "; }
 .show-week-btn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:15px 16px; border:1px dashed rgba(255,255,255,.14); border-radius:14px; background:rgba(255,255,255,.025); color:var(--muted); text-align:left; }
-.show-week-btn strong { color:var(--accent-primary); font-size:12px; }
+.show-week-btn strong { color:var(--accent-primary); font-size: var(--t-xs); }
 
 .actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .actions button, .actions label { flex: 1; min-width: max-content; }
@@ -308,7 +317,7 @@ details.section-card > summary:hover {
 }
 details.section-card > summary::-webkit-details-marker { display:none; }
 .summary-left h2 { margin: 0; font-size: 26px; letter-spacing: -0.02em; font-weight: 800; }
-.hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; line-height: 1.5; }
+.hint { color: var(--muted); font-size: var(--t-sm); margin: 6px 0 0; line-height: 1.5; }
 .chev { 
   color: var(--muted); 
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 

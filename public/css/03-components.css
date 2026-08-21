@@ -8,17 +8,19 @@
 .metric, .day-card {
   background: rgba(20, 20, 25, 0.5);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--r-md);
   padding: 20px;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   position: relative;
   overflow: hidden;
 }
-.metric:hover { 
-  border-color: rgba(255, 255, 255, 0.3); 
-  transform: translateY(-5px) scale(1.02);
-  box-shadow: 0 15px 40px rgba(0,0,0,0.4), 0 0 20px rgba(56, 189, 248, 0.1);
-  z-index: 10;
+/* A card acknowledges the cursor; it does not jump at it. Lifting 5px and
+   scaling 1.02 nudges every neighbour and reads as a toy. */
+.metric:hover {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
+  box-shadow: var(--e-2);
 }
 .metric .top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom: 16px; }
 .metric-title { font-weight: 700; font-size: 15px; color: #fff; }
@@ -51,7 +53,7 @@
 label.label, .label { 
   display:block; 
   color: var(--muted); 
-  font-size: 11px; 
+  font-size: var(--t-2xs); 
   font-weight: 800; 
   text-transform: uppercase; 
   letter-spacing: 0.1em; 
@@ -78,7 +80,7 @@ textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
 
 /* ===== DAY CARDS ===== */
 .day-card { padding: 0; }
-.day-card:hover { transform: translateY(-5px) scale(1.01); box-shadow: 0 15px 40px rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.25); z-index: 10; }
+.day-card:hover { border-color: var(--line-strong); box-shadow: var(--e-2); }
 .day-summary { 
   display: flex;
   align-items: center; 
@@ -91,8 +93,8 @@ textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
 .day-title { font-weight: 800; font-size: 20px; letter-spacing: -0.01em; }
 .day-heading { min-width: 0; }
 .day-subline { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; }
-.date-tag { color: var(--accent-primary); font-size: 12px; font-weight: 700; }
-.day-remaining { color: var(--muted); font-size: 12px; font-weight: 700; }
+.date-tag { color: var(--accent-primary); font-size: var(--t-xs); font-weight: 700; }
+.day-remaining { color: var(--muted); font-size: var(--t-xs); font-weight: 700; }
 .day-remaining:not(:empty)::before { content: "·"; margin-right: 8px; opacity: .6; }
 .day-remaining.is-clear { color: var(--gradient-success-text); }
 .badge, .pill {
@@ -102,7 +104,7 @@ textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
   background: rgba(255,255,255,0.05);
   color: var(--text);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 12px;
+  font-size: var(--t-xs);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -137,9 +139,9 @@ textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
 .check input:checked + span { color: var(--muted-2); text-decoration: line-through; opacity: 0.7; }
 
 /* ===== TABLES ===== */
-table { width:100%; border-collapse: separate; border-spacing: 0; overflow:hidden; border-radius: 16px; border: 1px solid var(--line); }
+table { width:100%; border-collapse: separate; border-spacing: 0; overflow:hidden; border-radius: var(--r-md); border: 1px solid var(--line); }
 th, td { padding: 16px; text-align:left; vertical-align: middle; border-bottom: 1px solid var(--line); }
-th { color:var(--muted); font-size: 12px; font-weight: 700; text-transform:uppercase; letter-spacing:0.05em; background: rgba(0,0,0,0.4); }
+th { color:var(--muted); font-size: var(--t-xs); font-weight: 700; text-transform:uppercase; letter-spacing:0.05em; background: rgba(0,0,0,0.4); }
 td { background: rgba(255,255,255,0.02); color:#f8fafc; font-size: 14px; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: rgba(255,255,255,0.04); }
@@ -148,7 +150,7 @@ tr:hover td { background: rgba(255,255,255,0.04); }
 .calendar { display:grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 12px; }
 
 .calendar-cell .dow { font-weight: 800; font-size: 16px; }
-.calendar-cell .date { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+.calendar-cell .date { color: var(--muted); font-size: var(--t-sm); margin-bottom: 16px; }
 .calendar-cell.today { 
   border-color: rgba(56,189,248,0.5); 
   background: rgba(56, 189, 248, 0.05);
@@ -198,7 +200,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   border: none;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--t-xs);
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -247,7 +249,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   min-height: 60px;
 }
 .theme-swatch span {
-  font-size: 12px;
+  font-size: var(--t-xs);
   font-weight: 700;
   color: rgba(255,255,255,0.9);
   text-shadow: 0 1px 4px rgba(0,0,0,0.8);
@@ -266,7 +268,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
 
 .trophy-details .hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-xs);
 }
 .trophy-empty {
   text-align: center;
@@ -277,7 +279,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   margin-top: 4px;
 }
 .trophy-empty p { margin: 4px 0; }
-.trophy-empty .hint { font-size: 12px; }
+.trophy-empty .hint { font-size: var(--t-xs); }
 .trophy-empty-icon {
   margin: 0 auto 10px;
   opacity: 0.4;
@@ -317,7 +319,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   right: 8px;
   z-index: 999;
   padding: 14px 14px 16px;
-  border-radius: 24px;
+  border-radius: var(--r-xl);
   background: rgba(12, 12, 17, 0.96);
   border: 1px solid var(--line-strong);
   backdrop-filter: blur(28px);
@@ -347,14 +349,14 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   gap: 8px;
   min-height: 76px;
   padding: 12px 6px;
-  border-radius: 16px;
+  border-radius: var(--r-md);
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--line);
   cursor: pointer;
   transition: transform 0.12s ease, background 0.2s ease, border-color 0.2s ease;
   text-decoration: none;
   color: var(--text);
-  font-size: 11px;
+  font-size: var(--t-2xs);
   font-weight: 700;
   letter-spacing: 0.01em;
   text-align: center;
@@ -422,7 +424,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   -webkit-text-fill-color: transparent;
 }
 .report-stat-label {
-  font-size: 11px;
+  font-size: var(--t-2xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -437,7 +439,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   border: 1px solid var(--line);
 }
 .report-section-title {
-  font-size: 12px;
+  font-size: var(--t-xs);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -481,7 +483,7 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
 .footer-note {
   text-align: center;
   color: var(--muted-2);
-  font-size: 13px;
+  font-size: var(--t-sm);
   margin-top: 40px;
 }
 
