@@ -238,8 +238,11 @@ Then open **http://localhost:3007**.
 | `SESSION_SECRET` | *(auto-generated)* | Secret used to sign the session cookie. A random one is generated and persisted on first run; set this only if you want to control it explicitly. |
 | `PUBLIC_ORIGIN` | *(unset)* | Optional canonical origin, such as `https://forge.example.com`, for reverse proxies that rewrite the `Host` header. Leave unset for normal Docker/local/LAN use. |
 | `TRUST_PROXY` | *(unset)* | Set to `1` only when The Forge is behind a reverse proxy you control. This lets Express honor `X-Forwarded-Proto` and mark auth cookies `Secure` on HTTPS. |
+| `DISABLE_REMINDERS` | *(unset)* | Set to any value to stop the server from sending push reminders. |
 
 Web-push **VAPID keys are generated automatically** on first run and stored in the database — you don't need to configure them.
+
+**Reminders need no cron.** Turn them on in Settings → Profile and pick your morning and evening times; the server checks every five minutes and sends them itself, on every install path. The evening nudge only fires if the day still has open quests, and it tells you what the weekly boss stands to lose if you clear them.
 
 ## Backups
 

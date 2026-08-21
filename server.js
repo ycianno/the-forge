@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const webpush = require('web-push');
+const { sendReminders } = require('./send-reminders');
 
 // Load a local .env file if present (zero-dependency). Real environment
 // variables always win; this just makes a bare-metal `npm start` pick up the
@@ -891,8 +892,31 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log('');
 });
 
+// ===== Reminder scheduler =====
+// Reminders used to depend on a cron entry that no install path ever created —
+// not the Dockerfile, not install.sh, not the Windows installer — so the one
+// feature whose job is to bring you back had no trigger anywhere. Running it
+// on a timer inside the process means a stock install needs nothing extra, on
+// any platform. A tick is cheap: it reads two rows and returns unless a slot
+// is actually due, and sendReminders() dedupes per day per slot regardless.
+const REMINDER_TICK_MS = 5 * 60 * 1000;
+let reminderTimer = null;
+function startReminderScheduler() {
+  if (process.env.DISABLE_REMINDERS) return;
+  const tick = () => {
+    sendReminders(db)
+      .then((r) => { if (r && r.sent) console.log(`[reminders] ${r.slot}: ${r.sent} sent — ${r.body}`); })
+      .catch((err) => console.warn(`[reminders] ${err.message}`));
+  };
+  reminderTimer = setInterval(tick, REMINDER_TICK_MS);
+  reminderTimer.unref();   // never hold the process open on its own
+  tick();                  // catch a slot that came due while the server was down
+}
+startReminderScheduler();
+
 function shutdown(signal) {
   console.log(`Received ${signal}, shutting down...`);
+  if (reminderTimer) clearInterval(reminderTimer);
   server.close(() => {
     db.close();
     process.exit(0);

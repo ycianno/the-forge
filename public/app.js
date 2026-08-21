@@ -3347,41 +3347,16 @@ function initModals() {
 
 // ===== EVENT BINDING =====
 // ===== WEEKLY BOSS =====
-const BOSSES = [
-  { name: "Inertia", emoji: "🪨", weak: "training", taunt: "You won't even start. Prove me wrong." },
-  { name: "The Procrastinator", emoji: "🦥", weak: "discipline", taunt: "Tomorrow, right? That's what you always say." },
-  { name: "Brain Fog", emoji: "🌫️", weak: "study", taunt: "Why study? You'll just forget it." },
-  { name: "The Glutton", emoji: "🍔", weak: "protein", taunt: "One more cheat day won't hurt…" },
-  { name: "The Drifter", emoji: "🌀", weak: "project", taunt: "Busywork feels like progress, doesn't it?" },
-  { name: "Lord Snooze", emoji: "😴", weak: "discipline", taunt: "Five more minutes. Every single morning." },
-  { name: "Doomscroll Hydra", emoji: "🐍", weak: "study", taunt: "Just one more scroll…" },
-  { name: "The Couch Wraith", emoji: "👻", weak: "training", taunt: "Skip the workout. Stay cozy." },
-];
-const BOSS_ATTR = { discipline: "Discipline", training: "Body", study: "Mind", protein: "Vitality", project: "Craft" };
-function bossKeyHash(key) {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return h;
-}
-function bossForWeek(key) { return BOSSES[bossKeyHash(key) % BOSSES.length]; }
-
-// Which boss a given week actually fields. The order matters: a stored pick
-// wins, then the name banked when you beat it, and only then the old date hash.
-// That last step is what keeps history honest — weeks fought before adaptive
-// selection existed have no pick, so they still resolve to the boss you
-// actually faced instead of being retroactively reassigned.
-function resolveBossFor(weekStart) {
-  const key = iso(weekStart);
-  const byName = (n) => BOSSES.find((b) => b.name === n);
-  const pick = (settings && settings.bossPick) ? settings.bossPick[key] : null;
-  if (pick) {
-    const b = byName(typeof pick === "string" ? pick : pick.n);
-    if (b) return b;
-  }
-  const won = (settings && settings.bossDefeated) ? settings.bossDefeated[key] : null;
-  if (won) { const b = byName(won); if (b) return b; }
-  return bossForWeek(key);
-}
+// The roster, which boss a week fields, and how much HP you have taken off it
+// all live in the engine (modules.js) — the reminder sender and the Discord
+// agent ask the same functions, so a nudge can never describe a different
+// fight from the one on screen. What stays here is selection and persistence:
+// reading your history to pick next week's challenger, and writing it down.
+const BOSSES = Forge.BOSSES;
+const BOSS_ATTR = Forge.BOSS_ATTR;
+const bossKeyHash = Forge.bossKeyHash;
+const bossForWeek = Forge.bossForWeek;
+function resolveBossFor(weekStart) { return Forge.resolveBoss(settings, iso(weekStart)); }
 function bossPickFor(weekStart) {
   const pick = (settings && settings.bossPick) ? settings.bossPick[iso(weekStart)] : null;
   return (pick && typeof pick === "object") ? pick : null;
@@ -3484,37 +3459,9 @@ function ensureBossPick(weekStart) {
   else patchSettingsSoon({ ["bossPick." + key]: pick });
 }
 // Damage for an arbitrary week, so the bestiary can replay history and the card
-// can break the number down. The 2x weighting lands in both sums, which is what
-// makes neglecting the weak category actually cost you: the same 15-of-20 week
-// deals 80% with the weak quests included and 60% without.
+// can break the number down.
 function computeBossDamageFor(weekStart) {
-  const key = iso(weekStart);
-  const boss = resolveBossFor(weekStart);
-  const wk = database.weeks[key];
-  const checks = (wk && wk.checks) ? wk.checks : {};
-  let weakTot = 0, weakDone = 0, otherTot = 0, otherDone = 0;
-  for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-    const date = addDays(weekStart, dayIndex);
-    questsForDate(date).forEach((q) => {
-      const category = q.category || attrCat(q.attr || "Discipline");
-      const on = !!checks[questCheckId(q, date)];
-      if (category === boss.weak) { weakTot++; if (on) weakDone++; }
-      else { otherTot++; if (on) otherDone++; }
-    });
-  }
-  const totW = weakTot * 2 + otherTot;
-  const pct = n => (totW ? Math.round(n / totW * 100) : 0);
-  return {
-    boss, key,
-    dmg: pct(weakDone * 2 + otherDone),
-    weakDmg: pct(weakDone * 2),
-    otherDmg: pct(otherDone),
-    weakTot, weakDone, otherTot, otherDone,
-    // What finishing the remaining weak-category quests would still be worth.
-    weakLeft: weakTot - weakDone,
-    weakLeftWorth: pct((weakTot - weakDone) * 2),
-    hasQuests: totW > 0,
-  };
+  return Forge.bossDamage(database.weeks[iso(weekStart)], getUnifiedQuests(), settings, weekStart);
 }
 function computeBossDamage() {
   const d = computeBossDamageFor(selectedWeekStart);

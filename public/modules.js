@@ -518,6 +518,78 @@
     return out;
   }
 
+  // ----- weekly boss: roster, resolution, damage ---------------------------
+  // Which boss a week fields and how much of its HP you have taken off are
+  // pure functions of (settings, week, quests) — so they live here, where the
+  // browser, the reminder sender and the Discord agent can all ask the same
+  // question and get the same answer. Choosing next week's challenger is NOT
+  // here: that reads history and writes settings, which is the app's job.
+  const BOSSES = [
+    { name: "Inertia", emoji: "🪨", weak: "training", taunt: "You won't even start. Prove me wrong." },
+    { name: "The Procrastinator", emoji: "🦥", weak: "discipline", taunt: "Tomorrow, right? That's what you always say." },
+    { name: "Brain Fog", emoji: "🌫️", weak: "study", taunt: "Why study? You'll just forget it." },
+    { name: "The Glutton", emoji: "🍔", weak: "protein", taunt: "One more cheat day won't hurt…" },
+    { name: "The Drifter", emoji: "🌀", weak: "project", taunt: "Busywork feels like progress, doesn't it?" },
+    { name: "Lord Snooze", emoji: "😴", weak: "discipline", taunt: "Five more minutes. Every single morning." },
+    { name: "Doomscroll Hydra", emoji: "🐍", weak: "study", taunt: "Just one more scroll…" },
+    { name: "The Couch Wraith", emoji: "👻", weak: "training", taunt: "Skip the workout. Stay cozy." },
+  ];
+  const BOSS_ATTR = { discipline: "Discipline", training: "Body", study: "Mind", protein: "Vitality", project: "Craft" };
+
+  function bossKeyHash(key) {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  function bossForWeek(key) { return BOSSES[bossKeyHash(key) % BOSSES.length]; }
+
+  // The order matters: a stored pick wins, then the name banked when you beat
+  // it, and only then the old date hash. That last step is what keeps history
+  // honest — weeks fought before adaptive selection existed have no pick, so
+  // they still resolve to the boss actually faced instead of being
+  // retroactively reassigned.
+  function resolveBoss(settings, weekKey) {
+    const key = weekKey instanceof Date ? localIso(weekKey) : String(weekKey);
+    const byName = (n) => BOSSES.find((b) => b.name === n);
+    const pick = (settings && settings.bossPick) ? settings.bossPick[key] : null;
+    if (pick) {
+      const b = byName(typeof pick === "string" ? pick : pick.n);
+      if (b) return b;
+    }
+    const won = (settings && settings.bossDefeated) ? settings.bossDefeated[key] : null;
+    if (won) { const b = byName(won); if (b) return b; }
+    return bossForWeek(key);
+  }
+
+  // The 2x weighting lands in both sums, which is what makes neglecting the
+  // weak category actually cost you: the same 15-of-20 week deals 80% with the
+  // weak quests included and 60% without.
+  function bossDamage(week, quests, settings, weekStart) {
+    const boss = resolveBoss(settings, weekStart);
+    const checks = (week && week.checks) || {};
+    let weakTot = 0, weakDone = 0, otherTot = 0, otherDone = 0;
+    questOccurrenceRows(quests, weekStart).forEach((row) => {
+      const category = row.q.category || CAT_OF_ATTR[row.q.attr] || "discipline";
+      const on = !!checks[row.id];
+      if (category === boss.weak) { weakTot++; if (on) weakDone++; }
+      else { otherTot++; if (on) otherDone++; }
+    });
+    const totW = weakTot * 2 + otherTot;
+    const pct = (n) => (totW ? Math.round(n / totW * 100) : 0);
+    return {
+      boss,
+      key: weekStart instanceof Date ? localIso(weekStart) : String(weekStart),
+      dmg: pct(weakDone * 2 + otherDone),
+      weakDmg: pct(weakDone * 2),
+      otherDmg: pct(otherDone),
+      weakTot, weakDone, otherTot, otherDone,
+      // What finishing the remaining weak-category quests would still be worth.
+      weakLeft: weakTot - weakDone,
+      weakLeftWorth: pct((weakTot - weakDone) * 2),
+      hasQuests: totW > 0,
+    };
+  }
+
   // ----- presets: starter dashboards for different people ------------------
   // Each preset is presentation-only: it sets section order/visibility and adds
   // custom sections. It never touches logged week data. `custom` entries are
@@ -571,6 +643,7 @@
   return {
     XP_BY_CAT, ATTR_OF_CAT, CAT_OF_ATTR, ATTR_LIST, ATTR_COLOR,
     PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
+    BOSSES, BOSS_ATTR, bossKeyHash, bossForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };

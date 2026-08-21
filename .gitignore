@@ -8,3 +8,7 @@ data/
 agent/config.json
 agent/hermes_state.json
 .env.sync
+
+# Python bytecode from the optional agent
+__pycache__/
+*.pyc

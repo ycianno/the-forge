@@ -24,7 +24,6 @@ import os
 import re
 import sqlite3
 import sys
-import unicodedata
 import urllib.error
 import urllib.request
 
@@ -54,31 +53,12 @@ DEFAULT_CONFIG = {
 
 DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
-DEFAULT_DAILY_BLUEPRINT = {
-    "Sunday": ["Wake up by 6:00 AM", "Morning cardio or movement", "Shower", "Brush teeth", "Work prep / plan the day", "Work / main responsibility", "Weights or active recovery", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
-    "Monday": ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    "Tuesday": ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    "Wednesday": ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    "Thursday": ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    "Friday": ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-    "Saturday": ["Wake up by 6:00 AM", "Workout or recovery", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
-}
-
-DEFAULT_DIET_ITEMS = [
-    "Protein backup ready for the week", "Weekend protein option planned",
-    "Protein groceries available", "Hydration handled most days",
-    "No full junk mode", "At least one protein meal prepped",
-]
-DEFAULT_PROJECT_CHECKS = [
-    "Code, workflow, documentation, or plan created",
-    "Progress documented", "Next action is clear",
-]
-
 # XP economy — mirrors public/game.js
 XP_BY_CAT = {"discipline": 10, "training": 30, "study": 25, "protein": 12, "project": 30, "other": 8}
 STUDY_HOUR_XP = 8
 PROJECT_HOUR_XP = 12
 ATTR_OF_CAT = {"discipline": "Discipline", "training": "Body", "study": "Mind", "protein": "Vitality", "project": "Craft"}
+CAT_OF_ATTR = {v: k for k, v in ATTR_OF_CAT.items()}
 ATTR_ORDER = ["Discipline", "Body", "Mind", "Vitality", "Craft"]
 RANKS = [(1, "Bronze"), (8, "Silver"), (16, "Gold"), (26, "Platinum"), (40, "Diamond"), (60, "Master")]
 
@@ -99,39 +79,47 @@ def load_config():
 
 
 # ---------------------------------------------------------------------------
-# Slug / id helpers (mirror public/game.js + app.js)
+# The quest model (mirrors public/modules.js questCheckId / questOccurrenceRows)
 # ---------------------------------------------------------------------------
+# Hermes used to read settings["dayTemplates"] and rebuild `day-{i}-{slug}` ids.
+# The v4 migration moved every task into settings["quests"] and left the
+# templates empty, so this agent has been reporting an empty board and 0 XP for
+# any current install. Only two things are mirrored now — how a check id is
+# spelled and which days a quest lands on — and the category rides *inside* the
+# id, so awarding XP needs no second copy of the economy's routing rules.
 
-def _slug(text: str, limit: int) -> str:
-    s = unicodedata.normalize("NFD", str(text).lower().strip())
-    s = re.sub(r"[̀-ͯ]", "", s)
-    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:limit]
-    return s or "item"
-
-
-def task_id(day_index: int, task_text: str) -> str:
-    return f"day-{day_index}-{_slug(task_text, 58)}"
-
-
-def diet_id(text: str) -> str:
-    return f"diet-{_slug(text, 48)}"
-
-
-def proj_id(text: str) -> str:
-    return f"project-{_slug(text, 48)}"
+def quest_check_id(quest, day_index=None) -> str:
+    cat = quest.get("category") or CAT_OF_ATTR.get(quest.get("attr")) or "discipline"
+    base = f"quest-{cat}-{quest.get('id')}"
+    if quest.get("scheduleType") != "weekly" or day_index is None:
+        return base
+    return f"{base}-d{day_index}"
 
 
-def category_for(text: str) -> str:
-    t = str(text).lower()
-    if any(k in t for k in ("workout", "cardio", "weights", "movement", "recovery")):
-        return "training"
-    if "study" in t or "certification" in t:
-        return "study"
-    if "protein" in t or "cook" in t:
-        return "protein"
-    if "project" in t:
-        return "project"
-    return "discipline"
+def quest_occurrences(settings, week_start):
+    """Every (quest, date, check_id) this week, exactly as the app counts them."""
+    rows = []
+    for q in settings.get("quests") or []:
+        if not q or q.get("archived"):
+            continue
+        if q.get("scheduleType") == "weekly":
+            for di in sorted(q.get("repeatDays") or []):
+                rows.append((q, week_start + datetime.timedelta(days=di), quest_check_id(q, di)))
+        else:
+            raw = q.get("scheduledDate")
+            if not raw:
+                continue
+            try:
+                d = datetime.date.fromisoformat(raw)
+            except ValueError:
+                continue
+            if get_week_start(d) == week_start:
+                rows.append((q, d, quest_check_id(q, get_day_index(d))))
+    return rows
+
+
+def quests_on(settings, date):
+    return [r for r in quest_occurrences(settings, get_week_start(date)) if r[1] == date]
 
 
 def get_week_start(date):
@@ -196,20 +184,16 @@ def load_db(config: dict):
     return weeks, settings
 
 
-def get_blueprint(settings):
-    return settings.get("dayTemplates") or DEFAULT_DAILY_BLUEPRINT
-
-
 # ---------------------------------------------------------------------------
-# XP engine (mirror game.js addWeekXp / computeProfile / calculateWeekScoreData)
+# XP engine (mirror of public/modules.js weekXp / weekScore, quest branch)
 # ---------------------------------------------------------------------------
 
 def add_week_xp(week, settings, attr_totals):
+    """Completed quests + logged hours, exactly as the engine awards them."""
     if not week:
         return 0
     checks = week.get("checks", {})
     fields = week.get("fields", {})
-    blueprint = get_blueprint(settings)
     xp = 0
 
     def award(cat, amount):
@@ -219,20 +203,14 @@ def add_week_xp(week, settings, attr_totals):
         if attr is not None:
             attr_totals[attr] = attr_totals.get(attr, 0) + amount
 
-    for i, day in enumerate(DAY_NAMES):
-        for t in blueprint.get(day, []):
-            if checks.get(task_id(i, t)):
-                cat = category_for(t)
-                award(cat, XP_BY_CAT.get(cat, XP_BY_CAT["other"]))
-    for i in range(7):
-        if checks.get(f"workout-{i}"):
-            award("training", XP_BY_CAT["training"])
-    for item in settings.get("dietItems") or DEFAULT_DIET_ITEMS:
-        if checks.get(diet_id(item)):
-            award("protein", XP_BY_CAT["protein"])
-    for item in settings.get("projectChecks") or DEFAULT_PROJECT_CHECKS:
-        if checks.get(proj_id(item)):
-            award("project", XP_BY_CAT["project"])
+    # A quest's check id carries its category — `quest-training-q-abc123-d3` —
+    # so the id alone says which stat the XP feeds. No second routing table.
+    for cid, on in checks.items():
+        if not on or not str(cid).startswith("quest-"):
+            continue
+        m = re.match(r"^quest-([a-z]+)-", str(cid))
+        cat = m.group(1) if m else "discipline"
+        award(cat, XP_BY_CAT.get(cat, XP_BY_CAT["other"]))
 
     study_hours = sum(float(v or 0) for k, v in fields.items() if str(k).startswith("hours-study-"))
     if study_hours > 0:
@@ -243,32 +221,34 @@ def add_week_xp(week, settings, attr_totals):
     return xp
 
 
-def calculate_week_score(week, settings) -> int:
-    if not week or not week.get("checks"):
+def calculate_week_score(week, settings, week_start=None) -> int:
+    """Completion % over the week's scheduled quest occurrences."""
+    rows = quest_occurrences(settings, week_start or get_week_start(datetime.date.today()))
+    if not rows:
         return 0
-    blueprint = get_blueprint(settings)
-    valid = set()
-    for i, day in enumerate(DAY_NAMES):
-        valid.add(f"workout-{i}")
-        for t in blueprint.get(day, []):
-            valid.add(task_id(i, t))
-    checks = week["checks"]
-    done = sum(1 for k in valid if checks.get(k))
-    return round(done / len(valid) * 100) if valid else 0
+    checks = (week or {}).get("checks", {})
+    done = sum(1 for _, _, cid in rows if checks.get(cid))
+    return round(done / len(rows) * 100)
+
+
+def week_start_of_key(key):
+    try:
+        return datetime.date.fromisoformat(key)
+    except (TypeError, ValueError):
+        return None
 
 
 def compute_streak(weeks, settings) -> int:
     grade = settings.get("streakGrade") or 75
-    today = datetime.date.today()
-    wk = get_week_start(today)
+    wk = get_week_start(datetime.date.today())
     streak = 0
     cur = weeks.get(iso(wk))
-    if cur and calculate_week_score(cur, settings) >= grade:
+    if cur and calculate_week_score(cur, settings, wk) >= grade:
         streak += 1
     wk -= datetime.timedelta(days=7)
     while True:
         data = weeks.get(iso(wk))
-        if data and calculate_week_score(data, settings) >= grade:
+        if data and calculate_week_score(data, settings, wk) >= grade:
             streak += 1
             wk -= datetime.timedelta(days=7)
         else:
@@ -277,42 +257,60 @@ def compute_streak(weeks, settings) -> int:
 
 
 BOSSES = [
-    ("Inertia", "🪨", "training", "You won't even start."),
-    ("The Procrastinator", "🦥", "discipline", "Tomorrow, right?"),
-    ("Brain Fog", "🌫️", "study", "Why study? You'll just forget it."),
-    ("The Glutton", "🍔", "protein", "One more cheat day won't hurt…"),
-    ("The Drifter", "🌀", "project", "Busywork feels like progress."),
-    ("Lord Snooze", "😴", "discipline", "Five more minutes. Every morning."),
-    ("Doomscroll Hydra", "🐍", "study", "Just one more scroll…"),
-    ("The Couch Wraith", "👻", "training", "Skip the workout. Stay cozy."),
+    ("Inertia", "\U0001FAA8", "training", "You won't even start."),
+    ("The Procrastinator", "\U0001F9A5", "discipline", "Tomorrow, right?"),
+    ("Brain Fog", "\U0001F32B\uFE0F", "study", "Why study? You'll just forget it."),
+    ("The Glutton", "\U0001F354", "protein", "One more cheat day won't hurt\u2026"),
+    ("The Drifter", "\U0001F300", "project", "Busywork feels like progress."),
+    ("Lord Snooze", "\U0001F634", "discipline", "Five more minutes. Every morning."),
+    ("Doomscroll Hydra", "\U0001F40D", "study", "Just one more scroll\u2026"),
+    ("The Couch Wraith", "\U0001F47B", "training", "Skip the workout. Stay cozy."),
 ]
 BOSS_ATTR = {"discipline": "Discipline", "training": "Body", "study": "Mind", "protein": "Vitality", "project": "Craft"}
 
 
-def compute_boss(weeks, settings):
-    """Mirror of public/app.js Weekly Boss — same roster, hash, and 2x-weakness."""
-    wk_key = iso(get_week_start(datetime.date.today()))
+def resolve_boss(settings, week_key):
+    """Mirror of Forge.resolveBoss — a stored pick wins, then a banked win,
+    then the date hash. Without this the agent announced a different monster
+    from the one on the board, because the app started choosing adaptively."""
+    by_name = {b[0]: b for b in BOSSES}
+    pick = (settings.get("bossPick") or {}).get(week_key)
+    if pick:
+        name = pick if isinstance(pick, str) else pick.get("n")
+        if name in by_name:
+            return by_name[name]
+    won = (settings.get("bossDefeated") or {}).get(week_key)
+    if won in by_name:
+        return by_name[won]
     h = 0
-    for ch in wk_key:
+    for ch in week_key:
         h = (h * 31 + ord(ch)) & 0xFFFFFFFF
-    name, emoji, weak, taunt = BOSSES[h % len(BOSSES)]
+    return BOSSES[h % len(BOSSES)]
+
+
+def compute_boss(weeks, settings):
+    """Mirror of Forge.bossDamage — quest occurrences, weak category at 2x."""
+    week_start = get_week_start(datetime.date.today())
+    wk_key = iso(week_start)
+    name, emoji, weak, taunt = resolve_boss(settings, wk_key)
     checks = (weeks.get(wk_key, {}) or {}).get("checks", {})
-    blueprint = get_blueprint(settings)
-    tot = done = 0
-    for i, day in enumerate(DAY_NAMES):
-        for t in blueprint.get(day, []):
-            w = 2 if category_for(t) == weak else 1
-            tot += w
-            if checks.get(task_id(i, t)):
-                done += w
-        ww = 2 if weak == "training" else 1
-        tot += ww
-        if checks.get(f"workout-{i}"):
-            done += ww
-    dmg = round(done / tot * 100) if tot else 0
+    weak_tot = weak_done = other_tot = other_done = 0
+    for q, _date, cid in quest_occurrences(settings, week_start):
+        cat = q.get("category") or CAT_OF_ATTR.get(q.get("attr")) or "discipline"
+        on = bool(checks.get(cid))
+        if cat == weak:
+            weak_tot += 1
+            weak_done += 1 if on else 0
+        else:
+            other_tot += 1
+            other_done += 1 if on else 0
+    tot = weak_tot * 2 + other_tot
+    dmg = round((weak_done * 2 + other_done) / tot * 100) if tot else 0
     grade = settings.get("streakGrade") or 75
     return {"name": name, "emoji": emoji, "weak": BOSS_ATTR.get(weak, weak),
-            "taunt": taunt, "dmg": dmg, "grade": grade, "defeated": dmg >= grade}
+            "taunt": taunt, "dmg": dmg, "grade": grade, "defeated": dmg >= grade,
+            "weak_left": weak_tot - weak_done,
+            "weak_left_worth": round((weak_tot - weak_done) * 2 / tot * 100) if tot else 0}
 
 
 def compute_profile(weeks, settings) -> dict:
@@ -321,11 +319,16 @@ def compute_profile(weeks, settings) -> dict:
     lifetime = 0
     study_total = 0.0
     best_week = 0
-    for wk in weeks.values():
+    for key, wk in weeks.items():
         lifetime += add_week_xp(wk, settings, attr_totals)
         if wk and wk.get("fields"):
             study_total += sum(float(v or 0) for k, v in wk["fields"].items() if str(k).startswith("hours-study-"))
-        best_week = max(best_week, calculate_week_score(wk, settings))
+        # Score each week against ITS OWN schedule — one-off quests belong to
+        # the week they were scheduled in, so scoring every week against this
+        # week's board would misreport all of them.
+        ws = week_start_of_key(key)
+        if ws:
+            best_week = max(best_week, calculate_week_score(wk, settings, ws))
     lv = level_from_xp(lifetime, base)
     attrs = {a: level_from_xp(attr_totals[a], base)["level"] for a in ATTR_ORDER}
     return {
@@ -344,15 +347,14 @@ def compute_profile(weeks, settings) -> dict:
 
 def evaluate_today(weeks, settings) -> dict:
     today = datetime.date.today()
-    di = get_day_index(today)
-    day = DAY_NAMES[di]
-    tasks = get_blueprint(settings).get(day, [])
+    day = DAY_NAMES[get_day_index(today)]
     week = weeks.get(iso(get_week_start(today)), {})
     checks = week.get("checks", {})
     completed, incomplete = [], []
-    for t in tasks:
-        (completed if checks.get(task_id(di, t)) else incomplete).append(t)
-    total = len(tasks)
+    for q, _date, cid in quests_on(settings, today):
+        title = q.get("title") or "Untitled quest"
+        (completed if checks.get(cid) else incomplete).append(title)
+    total = len(completed) + len(incomplete)
     done = len(completed)
     return {
         "day_name": day, "total": total, "done": done,
@@ -636,18 +638,17 @@ def get_retro_week(weeks, settings):
     wk = weeks.get(iso(start), {"fields": {}, "checks": {}})
     attr = {a: 0 for a in ATTR_ORDER}
     xp = add_week_xp(wk, settings, attr)
-    blueprint = get_blueprint(settings)
+    checks = wk.get("checks", {})
+    by_day = {i: [] for i in range(7)}
+    for _q, date, cid in quest_occurrences(settings, start):
+        by_day[get_day_index(date)].append(bool(checks.get(cid)))
     days = []
     for i, name in enumerate(DAY_NAMES):
-        tasks = blueprint.get(name, [])
-        if not tasks:
-            days.append((name, None))
-        else:
-            done = sum(1 for t in tasks if wk.get("checks", {}).get(task_id(i, t)))
-            days.append((name, round(done / len(tasks) * 100)))
+        marks = by_day[i]
+        days.append((name, round(sum(marks) / len(marks) * 100) if marks else None))
     f = wk.get("fields", {})
     return {
-        "start": start, "score": calculate_week_score(wk, settings), "xp": xp, "attr": attr,
+        "start": start, "score": calculate_week_score(wk, settings, start), "xp": xp, "attr": attr,
         "days": days, "wins": f.get("wins", ""), "misses": f.get("misses", ""),
         "changes": f.get("changes", ""), "grade": f.get("grade", ""),
     }

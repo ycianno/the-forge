@@ -1,94 +1,166 @@
 /* Forge — push reminder sender.
- * Run inside the container on a ~15-min cron. Reads settings.reminders + today's
- * quest completion, and fires a morning "quests waiting" ping and/or an evening
- * "don't break your streak" nudge (only if the day isn't done). Dedupes per day
- * via a small state file; prunes dead subscriptions.
+ *
+ * Fires a morning "quests waiting" ping and an evening "don't break your
+ * streak" nudge, the second one carrying what the weekly boss still stands to
+ * lose. Deduped per day per slot; prunes dead subscriptions as it goes.
+ *
+ * Two ways in, one implementation:
+ *   - server.js calls sendReminders(db) on a timer, so a stock install needs
+ *     no cron and reminders work identically on Docker, bare metal and Windows;
+ *   - `node send-reminders.js` still works for anyone who already wired a cron.
+ *
+ * Every id and every number comes from the engine (public/modules.js). This
+ * file used to rebuild them from a private copy of the old day-template model,
+ * which stopped holding any tasks after the v4 quest migration — so `total`
+ * was always 0, the morning ping permanently claimed the day was empty and the
+ * evening nudge, gated on `total > 0`, could never fire at all.
  */
 const Database = require('better-sqlite3');
 const webpush = require('web-push');
-const fs = require('fs');
 const path = require('path');
+const Forge = require('./public/modules.js');
 
-const WINDOW = 15; // minutes — must match the cron cadence
-const dbPath = process.env.DB_PATH || '/app/data/database.sqlite';
-const STATE = path.join(path.dirname(dbPath), 'reminder-state.json');
+// How late a slot may still fire. A laptop that was asleep at 08:00 should
+// still get the morning ping when it wakes at 09:15 — but not at 16:00.
+const GRACE_MINUTES = 90;
+const STATE_KEY = 'reminder_state';
 
-const db = new Database(dbPath);
-const get = (k) => { const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(k); return r ? r.value : null; };
-
-const pub = get('vapid_public'), priv = get('vapid_private');
-if (!pub || !priv) process.exit(0);
-webpush.setVapidDetails('mailto:forge@example.com', pub, priv);
-
-const settings = JSON.parse(get('app_settings') || '{}');
-const rem = settings.reminders || {};
-if (!rem.enabled) process.exit(0);
-
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const DEFAULT_BLUEPRINT = {
-  Sunday: ["Wake up by 6:00 AM", "Morning cardio or movement", "Shower", "Brush teeth", "Work prep / plan the day", "Work / main responsibility", "Weights or active recovery", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
-  Monday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Tuesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Wednesday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Thursday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Friday: ["Wake up by 6:00 AM", "Workout", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Project work or planning", "Read", "Sleep by 12:00 AM"],
-  Saturday: ["Wake up by 6:00 AM", "Workout or recovery", "Shower", "Brush teeth", "Cook / clean / organize", "2 hours certification study", "Read", "Sleep by 12:00 AM"],
+const getSetting = (db, key) => {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? row.value : null;
 };
-function slug(t) {
-  return String(t).toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 58) || 'task';
+const setSetting = (db, key, value) =>
+  db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value);
+
+const parseJson = (raw, fallback) => {
+  try { return raw ? JSON.parse(raw) : fallback; } catch (_) { return fallback; }
+};
+
+function localIso(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-const taskId = (i, t) => `day-${i}-${slug(t)}`;
-function weekKey(d) {
+function startOfWeek(d) {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   x.setDate(x.getDate() - x.getDay());
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return x;
+}
+function minutesOf(hhmm) {
+  const [h, m] = String(hhmm || '').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
 }
 
-const today = new Date();
-const di = today.getDay();
-const blueprint = settings.dayTemplates || DEFAULT_BLUEPRINT;
-const tasks = blueprint[DAY_NAMES[di]] || [];
-const wkRow = db.prepare('SELECT data FROM weeks WHERE week_key = ?').get(weekKey(today));
-const checks = wkRow ? (JSON.parse(wkRow.data).checks || {}) : {};
-const total = tasks.length;
-const done = tasks.filter((t) => checks[taskId(di, t)]).length;
-const left = total - done;
+// Today's scheduled quests and how many are still open, derived exactly the way
+// the board derives them.
+function todayBoard(settings, week, now) {
+  const quests = Array.isArray(settings.quests) ? settings.quests : [];
+  const checks = (week && week.checks) || {};
+  const rows = Forge.questOccurrenceRows(quests, startOfWeek(now))
+    .filter((row) => localIso(row.date) === localIso(now));
+  const open = rows.filter((row) => !checks[row.id]);
+  return { total: rows.length, done: rows.length - open.length, left: open.length };
+}
 
-const mins = (hhmm) => { const [h, m] = String(hhmm || '').split(':').map(Number); return h * 60 + (m || 0); };
-const nowM = today.getHours() * 60 + today.getMinutes();
-const dateStr = today.toISOString().slice(0, 10);
-let state = {};
-try { state = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (_) {}
+function morningBody(board) {
+  if (!board.total) return "Nothing scheduled today. Add a quest, or take the rest. 🛡️";
+  const n = board.left || board.total;
+  return `${n} quest${n === 1 ? '' : 's'} on today's board. ⚔️`;
+}
 
-const mAt = mins(rem.morning || '08:00');
-const eAt = mins(rem.evening || '19:00');
-let slot = null, body = '', tag = '';
-
-if (nowM >= mAt && nowM < mAt + WINDOW && state.morning !== dateStr) {
-  slot = 'morning'; tag = 'forge-morning';
-  body = total ? `${left > 0 ? left : total} quest${(left > 0 ? left : total) === 1 ? '' : 's'} on today's board. ⚔️` : "A fresh day. Set today's quests.";
-} else if (nowM >= eAt && nowM < eAt + WINDOW && state.evening !== dateStr) {
-  if (total > 0 && left > 0) {
-    slot = 'evening'; tag = 'forge-evening';
-    body = `${left} quest${left === 1 ? '' : 's'} left — don't break your streak. 🔥`;
-  } else {
-    state.evening = dateStr; fs.writeFileSync(STATE, JSON.stringify(state)); process.exit(0);
+// The evening nudge says something only this app can say: what the boss still
+// stands to lose tonight. Falls back to the streak line when the weak front is
+// already clear, or when there is no boss data to speak of.
+function eveningBody(board, dmg) {
+  const left = `${board.left} quest${board.left === 1 ? '' : 's'} left`;
+  if (dmg && dmg.hasQuests && dmg.weakLeft > 0 && dmg.weakLeftWorth > 0) {
+    const attr = Forge.BOSS_ATTR[dmg.boss.weak] || dmg.boss.weak;
+    const n = dmg.weakLeft;
+    return `${left}. ${dmg.boss.name} is on ${Math.max(0, 100 - dmg.dmg)}% HP — ${n} ${attr} quest${n === 1 ? '' : 's'} would take off ${dmg.weakLeftWorth}% more.`;
   }
+  return `${left} — don't break your streak. 🔥`;
 }
-if (!slot) process.exit(0);
 
-const subs = db.prepare('SELECT endpoint, sub FROM push_subscriptions').all();
-const payload = JSON.stringify({ title: 'Forge', body, url: '/', tag });
-Promise.allSettled(subs.map((row) =>
-  webpush.sendNotification(JSON.parse(row.sub), payload).catch((err) => {
-    if (err && (err.statusCode === 404 || err.statusCode === 410)) {
-      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(row.endpoint);
+// Which slot, if any, is due right now. Returns null when nothing should fire,
+// so the caller can exit cheaply on the vast majority of ticks.
+function dueSlot(reminders, state, now) {
+  const nowM = now.getHours() * 60 + now.getMinutes();
+  const today = localIso(now);
+  const due = (at, slot) => {
+    if (state[slot] === today) return false;
+    const target = minutesOf(at);
+    return nowM >= target && nowM < target + GRACE_MINUTES;
+  };
+  if (due(reminders.morning || '08:00', 'morning')) return 'morning';
+  if (due(reminders.evening || '19:00', 'evening')) return 'evening';
+  return null;
+}
+
+async function sendReminders(db, opts) {
+  const now = (opts && opts.now) || new Date();
+  const settings = parseJson(getSetting(db, 'app_settings'), {});
+  const reminders = settings.reminders || {};
+  if (!reminders.enabled) return { sent: 0, slot: null, reason: 'disabled' };
+
+  const pub = getSetting(db, 'vapid_public');
+  const priv = getSetting(db, 'vapid_private');
+  if (!pub || !priv) return { sent: 0, slot: null, reason: 'no-vapid' };
+
+  const state = parseJson(getSetting(db, STATE_KEY), {});
+  const slot = dueSlot(reminders, state, now);
+  if (!slot) return { sent: 0, slot: null, reason: 'not-due' };
+
+  const weekStart = startOfWeek(now);
+  const weekRow = db.prepare('SELECT data FROM weeks WHERE week_key = ?').get(localIso(weekStart));
+  const week = parseJson(weekRow && weekRow.data, { checks: {}, fields: {} });
+  const board = todayBoard(settings, week, now);
+
+  let body;
+  if (slot === 'morning') {
+    body = morningBody(board);
+  } else {
+    // Nothing to nag about — bank the slot so it stays quiet until tomorrow.
+    if (!board.total || !board.left) {
+      state[slot] = localIso(now);
+      setSetting(db, STATE_KEY, JSON.stringify(state));
+      return { sent: 0, slot, reason: 'day-clear' };
     }
-  })
-)).then(() => {
-  state[slot] = dateStr;
-  fs.writeFileSync(STATE, JSON.stringify(state));
-  console.log(`[reminders] ${new Date().toISOString()} ${slot}: ${subs.length} sub(s), ${done}/${total} done`);
-  process.exit(0);
-});
+    const dmg = Forge.bossDamage(week, settings.quests || [], settings, weekStart);
+    body = eveningBody(board, dmg);
+  }
+
+  const subs = db.prepare('SELECT endpoint, sub FROM push_subscriptions').all();
+  if (!subs.length) {
+    state[slot] = localIso(now);
+    setSetting(db, STATE_KEY, JSON.stringify(state));
+    return { sent: 0, slot, reason: 'no-subscribers' };
+  }
+
+  webpush.setVapidDetails('mailto:forge@example.com', pub, priv);
+  const payload = JSON.stringify({ title: 'Forge', body, url: '/', tag: `forge-${slot}` });
+  let sent = 0;
+  await Promise.allSettled(subs.map((row) =>
+    webpush.sendNotification(parseJson(row.sub, null), payload)
+      .then(() => { sent++; })
+      .catch((err) => {
+        if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+          db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(row.endpoint);
+        }
+      })
+  ));
+
+  state[slot] = localIso(now);
+  setSetting(db, STATE_KEY, JSON.stringify(state));
+  return { sent, slot, body, board };
+}
+
+module.exports = { sendReminders, todayBoard, morningBody, eveningBody, dueSlot, GRACE_MINUTES };
+
+if (require.main === module) {
+  const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'database.sqlite');
+  const db = new Database(dbPath);
+  sendReminders(db)
+    .then((r) => {
+      if (r.slot && r.sent) console.log(`[reminders] ${new Date().toISOString()} ${r.slot}: ${r.sent} sent — ${r.body}`);
+      process.exit(0);
+    })
+    .catch((err) => { console.error(`[reminders] ${err.message}`); process.exit(1); });
+}
