@@ -324,3 +324,68 @@ html { scroll-padding-top: 84px; }
 .settings-foot { align-items: center; justify-content: space-between; }
 .settings-autosave { color: var(--muted); font-size: 12px; }
 @media (max-width: 640px) { .settings-autosave { display: none; } }
+
+/* ===========================================================================
+ * MOBILE UX PHASE 3  (added 2026-08)
+ * Cut what a phone cannot use, shrink the oversized controls, and give the
+ * hero one compact week switcher instead of a five-button block.
+ * ======================================================================== */
+@media (max-width: 768px) {
+  /* --- Gone on phones ---------------------------------------------------
+     The 52-week heatmap only fits by scrolling sideways, and the attribute
+     radar is a wide-screen readout. Both push the daily quests further down
+     the page without being usable at this width. */
+  #activity,
+  .char-panel { display: none; }
+
+  /* Trophy tiers stay; "Open cabinet" duplicates the Cabinet tab below it. */
+  .ht-open { display: none; }
+
+  /* "Saved" sits next to the wordmark permanently. Only surface the states
+     that actually want attention (saving / queued / failed). */
+  .save-state[data-state="saved"] { display: none; }
+
+  /* --- Week switcher: one segmented control -----------------------------
+     Was This Week / Prev / Next / Season / Share Card — five 44px buttons
+     wrapping into a block. Now a single row. DOM order is current-prev-next,
+     so flex `order` seats the arrows either side without touching markup.
+     Season and Share Card moved into the More drawer. */
+  .char-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .char-actions button {
+    min-height: 40px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 13px;
+    justify-content: center;
+  }
+  .char-actions .ic { width: 17px; height: 17px; }
+  /* Chevrons alone read as prev/next here; the buttons carry aria-labels. */
+  .char-actions .wk-lbl { display: none; }
+  .char-actions .share-group { display: none; }
+  #prevWeekBtn { order: 1; flex: 0 0 48px; padding: 0; border-right: 1px solid var(--line); }
+  #currentWeekBtn { order: 2; flex: 1 1 auto; font-weight: 700; color: var(--accent-primary); }
+  #nextWeekBtn { order: 3; flex: 0 0 48px; padding: 0; border-left: 1px solid var(--line); }
+
+  /* --- More drawer: denser tiles ---------------------------------------- */
+  .more-drawer .more-grid { gap: 8px; }
+  .more-drawer .more-item {
+    min-height: 62px;
+    gap: 6px;
+    padding: 10px 4px;
+    border-radius: 14px;
+    font-size: 10.5px;
+  }
+  .more-drawer .more-icon { height: 22px; }
+  .more-drawer .more-icon .ic { width: 20px; height: 20px; }
+}

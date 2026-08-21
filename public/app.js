@@ -3100,8 +3100,15 @@ function initMobileTabBar() {
     'moreDietBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('diet'); },
     'moreReviewBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('review'); },
     'moreCalendarBtn': () => { moreDrawer.classList.remove('active'); openCalendar(); },
-    'moreExpandBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = true); },
-    'moreCollapseBtn': () => { moreDrawer.classList.remove('active'); document.querySelectorAll("details.section-card").forEach(d => d.open = false); },
+    'moreSeasonBtn': () => { moreDrawer.classList.remove('active'); openSeason(); },
+    // The hero's Season/Share pair is hidden on phones, so the drawer carries
+    // them instead. shareCard() lives in an extras.js closure reachable only
+    // through its button, so drive that button rather than duplicating it.
+    'moreShareBtn': () => {
+      moreDrawer.classList.remove('active');
+      const btn = document.getElementById('shareCardBtn');
+      if (btn) btn.click();
+    },
   };
   
   Object.entries(moreActions).forEach(([id, handler]) => {
