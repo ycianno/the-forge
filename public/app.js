@@ -3125,15 +3125,9 @@ function initMobileTabBar() {
     }
   });
 
-  // Tapping the dimmed area behind any sheet dismisses it, then re-syncs the
-  // bottom tab to wherever the page is now scrolled.
-  document.querySelectorAll('.modal-backdrop').forEach(bd => {
-    bd.addEventListener('click', (e) => {
-      if (e.target !== bd) return;
-      bd.classList.remove('active');
-      window.dispatchEvent(new Event('scroll'));
-    });
-  });
+  // Backdrop taps are handled once, in initModals() — going through
+  // closeModal() is what releases the page scroll lock and restores focus.
+  // A second handler here used to dismiss the sheet behind its back.
 }
 
 function scrollToSection(id) {
@@ -3258,14 +3252,47 @@ function isModalOpen(id) {
   const md = document.getElementById(id);
   return !!(md && md.classList.contains("active"));
 }
+// Everything focusable inside one dialog, in tab order, ignoring what CSS has
+// hidden (the file input behind "Import Backup", collapsed panes).
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+function focusablesIn(md) {
+  return [...md.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetWidth || el.offsetHeight || el === document.activeElement);
+}
+// Page scroll position and the element that had focus before the first sheet
+// opened — both restored when the last one closes.
+let scrollLockY = 0;
+let preModalFocus = null;
+function lockPageScroll() {
+  if (document.body.classList.contains("modal-open")) return;
+  scrollLockY = window.scrollY || document.documentElement.scrollTop || 0;
+  document.body.style.top = `-${scrollLockY}px`;
+  document.body.classList.add("modal-open");
+}
+function unlockPageScroll() {
+  if (!document.body.classList.contains("modal-open")) return;
+  document.body.classList.remove("modal-open");
+  document.body.style.top = "";
+  // `html { scroll-behavior: smooth }` would animate the restore into view;
+  // put it back exactly where it was, then hand smooth scrolling back.
+  const root = document.documentElement;
+  const prev = root.style.scrollBehavior;
+  root.style.scrollBehavior = "auto";
+  window.scrollTo(0, scrollLockY);
+  root.style.scrollBehavior = prev;
+}
 function openModal(id) {
   const md = document.getElementById(id);
   if (!md) return null;
+  if (!topOpenModal()) preModalFocus = document.activeElement;
+  lockPageScroll();
   md.classList.add("active");
   md.setAttribute("aria-hidden", "false");
   // Focus the first thing worth typing in — never the header's close button,
   // which is earlier in document order but not where anyone wants the caret.
-  const field = md.querySelector(".modal :is(input:not([type=hidden]):not([type=file]):not([disabled]), select, textarea):not(.modal-head *)");
+  // A dialog with nothing to type into still takes focus, or Tab would start
+  // from wherever the page left it and walk straight out of the sheet.
+  const field = md.querySelector(".modal :is(input:not([type=hidden]):not([type=file]):not([disabled]), select, textarea):not(.modal-head *)")
+    || focusablesIn(md)[0];
   if (field) setTimeout(() => { try { field.focus({ preventScroll: true }); } catch (e) {} }, 0);
   return md;
 }
@@ -3274,6 +3301,13 @@ function closeModal(id) {
   if (!md) return;
   md.classList.remove("active");
   md.setAttribute("aria-hidden", "true");
+  if (!topOpenModal()) {
+    unlockPageScroll();
+    if (preModalFocus && document.contains(preModalFocus)) {
+      try { preModalFocus.focus({ preventScroll: true }); } catch (e) {}
+    }
+    preModalFocus = null;
+  }
   window.dispatchEvent(new Event("scroll"));   // re-sync the mobile tab bar
 }
 function topOpenModal() {
@@ -3289,6 +3323,20 @@ function initModals() {
     if (!md) return;
     e.preventDefault();
     if (md.id === "editSectionModal") closeSectionEditor(); else closeModal(md.id);
+  });
+  // Keep Tab inside the frontmost dialog. Without this it walked straight out
+  // into the page behind the sheet, which for a screen-reader or keyboard user
+  // meant the dialog had no edges at all.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const md = topOpenModal();
+    if (!md) return;
+    const items = focusablesIn(md);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    const inside = md.contains(document.activeElement);
+    if (e.shiftKey && (!inside || document.activeElement === first)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (!inside || document.activeElement === last)) { e.preventDefault(); first.focus(); }
   });
   document.addEventListener("click", (e) => {
     if (!e.target.classList || !e.target.classList.contains("modal-backdrop")) return;
@@ -3889,10 +3937,18 @@ function renderTrends() {
 }
 
 function bindEvents() {
+  // One save path per control type. A checkbox fires BOTH `input` and `change`,
+  // so a listener on each ran the entire live update twice on the app's most
+  // common interaction — twice the work on every tick of every task. `input`
+  // now owns what you type into (debounced, so a keystroke never pays for a
+  // widget refresh); `change` owns what you pick (immediate, so the XP pop
+  // still feels instant). Nothing carrying [data-save] is a date or time
+  // field, which are the controls whose input/change support varies.
+  const PICKED = new Set(["checkbox", "radio", "select-one", "select-multiple"]);
   document.addEventListener("input", e => {
-    if (!e.target.matches("[data-save]")) return;
+    if (!e.target.matches("[data-save]") || PICKED.has(e.target.type)) return;
     saveWeekField(e.target);
-    if (e.target.type === "checkbox") updateLive(); else updateLiveSoon();
+    updateLiveSoon();
   });
   // Linked daily-task proxy → writes the section's shared check id (counts once).
   document.addEventListener("change", e => {
@@ -3916,7 +3972,9 @@ function bindEvents() {
     if (e.target.id === "onboardSkip") startBlank();
   });
   document.addEventListener("change", e => {
-    if (e.target.matches("[data-save]")) { saveWeekField(e.target); updateLive(); }
+    if (!e.target.matches("[data-save]") || !PICKED.has(e.target.type)) return;
+    saveWeekField(e.target);
+    updateLive();
   });
   // A Quest Log tile is a link to the pursuit it reports on.
   document.addEventListener("click", e => {

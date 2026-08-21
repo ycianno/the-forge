@@ -388,8 +388,13 @@
     // "Load sample data" inside the first-run "Choose your path" onboarding.
     var ob = document.getElementById("onboardSample");
     if (ob) ob.onclick = function () {
-      var md = document.getElementById("onboardModal");
-      if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); }
+      // Through the controller, not around it — closeModal() is what releases
+      // the page scroll lock the sheet took when it opened.
+      if (typeof closeModal === "function") closeModal("onboardModal");
+      else {
+        var md = document.getElementById("onboardModal");
+        if (md) { md.classList.remove("active"); md.setAttribute("aria-hidden", "true"); }
+      }
       loadSampleData();
     };
     showDefaultPasswordBanner();

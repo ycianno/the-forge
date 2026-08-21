@@ -5,7 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Login · The Forge</title>
   <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
-  <link rel="stylesheet" href="style.css?v=23" />
+  <!-- The auth pages need tokens (themes + fonts), base (body, .glass, .brand,
+       .orb, button) and components (input). They deliberately reuse the app's
+       own sheets rather than a private copy — same files, same cache entries,
+       so this page can never drift out of the theme again. -->
+  <link rel="stylesheet" href="css/01-tokens.css?v=2" />
+  <link rel="stylesheet" href="css/02-base.css?v=1" />
+  <link rel="stylesheet" href="css/03-components.css?v=2" />
   <style>
     body { display: grid; place-items: center; }
     .login-box { width: 100%; max-width: 400px; padding: 40px; text-align: center; }

@@ -169,6 +169,11 @@ tr:hover td { background: rgba(255,255,255,0.04); }
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .modal-backdrop.active { opacity: 1; visibility: visible; pointer-events: auto; }
+/* Page scroll lock while any sheet is open. `overflow: hidden` on <html> is
+   not enough on iOS — the body scrolls behind the sheet anyway — so the body
+   is pinned and offset by the scroll position openModal() recorded, which
+   openModal/closeModal restore exactly. */
+body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }
 .modal { padding: 32px; width: 100%; max-width: 500px; transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); max-height: 90vh; overflow-x: hidden; overflow-y: auto; }
 .modal-backdrop.active .modal { transform: scale(1); }
 .modal h3 { margin-bottom: 16px; }

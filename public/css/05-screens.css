@@ -842,7 +842,16 @@
   .check .quest-source-badge, .check .task-kind-badge { font-size: 9px; padding: 3px 7px; }
   .check .quest-source-badge { max-width: none; letter-spacing: .03em; }
   .check .task-kind-badge.is-once { padding: 3px; }
-  .quest-row { padding: 8px; }
+  /* A plan row is three bands on a phone: title, then the day chips, then
+     schedule + actions. Without wrap it stays one line, the actions lay out
+     past the right edge, and `overflow: hidden` on the row silently clips
+     them — so reordering or editing a task from inside its pursuit's plan was
+     impossible on a phone. The occurrences already ask for a full line below,
+     which is what made the row overflow in the first place. */
+  .quest-row { padding: 8px; flex-wrap: wrap; row-gap: 8px; }
+  .quest-row > .q-text { flex: 1 1 100%; }
+  .quest-row .quest-date-badge { margin-right: auto; }
+  .quest-row-actions { flex: 0 0 auto; }
   .pursuit-plan { padding: 14px; }
   .pursuit-plan-head { flex-direction: column; }
   .pursuit-plan-actions { width: 100%; justify-content: space-between; }

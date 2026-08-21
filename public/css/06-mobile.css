@@ -389,3 +389,18 @@ html { scroll-padding-top: 84px; }
   .more-drawer .more-icon { height: 22px; }
   .more-drawer .more-icon .ic { width: 20px; height: 20px; }
 }
+
+/* ===========================================================================
+ * TOUCH: controls that only existed on hover
+ * ---------------------------------------------------------------------------
+ * Three controls were revealed by :hover, a state a touch screen never enters.
+ * The callsign pencil sat at opacity 0 — tappable but completely invisible, so
+ * on a phone there was no way to discover you could rename your hero at all.
+ * Reveal them wherever hover isn't available; the desktop hover-reveal is
+ * untouched.
+ * ======================================================================== */
+@media (hover: none) {
+  .callsign-edit { opacity: 0.65; }
+  .quest-row-actions { opacity: 1; }
+  .q-inline-edit { color: var(--muted-2); }
+}
