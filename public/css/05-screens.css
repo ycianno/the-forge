@@ -981,6 +981,40 @@
 .stat-name { flex: 1; min-width: 0; }
 .stat-key { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: var(--muted); opacity: 0.6; }
 
+/* ----- plan health: what the week actually asks of you ----- */
+.plan-health {
+  --ph: var(--muted);
+  margin-bottom: 14px; padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--ph) 28%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ph) 7%, transparent);
+}
+.plan-health[data-band="light"]      { --ph: var(--blue); }
+.plan-health[data-band="balanced"]   { --ph: var(--green); }
+.plan-health[data-band="heavy"]      { --ph: var(--amber); }
+.plan-health[data-band="overloaded"] { --ph: var(--red); }
+.ph-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ph-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); }
+.ph-band {
+  font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 99px; color: var(--ph);
+  border: 1px solid color-mix(in srgb, var(--ph) 45%, transparent);
+  background: color-mix(in srgb, var(--ph) 12%, transparent);
+}
+.ph-figures { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--muted); }
+.ph-figures b { font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.ph-bars { display: flex; align-items: flex-end; gap: 6px; height: 46px; margin: 12px 0 8px; }
+.ph-bar { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.ph-bar i { display: block; width: 100%; max-width: 26px; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--ph) 55%, transparent); }
+.ph-bar em { font-style: normal; font-size: 10px; font-weight: 700; color: var(--muted-2); }
+.ph-note, .ph-empty { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.ph-reset {
+  margin-top: 12px; width: 100%; padding: 9px 12px; font-size: 13px; font-weight: 700;
+  border-radius: 10px; border: 1px solid color-mix(in srgb, var(--ph) 45%, transparent);
+  background: color-mix(in srgb, var(--ph) 12%, transparent); color: var(--text);
+}
+.ph-reset:hover { background: color-mix(in srgb, var(--ph) 22%, transparent); border-color: var(--ph); }
+
 .mod-presets { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 .mod-presets-label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
 .mod-presets-row { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -147,6 +147,36 @@
   // A daily task's attribute. Explicit override (settings.taskAttrs, keyed by the
   // task's slug so the same habit shares one attribute across days) wins; default
   // falls back to keyword inference, which equals the legacy XP routing exactly.
+  // How long a task is expected to take. 0 means "not estimated" — never a
+  // guess, so a total built from these is a floor the UI can label honestly.
+  function questMinutesOf(q) {
+    const n = Number(q && q.estMinutes);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+  }
+  // What a week's plan actually asks of you, per day. Drives the plan-health
+  // readout, which exists because a plan can quietly grow past the point where
+  // any day is winnable and nothing in the app used to say so.
+  function planLoad(quests, weekStart) {
+    const perDay = Array.from({ length: 7 }, () => ({ count: 0, minutes: 0, unestimated: 0 }));
+    const rows = questOccurrenceRows(quests, weekStart);
+    rows.forEach((row) => {
+      const day = perDay[row.dayIndex];
+      day.count++;
+      const mins = questMinutesOf(row.q);
+      if (mins) day.minutes += mins; else day.unestimated++;
+    });
+    let heaviest = 0;
+    perDay.forEach((d, i) => { if (d.count > perDay[heaviest].count) heaviest = i; });
+    return {
+      total: rows.length,
+      perDay,
+      average: rows.length / 7,
+      heaviest,
+      minutes: perDay.reduce((n, d) => n + d.minutes, 0),
+      unestimated: perDay.reduce((n, d) => n + d.unestimated, 0),
+    };
+  }
+
   function dailyAttrKey(text) { return slug(text, 58, "task"); }
   function dailyAttr(text, taskAttrs) {
     const k = dailyAttrKey(text);
@@ -318,18 +348,65 @@
   }
 
   // ----- default seed data (mirrors app.js defaults; light generic starter) --
-  const STARTER_DAY = ["Make the bed", "Drink water", "Move your body (walk or workout)", "Eat something healthy", "Read or learn for 20 min", "Tidy one thing", "Plan tomorrow", "Lights out on time"];
+  // BUDGET: a starter day is 5 tasks, 6 on a training day — 40 occurrences in a
+  // week. It used to be 15 a day and 105 a week, which is not a plan, it is a
+  // reason to close the tab: a new hero met a wall of checkboxes and a 0% ring
+  // on day one. The set also overlapped itself — "Move your body (walk or
+  // workout)" sat on the same day as that day's Training session, both worth
+  // +30 Body, and "Drink water" and "Stay hydrated" were the same glass scoring
+  // two different stats. One act should be one checkbox.
+  const STARTER_DAY = ["Make the bed", "Study or read for 20 minutes", "Plan tomorrow"];
   const DEFAULT_BLUEPRINT = {
     Sunday: STARTER_DAY.slice(), Monday: STARTER_DAY.slice(), Tuesday: STARTER_DAY.slice(),
     Wednesday: STARTER_DAY.slice(), Thursday: STARTER_DAY.slice(), Friday: STARTER_DAY.slice(), Saturday: STARTER_DAY.slice(),
   };
+  // Five real sessions, matching the workout target's default of 5. The old
+  // seventh and sixth rows were "Optional Cardio / Recovery" and "Reset / Light
+  // Cardio" — filler that made every day owe you a workout.
   const DEFAULT_WORKOUTS = [
-    ["Monday", "Upper Body / Push-Pull"], ["Tuesday", "Lower Body + Core"], ["Wednesday", "Cardio + Mobility"],
-    ["Thursday", "Upper Body"], ["Friday", "Lower Body + Full Body"], ["Saturday", "Optional Cardio / Recovery"], ["Sunday", "Reset / Light Cardio"],
+    ["Monday", "Upper Body / Push-Pull"], ["Tuesday", "Lower Body + Core"],
+    ["Thursday", "Upper Body"], ["Friday", "Lower Body + Full Body"], ["Saturday", "Cardio + Mobility"],
   ];
-  const DEFAULT_DIET = ["Eat a healthy breakfast", "Hit your protein target", "Stay hydrated", "Eat fruit or vegetables", "Cook instead of takeout", "Plan tomorrow's meals"];
+  const DEFAULT_DIET = ["Hit your protein target", "Cook instead of takeout"];
   const DEFAULT_PROJECT_CHECKS = ["Made progress on a project", "Documented what you did", "Decided the next step"];
-  const DEFAULT_STUDY_AREAS = ["Certification / Course", "Language Learning", "Reading List", "Skill Practice"];
+  const DEFAULT_STUDY_AREAS = ["Certification / Course"];
+
+  // Seeded tasks arrive with a time, so a fresh install actually sees the
+  // agenda: without one every quest falls into "Anytime", the Morning /
+  // Afternoon / Evening bands never render, and the live now-line and overdue
+  // marking have nothing to attach to. Keyed by title — a task the user renames
+  // or writes themselves simply gets no default, which is correct.
+  const SEED_TIMES = {
+    "Make the bed": "07:00",
+    "Hit your protein target": "13:00",
+    "Study or read for 20 minutes": "20:00",
+    "Cook instead of takeout": "19:00",
+    "Plan tomorrow": "21:30",
+    "Upper Body / Push-Pull": "18:00",
+    "Lower Body + Core": "18:00",
+    "Upper Body": "18:00",
+    "Lower Body + Full Body": "18:00",
+    "Cardio + Mobility": "10:00",
+  };
+  // Rough minutes a seeded task takes, so the day can be costed in time rather
+  // than in guilt — "1h 40m left" is a decision you can make at 9pm; "12 left"
+  // is only a number to feel bad about.
+  const SEED_MINUTES = {
+    "Make the bed": 5,
+    "Hit your protein target": 10,
+    "Study or read for 20 minutes": 20,
+    "Cook instead of takeout": 40,
+    "Plan tomorrow": 10,
+    "Upper Body / Push-Pull": 60,
+    "Lower Body + Core": 60,
+    "Upper Body": 60,
+    "Lower Body + Full Body": 60,
+    "Cardio + Mobility": 45,
+  };
+  function seedDefaults(title) {
+    const key = String(title || "").trim();
+    return { dueTime: SEED_TIMES[key] || "", estMinutes: SEED_MINUTES[key] || 0 };
+  }
   const DEFAULT_REVIEW = ["Wins this week", "Missed habits / friction", "What needs to change next week?", "One thing I refuse to drop"];
 
   // ----- migration: build the modules array from current settings ----------
@@ -645,6 +722,7 @@
     PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     BOSSES, BOSS_ATTR, bossKeyHash, bossForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
+    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, planLoad,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });

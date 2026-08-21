@@ -404,3 +404,22 @@ html { scroll-padding-top: 84px; }
   .quest-row-actions { opacity: 1; }
   .q-inline-edit { color: var(--muted-2); }
 }
+
+/* ===========================================================================
+ * TOUCH: reclaim the row from the padding chain
+ * ---------------------------------------------------------------------------
+ * Five nested containers each took a desktop-sized inset — shell 16 margin +
+ * 12 padding, section content 16, day card 14, day content 20 — so on a 375px
+ * phone 78px, a fifth of the screen, was gutter before a task row began. The
+ * title track was left with 91px, which is why titles wrapped to three lines
+ * and the attribute pill squeezed to a bare dot. The row is the content;
+ * everything above it is chrome, and chrome should not outrank it.
+ * ======================================================================== */
+@media (max-width: 640px) {
+  .shell { padding-left: 0; padding-right: 0; }
+  details.section-card > .content { padding-left: 10px; padding-right: 10px; }
+  .metric, .day-card, .calendar-cell { padding-left: 10px; padding-right: 10px; }
+  .day-summary { padding-left: 4px; padding-right: 4px; }
+  .day-content { padding-left: 4px; padding-right: 4px; }
+  .agenda-part { padding-left: 0; padding-right: 0; }
+}

@@ -109,12 +109,12 @@ function seedCustomPlanTasks(m) {
     const kind = (m.target && m.target.kind) || "count";
     days = (kind === "count" && tgt < 7) ? all.slice(0, tgt) : all.slice();
   } else { titles = [m.name]; days = [0]; } // notes (and any other) → weekly reflection
-  titles.forEach((title, order) => settings.quests.push({
+  titles.forEach((title, order) => settings.quests.push(Object.assign({
     id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "",
     repeatDays: days.slice(),
     areaId: m.id, goalId: "", attr, category, order,
     createdAt: new Date().toISOString(), migratedFrom: `${m.idPrefix || m.id}-${order}`
-  }));
+  }, Forge.seedDefaults(title))));
 }
 
 // Drive the section DOM from the module list: apply each module's editable name
@@ -333,6 +333,108 @@ function pursuitIdentityHtml(m) {
     ${colors}
   </div>`;
 }
+// ----- plan health ---------------------------------------------------------
+// A plan grows one reasonable task at a time until no day is winnable, and
+// nothing in the app used to say so. This is the one place that reports what
+// the week actually asks of you.
+const PLAN_BANDS = [
+  { max: 3,        id: "light",      label: "Light",      note: "Room for one more habit if you want it." },
+  { max: 6,        id: "balanced",   label: "Balanced",   note: "A day you can realistically clear." },
+  { max: 9,        id: "heavy",      label: "Heavy",      note: "Clearing every day will be hard to sustain." },
+  { max: Infinity, id: "overloaded", label: "Overloaded", note: "Most days will end unfinished. Consider cutting back." },
+];
+function planBandFor(average) { return PLAN_BANDS.find((b) => average <= b.max); }
+// Stricter than hasLoggedData(): saving a task writes `false` for each of its
+// occurrences, so merely editing a plan creates keys. What matters here is
+// whether anything was ever actually completed or written down.
+function hasCompletedAnything() {
+  const weeks = (database && database.weeks) || {};
+  return Object.keys(weeks).some((key) => {
+    const w = weeks[key];
+    if (w && w.checks && Object.values(w.checks).some(Boolean)) return true;
+    return !!(w && w.fields && Object.values(w.fields).some((v) => String(v == null ? "" : v).trim()));
+  });
+}
+function planHealthHtml() {
+  const load = Forge.planLoad(getUnifiedQuests(), selectedWeekStart);
+  if (!load.total) {
+    return `<div class="plan-health" data-band="light">
+      <div class="ph-head"><span class="ph-title">Plan health</span></div>
+      <p class="ph-empty">No scheduled tasks yet. Pick a preset below, or add tasks inside a pursuit.</p>
+    </div>`;
+  }
+  const avg = load.total / 7;
+  const band = planBandFor(avg);
+  const heaviest = load.perDay[load.heaviest];
+  const dayMins = load.minutes / 7;
+  const costLine = load.minutes
+    ? `about ${fmtDuration(Math.round(dayMins))} a day${load.unestimated ? "+" : ""}`
+    : "no time estimates yet";
+  // Starting over only makes sense while there is nothing to lose. Archiving or
+  // deleting tasks rewrites what past weeks were scored against, so once a
+  // single day is logged this button goes away rather than quietly rewriting
+  // your history.
+  const canReset = !hasCompletedAnything();
+  return `<div class="plan-health" data-band="${band.id}">
+    <div class="ph-head">
+      <span class="ph-title">Plan health</span>
+      <span class="ph-band">${band.label}</span>
+    </div>
+    <div class="ph-figures">
+      <span><b>${load.total}</b> scheduled this week</span>
+      <span><b>${Math.round(avg * 10) / 10}</b> a day</span>
+      <span>${escapeHtml(costLine)}</span>
+    </div>
+    <div class="ph-bars" role="img" aria-label="Tasks per day this week">
+      ${load.perDay.map((d, i) => {
+        const h = Math.max(4, Math.round(d.count / Math.max(1, heaviest.count) * 100));
+        return `<span class="ph-bar" title="${escapeHtml(dayNames()[i])}: ${d.count} task${d.count === 1 ? "" : "s"}"><i style="height:${h}%"></i><em>${DOW_INITIAL[i]}</em></span>`;
+      }).join("")}
+    </div>
+    <p class="ph-note">${escapeHtml(band.note)}${heaviest.count ? ` Heaviest day is ${escapeHtml(dayNames()[load.heaviest])}, with ${heaviest.count}.` : ""}</p>
+    ${canReset ? `<button type="button" class="ph-reset" id="planResetBtn">Start over with a fresh plan</button>` : ""}
+  </div>`;
+}
+// Replace every scheduled task with the starter plan. Only offered while no day
+// has been logged (see planHealthHtml), so nothing historical is at stake.
+async function resetPlanToStarter() {
+  if (hasCompletedAnything()) return;
+  const load = Forge.planLoad(getUnifiedQuests(), selectedWeekStart);
+  if (!confirm(`Replace all ${load.total} scheduled tasks with the starter plan (5 a day, 6 on a training day)?\n\nYour pursuits, targets, goals and theme are kept. You have no logged days, so nothing is lost.`)) return;
+  settings.quests = starterQuests();
+  await persistSettings();
+  renderModulesEditor();
+  renderStructure();
+  applyWeekToUI();
+}
+// The starter plan, built straight from the engine's defaults. Attributes are
+// set per pursuit rather than inferred, because a workout title like "Upper
+// Body" reads as Discipline to the text inference and belongs to Body.
+function starterQuests() {
+  const out = [];
+  const add = (title, extra) => {
+    const t = String(title || "").trim();
+    if (!t) return;
+    out.push(Object.assign({
+      id: forgeId("q"), title: t, scheduleType: "weekly", scheduledDate: "",
+      repeatDays: [0, 1, 2, 3, 4, 5, 6], areaId: "", goalId: "",
+      order: out.length, createdAt: new Date().toISOString(),
+    }, extra, Forge.seedDefaults(t)));
+  };
+  Forge.DEFAULT_BLUEPRINT.Sunday.forEach((title) => {
+    const category = Forge.categoryFor(title);
+    add(title, { attr: Forge.ATTR_OF_CAT[category] || "Discipline", category });
+  });
+  Forge.DEFAULT_DIET.forEach((title) => add(title, { areaId: "diet", attr: "Vitality", category: "protein" }));
+  const days = dayNames().map((d) => d.toLowerCase());
+  Forge.DEFAULT_WORKOUTS.forEach(([dayLabel, title], i) => {
+    let dayIndex = days.indexOf(String(dayLabel).toLowerCase());
+    if (dayIndex < 0) dayIndex = (i + 1) % 7;
+    add(title, { areaId: "workout", attr: "Body", category: "training", repeatDays: [dayIndex] });
+  });
+  return out;
+}
+
 function renderModulesEditor() {
   const wrap = document.getElementById("modulesEditor");
   if (!wrap) return;
@@ -414,7 +516,9 @@ function renderModulesEditor() {
   const presetRow = `<div class="mod-presets"><span class="mod-presets-label">Start from a preset</span><div class="mod-presets-row">`
     + Object.entries(presets).map(([id, p]) => `<button class="mod-preset" type="button" data-preset="${id}" title="${escapeHtml(p.desc)}">${escapeHtml(p.name)}</button>`).join("")
     + `</div></div>`;
-  wrap.innerHTML = presetRow + rows + form;
+  wrap.innerHTML = planHealthHtml() + presetRow + rows + form;
+  const resetBtn = document.getElementById("planResetBtn");
+  if (resetBtn) resetBtn.onclick = resetPlanToStarter;
 }
 // ----- Edit Section modal (custom sections) — reachable from the section's own
 // pencil and from Settings → Sections. Lets the user set name, stat, XP, items,
@@ -886,6 +990,14 @@ function getStartOfWeek(date) {
 function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
 function fmt(date) { return date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 function iso(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+// "45m", "1h", "1h 40m" — never "0h 45m", never a bare minute count over an hour.
+function fmtDuration(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  if (!total) return "";
+  const h = Math.floor(total / 60), m = total % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
 function fmtTime12(timeStr) {
   if (!timeStr || !/^\d{1,2}:\d{2}$/.test(timeStr)) return timeStr || "";
   const [hStr, mStr] = timeStr.split(":");
@@ -1702,6 +1814,7 @@ function migrateQuestModelIfNeeded() {
     if (q.scheduleType === "once" && !q.scheduledDate) { q.scheduledDate = iso(new Date()); changed = true; }
     if (!Array.isArray(q.repeatDays)) { q.repeatDays = []; changed = true; }
     if (q.dueTime === undefined) { q.dueTime = ""; changed = true; }
+    if (q.estMinutes === undefined) { q.estMinutes = 0; changed = true; }
     if (q.areaId === undefined) {
       q.areaId = q.sourceType === "study" ? "study" : q.sourceType === "project" ? "projects" : "";
       q.goalId = (q.sourceType === "study" || q.sourceType === "project") ? (q.sourceId || "") : "";
@@ -1728,7 +1841,7 @@ function migrateQuestModelIfNeeded() {
         const key = [String(title).trim().toLowerCase(), attr, areaId, goalId].join("|");
         let task = routines.get(key);
         if (!task) {
-          task = { id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [], areaId, goalId, attr, category: attrCat(attr), order: settings.quests.length + routines.size, createdAt: new Date().toISOString() };
+          task = Object.assign({ id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [], areaId, goalId, attr, category: attrCat(attr), order: settings.quests.length + routines.size, createdAt: new Date().toISOString() }, Forge.seedDefaults(title));
           routines.set(key, task);
           settings.quests.push(task);
         }
@@ -1768,14 +1881,14 @@ function migrateQuestModelIfNeeded() {
       if (!title) return;
       let dayIndex = names.findIndex((d) => d === dayLabel.toLowerCase());
       if (dayIndex < 0) dayIndex = (legacyIndex + 1) % 7;
-      const task = { id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [dayIndex], areaId: "workout", goalId: "", attr: "Body", category: "training", order: settings.quests.filter((q) => q.areaId === "workout" && !q.goalId).length, createdAt: new Date().toISOString(), migratedFrom: `workout-${legacyIndex}` };
+      const task = Object.assign({ id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [dayIndex], areaId: "workout", goalId: "", attr: "Body", category: "training", order: settings.quests.filter((q) => q.areaId === "workout" && !q.goalId).length, createdAt: new Date().toISOString(), migratedFrom: `workout-${legacyIndex}` }, Forge.seedDefaults(title));
       settings.quests.push(task);
       migrated.push({ kind: "workout", legacyIndex, dayIndex, task });
     });
     provisionPlan.forEach((title, legacyIndex) => {
       title = String(title || "").trim();
       if (!title) return;
-      const task = { id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [0,1,2,3,4,5,6], areaId: "diet", goalId: "", attr: "Vitality", category: "protein", order: settings.quests.filter((q) => q.areaId === "diet" && !q.goalId).length, createdAt: new Date().toISOString(), migratedFrom: `diet-${slugify(title)}` };
+      const task = Object.assign({ id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", repeatDays: [0,1,2,3,4,5,6], areaId: "diet", goalId: "", attr: "Vitality", category: "protein", order: settings.quests.filter((q) => q.areaId === "diet" && !q.goalId).length, createdAt: new Date().toISOString(), migratedFrom: `diet-${slugify(title)}` }, Forge.seedDefaults(title));
       settings.quests.push(task);
       migrated.push({ kind: "diet", legacyIndex, dayIndex: 0, legacyId: dietId(title), task });
     });
@@ -2293,6 +2406,7 @@ function openQuestEditor(opts) {
   document.getElementById("questAttr").innerHTML = attrs.map((a) => `<option value="${a}"${selectedAttr === a ? " selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
   renderQuestWeekdays(q ? q.repeatDays : (opts.days || []));
   document.getElementById("questDueTime").value = q ? (q.dueTime || "") : (opts.dueTime || "");
+  document.getElementById("questEstMinutes").value = (q && q.estMinutes) ? q.estMinutes : "";
   document.getElementById("deleteQuestBtn").style.display = q ? "" : "none";
   syncQuestScheduleFields();
   syncQuestAttrToSource();
@@ -2322,6 +2436,7 @@ async function saveQuestEditor() {
   const scheduledDate = document.getElementById("questDate").value;
   const repeatDays = [...document.querySelectorAll("#questWeekdays input:checked")].map((el) => Number(el.value));
   const dueTime = document.getElementById("questDueTime").value || "";
+  const estMinutes = Math.max(0, Math.min(600, Number(document.getElementById("questEstMinutes").value) || 0));
   if (!title) { document.getElementById("questTitle").focus(); return; }
   if (scheduleType === "once" && !scheduledDate) { document.getElementById("questDate").focus(); return; }
   if (scheduleType === "weekly" && !repeatDays.length) { alert("Choose at least one day for this weekly routine."); return; }
@@ -2331,7 +2446,7 @@ async function saveQuestEditor() {
   const old = current ? Object.assign({}, current) : null;
   const siblingCount = getUnifiedQuests().filter((q) => q.areaId === ctx.areaId && q.goalId === ctx.goalId).length;
   const next = current || { id: forgeId("q"), createdAt: new Date().toISOString(), order: siblingCount };
-  Object.assign(next, { title, scheduleType, scheduledDate: scheduleType === "once" ? scheduledDate : "", repeatDays: scheduleType === "weekly" ? repeatDays : [], areaId: ctx.areaId, goalId: ctx.goalId, attr, category: attrCat(attr), dueTime, updatedAt: new Date().toISOString() });
+  Object.assign(next, { title, scheduleType, scheduledDate: scheduleType === "once" ? scheduledDate : "", repeatDays: scheduleType === "weekly" ? repeatDays : [], areaId: ctx.areaId, goalId: ctx.goalId, attr, category: attrCat(attr), dueTime, estMinutes, updatedAt: new Date().toISOString() });
   if (!current) settings.quests.push(next);
   const carried = new Map(), carriedNotes = new Map(), touched = new Set();
   if (old) {
@@ -2551,7 +2666,8 @@ function renderDays() {
         const context = questContextLabel(q);
         // Two axes, no overlap: the icon says which pursuit, the pill says which
         // attribute the XP feeds — and the pill's colour finally matches its label.
-        const rowTitle = `${context || "Daily task"} · trains ${attrName(attr)} · ${q.scheduleType === "weekly" ? "weekly routine" : "one-time task"}`;
+        const est = Forge.questMinutesOf(q);
+        const rowTitle = `${context || "Daily task"} · trains ${attrName(attr)} · ${q.scheduleType === "weekly" ? "weekly routine" : "one-time task"}${est ? ` · about ${fmtDuration(est)}` : ""}`;
         const timeCell = min == null
           ? `<span class="q-time is-untimed">Anytime</span>`
           : `<span class="q-time">${escapeHtml(fmtTime12(q.dueTime))}</span>`;
@@ -2797,12 +2913,22 @@ function updateProgress() {
     const bar = document.getElementById(`dayBar-${d}`);
     if (badge) badge.textContent = `${dayDone}/${items.length}`;
     if (bar) bar.style.width = p + "%";
-    // "3 left · 62 xp" — what the day still owes you, not just what it holds.
+    // What the day still owes you. In minutes when the open tasks are costed —
+    // "3 left · 1h 40m" is a decision you can make at 9pm, where "3 left" is
+    // only a number to feel bad about. Falls back to XP when nothing is
+    // estimated, and marks the total a floor when only some tasks are.
     const left = document.getElementById(`dayLeft-${d}`);
     if (left) {
       const open = items.filter((row) => !_wk.checks[row.id]);
-      const xpLeft = open.reduce((sum, row) => sum + ((window.Game && Game.xpForCat) ? Game.xpForCat(row.q.category || attrCat(row.q.attr || "Discipline")) : 10), 0);
-      left.textContent = !items.length ? "" : open.length ? `${open.length} left · ${xpLeft} xp` : "Cleared";
+      const mins = open.reduce((sum, row) => sum + Forge.questMinutesOf(row.q), 0);
+      const uncosted = open.filter((row) => !Forge.questMinutesOf(row.q)).length;
+      let cost;
+      if (mins) cost = fmtDuration(mins) + (uncosted ? "+" : "");
+      else cost = `${open.reduce((sum, row) => sum + ((window.Game && Game.xpForCat) ? Game.xpForCat(row.q.category || attrCat(row.q.attr || "Discipline")) : 10), 0)} xp`;
+      left.textContent = !items.length ? "" : open.length ? `${open.length} left · ${cost}` : "Cleared";
+      left.title = !items.length || !open.length ? "" : uncosted && mins
+        ? `${uncosted} of ${open.length} open tasks have no time estimate, so the real total is higher.`
+        : "";
       left.classList.toggle("is-clear", items.length > 0 && !open.length);
     }
   }

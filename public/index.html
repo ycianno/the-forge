@@ -17,8 +17,8 @@
   <link rel="stylesheet" href="css/02-base.css?v=1" />
   <link rel="stylesheet" href="css/03-components.css?v=2" />
   <link rel="stylesheet" href="css/04-responsive.css?v=1" />
-  <link rel="stylesheet" href="css/05-screens.css?v=10" />
-  <link rel="stylesheet" href="css/06-mobile.css?v=3" />
+  <link rel="stylesheet" href="css/05-screens.css?v=11" />
+  <link rel="stylesheet" href="css/06-mobile.css?v=4" />
 </head>
 <body>
   <main class="shell">
@@ -557,7 +557,9 @@
           <div><label class="label" for="questSource">Pursuit</label><select id="questSource"></select></div>
           <div class="form-span" id="questOnceFields"><label class="label" for="questDate">Do on</label><input id="questDate" type="date"></div>
           <div class="form-span" id="questWeeklyFields" style="display:none;"><label class="label">Repeat on</label><div class="weekday-picker" id="questWeekdays"></div></div>
-          <div class="form-span"><label class="label" for="questDueTime">Time</label><input id="questDueTime" type="time" placeholder="e.g. 06:00"><p class="hint">Optional. Scheduled time for this quest (shows on your calendar & Apple Reminders).</p></div>
+          <div><label class="label" for="questDueTime">Time</label><input id="questDueTime" type="time" placeholder="e.g. 06:00"></div>
+          <div><label class="label" for="questEstMinutes">Takes about (min)</label><input id="questEstMinutes" type="number" min="0" max="600" step="5" placeholder="minutes"></div>
+          <p class="hint form-span" style="margin-top:-8px;">Both optional. A time places the task in your day and syncs to Apple Reminders; an estimate lets a day report how much is left in minutes, not just how many boxes.</p>
           <div class="form-span"><label class="label" for="questAttr">Attribute</label><select id="questAttr"></select><p class="hint quest-attr-hint" id="questAttrHint">Tasks inside a pursuit automatically train that pursuit's attribute.</p></div>
         </div>
         <div class="modal-actions split-actions">
@@ -703,10 +705,10 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="modules.js?v=17"></script>
+  <script src="modules.js?v=19"></script>
   <script src="game.js?v=33"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=81"></script>
+  <script src="app.js?v=83"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>
