@@ -1912,6 +1912,44 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 /* A fight has a clock. On a Friday this is the most useful line on the card. */
 .boss-clock { font-weight: 800; color: var(--muted-2); white-space: nowrap; letter-spacing: .04em; }
 .boss-clock.is-urgent { color: var(--heat-4); text-shadow: 0 0 10px var(--heat-glow); }
+/* Work you did while you were not looking at Week. The bar sits where you left
+   it until you land these by hand — the outcome was decided by the work, the
+   swing is yours. Only ever shown for damage already earned. */
+.boss-fight { margin-top: 10px; }
+.boss-fight[hidden] { display: none; }
+.bf-strike {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px 7px 8px; border-radius: var(--r-pill);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--heat-2) 55%, transparent), color-mix(in srgb, var(--heat-4) 30%, transparent));
+  border: 1px solid color-mix(in srgb, var(--heat-4) 46%, transparent);
+  color: var(--text);
+  animation: bf-waiting 2.4s ease-in-out infinite;
+}
+.bf-strike:hover { filter: brightness(1.12); border-color: var(--heat-4); }
+.bf-n {
+  display: inline-grid; place-items: center; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--heat-4); color: #1a1005;
+  font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-sm);
+}
+.bf-t { font-size: var(--t-2xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.bf-strike .ic { width: 15px; height: 15px; flex: 0 0 auto; fill: currentcolor; stroke: none; }
+@keyframes bf-waiting {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 0 18px 2px var(--heat-glow); }
+}
+/* With blows waiting the portrait is the other place you can hit. */
+.boss-card.has-blows .boss-arena { cursor: pointer; }
+.boss-card.has-blows .boss-arena::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1.5px dashed color-mix(in srgb, var(--heat-4) 55%, transparent);
+  animation: bf-ring 3s linear infinite;
+  pointer-events: none;
+}
+@keyframes bf-ring { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .bf-strike, .boss-card.has-blows .boss-arena::after { animation: none; }
+}
+
 /* Name the quests that would end it. "Three left" and "these three" are
    different sentences, and only one of them tells you what to go and do. */
 .boss-finisher { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 9px; }

@@ -3459,6 +3459,10 @@ function updateLive() {
   updateProgress();
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
+  if (currentView === "week" && !bossPending) {
+    const bd = computeBossDamage();
+    setBossSeen(bd.dmg, bd.weakDone + bd.otherDone);
+  }
   renderBoss();
   if (currentView === "week") renderWeekPulse();
   renderSidebarLive();   // level, streak and boss HP follow the same data
@@ -4436,7 +4440,10 @@ function routeTo(view, opts) {
   }
   if (next === "today") { initTodayModes(); syncAnvil({ snap: true }); }
   else if (window.ForgeStage) ForgeStage.stop();
-  if (next === "week") renderWeekPulse();
+  // Arming has to be followed by a paint: routeTo() does not run updateLive(),
+  // so without this the queue existed and the card never said so.
+  if (next === "week") { armBossFight(); renderBoss(); renderWeekPulse(); }
+  else if (bossPending) settleBossFight();
   if (next === "pursuits") { initPlanHead(); renderPlanHead(); }
   if (next !== "character" && window.Effigy) Effigy.stop();
   if (changed) {
@@ -5172,6 +5179,95 @@ function bossFinishers(limit) {
   return out.slice(0, limit || 3);
 }
 
+// ===== THE FIGHT =====
+// The boss's health is derived from the quests you have completed and that does
+// not change here — it must not, or the bestiary, the trophies and the defeat
+// record all start disagreeing with the week.
+//
+// What changes is the delivery. Work you did while you were not looking at Week
+// used to be applied silently: you arrived and the bar was simply lower. Now
+// the bar starts where you left it and you land those blows by hand, one tap
+// each. The outcome was already decided by the work; the swing is yours.
+//
+// Three rules keep this honest:
+//   1. It only ever replays damage you have ALREADY earned.
+//   2. Blows landed while you are in the room still apply immediately, exactly
+//      as before — the queue is only for what happened while you were away.
+//   3. Leaving the room settles the queue to the truth, so the stored marker
+//      can never persist as a lie about a week.
+const BOSS_MAX_BLOWS = 8;   // a barrage, not a chore, when a whole day landed
+let bossPending = null;     // display only: { from, to, blows, left, shown }
+
+// The marker lives in memory, not in settings. It was in settings first, and a
+// settings reload landing between arming and looking wiped it — the queue armed
+// against a marker that no longer existed and silently reset itself to the
+// truth. A view marker has no business depending on a server round-trip: it
+// describes what THIS session has already shown you, and losing it costs a
+// flourish rather than any data. Settings still carries a copy so a reload
+// mid-week does not replay the whole week, but memory always wins.
+const bossSeenMem = {};
+function bossSeenKey() { return iso(selectedWeekStart); }
+function getBossSeen() {
+  const key = bossSeenKey();
+  if (bossSeenMem[key]) return bossSeenMem[key];
+  const stored = ((settings && settings.bossSeen) || {})[key];
+  if (stored) bossSeenMem[key] = stored;
+  return bossSeenMem[key] || null;
+}
+function setBossSeen(dmg, done) {
+  const key = bossSeenKey();
+  const mark = { d: dmg, n: done };
+  bossSeenMem[key] = mark;
+  if (!settings.bossSeen) settings.bossSeen = {};
+  settings.bossSeen[key] = mark;
+  // Only the weeks you have actually looked at, and only the last dozen —
+  // this is a view marker, not history, and it should not grow forever.
+  const keys = Object.keys(settings.bossSeen).sort();
+  while (keys.length > 12) delete settings.bossSeen[keys.shift()];
+  persistSettingsSoon();
+}
+
+// Called when Week comes on screen. Anything earned since the last look becomes
+// a queue of blows to land.
+function armBossFight() {
+  const d = computeBossDamage();
+  const done = d.weakDone + d.otherDone;
+  const seen = getBossSeen();
+  if (!seen) { setBossSeen(d.dmg, done); bossPending = null; return; }
+  const gained = done - seen.n;
+  if (gained <= 0 || d.dmg <= seen.d) {
+    bossPending = null;
+    if (d.dmg !== seen.d || done !== seen.n) setBossSeen(d.dmg, done);
+    return;
+  }
+  const blows = Math.max(1, Math.min(BOSS_MAX_BLOWS, gained));
+  bossPending = { from: seen.d, to: d.dmg, blows, left: blows, shown: seen.d, done };
+}
+// Land one. The bar walks toward the truth in equal steps and arrives exactly
+// on it — never past, so the resting state is always the derived number.
+function landBossBlow() {
+  if (!bossPending || bossPending.left <= 0) return;
+  bossPending.left--;
+  const p = 1 - bossPending.left / bossPending.blows;
+  bossPending.shown = bossPending.from + (bossPending.to - bossPending.from) * p;
+  const panel = document.getElementById("boss");
+  const step = Math.round((bossPending.to - bossPending.from) / bossPending.blows);
+  if (panel && window.FX && FX.bossHit) {
+    FX.bossHit({ from: panel, damage: Math.max(1, step), weak: bossPending.left === 0 });
+  }
+  if (bossPending.left <= 0) settleBossFight();
+  else renderBoss();
+}
+// Take the queue off the board and write the truth down. Called when the last
+// blow lands and again on leaving the room, so an abandoned queue costs nothing.
+function settleBossFight() {
+  if (!bossPending) return;
+  const d = computeBossDamage();
+  setBossSeen(d.dmg, d.weakDone + d.otherDone);
+  bossPending = null;
+  renderBoss();
+}
+
 function renderBoss() {
   const panel = document.getElementById("boss");
   if (!panel) return;
@@ -5212,10 +5308,21 @@ function renderBoss() {
       huntEl.hidden = true;
     }
   }
+  // Ticking a task in the board below while blows are still queued moves the
+  // truth out from under the queue. Extend the target rather than letting the
+  // bar walk confidently to a number that stopped being right.
+  if (bossPending && dmg > bossPending.to) {
+    bossPending.to = dmg;
+    bossPending.left++;
+    bossPending.blows++;
+  }
+  // While blows are queued the bar sits where you left it and walks down as you
+  // land them. With nothing queued it is the derived number, always.
+  const shownDmg = bossPending ? Math.min(bossPending.shown, dmg) : dmg;
   const fill = document.getElementById("bossHpFill");
   if (fill) {
-    const hp = Math.max(0, Math.round((1 - dmg / grade) * 100));
-    const target = defeated ? 100 : hp;
+    const hp = Math.max(0, Math.round((1 - shownDmg / grade) * 100));
+    const target = defeated && !bossPending ? 100 : hp;
     // On a landed hit the bar overshoots past the new value and settles back —
     // that recoil is the difference between "a bar updated" and "that hurt".
     // Every other render (a keystroke, a re-paint) just sets the width.
@@ -5266,6 +5373,24 @@ function renderBoss() {
     clock.classList.toggle("is-urgent", !defeated && left >= 0 && left <= 1);
   }
 
+  // The invitation. Only shown when there is something genuinely earned and
+  // unlanded — never as a nag, and never for work you have not already done.
+  const fight = document.getElementById("bossFight");
+  if (fight) {
+    if (bossPending && bossPending.left > 0) {
+      const n = bossPending.left;
+      fight.innerHTML = `<button class="bf-strike" id="bossStrikeBtn" type="button">` +
+        `<span class="bf-n">${n}</span><span class="bf-t">blow${n === 1 ? "" : "s"} waiting — strike</span>` +
+        `<svg viewBox="0 0 24 24" class="ic"><path d="M13 2 3 14h8l-1 8 10-12h-8z"/></svg></button>`;
+      fight.hidden = false;
+      panel.classList.add("has-blows");
+    } else {
+      fight.innerHTML = "";
+      fight.hidden = true;
+      panel.classList.remove("has-blows");
+    }
+  }
+
   // Name the quests that would end it, not just how many there are.
   const fin = document.getElementById("bossFinisher");
   if (fin) {
@@ -5284,7 +5409,7 @@ function renderBoss() {
   // health, so a boss you have barely touched glowers and a beaten one is ash.
   const arena = panel.querySelector(".boss-arena");
   if (arena) {
-    const hpLeft = defeated ? 0 : Math.max(0, Math.round((1 - dmg / grade) * 100));
+    const hpLeft = (defeated && !bossPending) ? 0 : Math.max(0, Math.round((1 - shownDmg / grade) * 100));
     arena.style.setProperty("--hp", hpLeft + "%");
     arena.classList.toggle("is-hurt", !defeated && hpLeft < 50);
     if (bossGained) {
@@ -5301,7 +5426,7 @@ function renderBoss() {
   const isThisWeek = key === iso(getStartOfWeek(new Date()));
   const first = !settings.bossDefeated;
   if (!settings.bossDefeated) settings.bossDefeated = {};
-  if (defeated && !settings.bossDefeated[key]) {
+  if (defeated && !bossPending && !settings.bossDefeated[key]) {
     settings.bossDefeated[key] = boss.name;
     if (typeof persistSettingsSoon === "function") persistSettingsSoon();
     if (!first && isThisWeek && window.FX && FX.bossDefeated) FX.bossDefeated(boss.name);
@@ -5943,6 +6068,15 @@ function bindEvents() {
     if (selectedDayIso === cell.dataset.date) { closeDayInsights(); return; }
     openDayInsights(date, dayPctInfo(date));
   });
+  // Landing a blow: the button, or the boss itself. Delegated from the card,
+  // because renderBoss() replaces the button's markup on every paint.
+  const bossCard = document.getElementById("boss");
+  if (bossCard) bossCard.addEventListener("click", (e) => {
+    if (!bossPending || bossPending.left <= 0) return;
+    if (!e.target.closest("#bossStrikeBtn") && !e.target.closest(".boss-arena")) return;
+    landBossBlow();
+  });
+
   // A cell in the pulse is a door into that day's card on the board below.
   const wpDays = document.getElementById("wpDays");
   if (wpDays) wpDays.addEventListener("click", (e) => {

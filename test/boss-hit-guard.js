@@ -19,16 +19,46 @@ const path = require("path");
 
 const APP = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf8");
 
-// ---- the call site exists, exactly once -----------------------------------
+// ---- the call sites exist, and there are exactly two ----------------------
+// Two, and only two, because each one is separately proved below. A third
+// appearing without its own proof is exactly the regression this file is for.
 const calls = APP.match(/FX\.bossHit\(/g) || [];
-assert.equal(calls.length, 1, "expected exactly one FX.bossHit() call site, found " + calls.length);
+assert.equal(calls.length, 2, "expected exactly two FX.bossHit() call sites, found " + calls.length);
 
-// ---- and it is guarded ----------------------------------------------------
+// ---- site 1: the automatic hit, guarded by a real increase ----------------
 // The call must be preceded on the same statement by the bossGained condition.
 const guarded = /if\s*\(\s*bossGained\s*&&[^)]*\)\s*\{[\s\S]{0,200}?FX\.bossHit\(/;
 assert.ok(guarded.test(APP),
   "FX.bossHit() is no longer inside an `if (bossGained && ...)` guard — it would " +
   "fire on every debounced keystroke");
+
+// ---- site 2: the hand-landed blow, guarded by a queued blow ---------------
+// landBossBlow() is only ever reached from a click, but "only ever" is what
+// every regression in this file's history believed about itself. The function
+// must refuse to do anything without a queued blow, and it must decrement that
+// queue — otherwise one click could fire the effect forever.
+const lbb = APP.slice(APP.indexOf("function landBossBlow()"));
+const lbbEnd = lbb.indexOf("\n}\n");
+const lbbFn = lbb.slice(0, lbbEnd === -1 ? lbb.length : lbbEnd);
+
+assert.ok(lbbFn.indexOf("FX.bossHit(") !== -1,
+  "the second FX.bossHit() call site is not inside landBossBlow() — if it moved, " +
+  "whatever it moved into needs its own guard and its own assertion here");
+assert.ok(/^\s*if\s*\(\s*!bossPending\s*\|\|\s*bossPending\.left\s*<=\s*0\s*\)\s*return;/m.test(lbbFn),
+  "landBossBlow() must bail out when there is no queued blow, or a click could " +
+  "fire a hit against a boss that has taken no damage");
+assert.ok(/bossPending\.left--/.test(lbbFn),
+  "landBossBlow() must consume a blow from the queue, or one click fires forever");
+
+// ---- the queue only ever replays damage already earned --------------------
+// This is the honesty rule for the whole mechanic: the bar may lag behind the
+// derived number while blows are waiting, but it must never lead it.
+const arm = APP.slice(APP.indexOf("function armBossFight()"));
+const armEnd = arm.indexOf("\n}\n");
+const armFn = arm.slice(0, armEnd === -1 ? arm.length : armEnd);
+assert.ok(/gained\s*<=\s*0\s*\|\|\s*d\.dmg\s*<=\s*seen\.d/.test(armFn),
+  "armBossFight() must refuse to queue blows unless BOTH the completed count and " +
+  "the damage have risen — otherwise the bar could be walked down past the truth");
 
 // ---- the baseline is what makes the guard meaningful ----------------------
 const body = APP.slice(APP.indexOf("function renderBoss()"));
