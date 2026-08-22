@@ -3233,10 +3233,13 @@ function viewEl(id) { return document.getElementById(`view-${id}`); }
 // Which view a section id belongs to. Pursuit sections are whatever the module
 // list currently says they are, so a custom pursuit lands in the right place
 // without this map knowing about it.
+// Every section has exactly one horizon. Daily is the single exception: it is
+// the same board in two sizes — one card in Today, seven in Week — and routeTo()
+// re-homes the node so there is never a second copy of a day's ids in the page.
 function viewOfSection(id) {
   if (id === "daily") return currentView === "week" ? "week" : "today";
-  if (id === "boss") return "today";
-  if (id === "scoreboard" || id === "activity") return "week";
+  if (id === "boss" || id === "scoreboard" || id === "review") return "week";
+  if (id === "activity") return "month";
   return "pursuits";
 }
 
@@ -3268,15 +3271,40 @@ function buildViewShell() {
   shell.insertBefore(frame, hero || shell.firstElementChild);
 
   const move = (view, node) => { if (node) viewEl(view).appendChild(node); };
-  // Today: what you came to do, then what it is worth beating.
+  // Today: the day's work, and nothing that is about any other day.
   move("today", document.getElementById("questsHub"));
   move("today", document.getElementById("daily"));
-  move("today", document.getElementById("boss"));
-  // Week: who you are, how the week is going, and the whole board.
-  move("week", hero);
+
+  // Week: seven days. The hero is the character sheet and goes to Character,
+  // but three of its parts are week machinery that was only ever housed there —
+  // the week's score ring, the week nav, and the week's stated mission. Lift
+  // those into a bar at the top of Week rather than leaving Week without any
+  // way to say which week you are looking at.
+  const weekBar = document.createElement("section");
+  weekBar.className = "section week-bar glass";
+  weekBar.id = "weekBar";
+  [".week-chip", ".char-actions", ".mission-banner"].forEach((sel) => {
+    const node = hero && hero.querySelector(sel);
+    if (node) weekBar.appendChild(node);
+  });
+  // Order is the week's story: which week, who you are fighting, how each
+  // pursuit is tracking, the seven days themselves, then the review. The boss
+  // sits above the board because the board is seven cards tall and an enemy you
+  // have to scroll to find is not a threat.
+  move("week", weekBar);
+  move("week", document.getElementById("boss"));
   move("week", document.getElementById("scoreboard"));
-  move("week", document.getElementById("activity"));
-  move("week", shell.querySelector(".quote-box"));
+  move("week", document.getElementById("review"));
+
+  // Month: the record. The calendar joins the year heat map here — two views of
+  // the same question, which is why they never belonged in different rooms.
+  move("month", document.getElementById("activity"));
+
+  // Character: who you are becoming.
+  move("character", hero);
+
+  // The motivational quote is gone from index.html entirely — it was the one
+  // node in the app that answered no question you could ask.
   // Pursuits: every remaining section card. Reading the module list here would
   // depend on settings having loaded, and this runs before the first fetch —
   // so take what is in the document and let applyModuleLayout() order it once
@@ -3288,7 +3316,7 @@ function buildViewShell() {
   // Month: the calendar was a modal you opened to *look* at something, which is
   // the definition of a place. Unwrap it in situ — the grid, the nav and the
   // summary keep their ids, so renderCalendarMonth() does not know it moved.
-  unwrapModalInto("month", "calendarModal", { drop: ["#calClose"] });
+  unwrapModalInto("month", "calendarModal", { drop: ["#calClose"], first: true });
   // Character: the cabinet is who you have become, not a separate building.
   unwrapModalInto("character", "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
@@ -3319,7 +3347,8 @@ function unwrapModalInto(view, modalId, opts) {
   body.removeAttribute("style");
   body.classList.add("room-body");
   if (opts && opts.className) body.classList.add(opts.className);
-  room.appendChild(body);
+  if (opts && opts.first) room.insertBefore(body, room.firstChild);
+  else room.appendChild(body);
   backdrop.remove();
   return body;
 }
@@ -3334,7 +3363,8 @@ function navItems() {
 }
 function visiblePursuits() {
   const hidden = getHiddenSections();
-  return getModules().filter((m) => m.id !== "daily" && !hidden.includes(m.id));
+  return getModules().filter((m) =>
+    m.id !== "daily" && !hidden.includes(m.id) && viewOfSection(m.id) === "pursuits");
 }
 function renderSidebar() {
   const side = document.getElementById("sidebar");
@@ -3403,9 +3433,10 @@ function routeTo(view, opts) {
   if (daily) {
     const home = viewEl(viewOfSection("daily"));
     if (home && daily.parentNode !== home) {
-      // Keep Daily above the boss card in Today, and above nothing in Week.
-      const boss = home.querySelector(":scope > #boss");
-      home.insertBefore(daily, boss || null);
+      // In Week the board sits between the quest log and The Bench; in Today
+      // it is simply the last thing in the room.
+      const after = home.querySelector(":scope > #review");
+      home.insertBefore(daily, after || null);
     }
     daily.open = true;
   }

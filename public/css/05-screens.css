@@ -1917,6 +1917,35 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* ===========================================================================
+ * THE WEEK BAR
+ * ---------------------------------------------------------------------------
+ * Week lost the hero and with it the only place that said which week you were
+ * looking at. Three parts came across — the score ring, the week nav and the
+ * mission — and they need to read as one bar rather than three orphans. The
+ * chip sheds the divider it wore when it sat at the right edge of the hero,
+ * and stops hiding itself on phones: here it is the headline, not an extra.
+ * ======================================================================== */
+.week-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-3) var(--s-5);
+  align-items: center;
+  padding: var(--s-4) var(--s-5);
+}
+.week-bar > .week-chip { padding-left: 0; border-left: none; }
+.week-bar > .char-actions { margin: 0; justify-content: flex-end; flex-wrap: wrap; }
+.week-bar > .mission-banner { grid-column: 1 / -1; }
+.week-bar .week-chip-meta .status-line { max-width: 200px; }
+
+@media (max-width: 768px) {
+  .week-bar { grid-template-columns: minmax(0, 1fr); padding: var(--s-3) var(--s-4); }
+  /* The hero hid the chip on phones because it was competing with the callsign.
+     In the week bar nothing is competing with it. */
+  .week-bar > .week-chip { display: flex; }
+  .week-bar > .char-actions { justify-content: flex-start; }
+}
+
 /* A modal body that became a room needs the surface the sheet used to give it.
    Their panes were written for a dialog 500–900px wide; a room is wider, so
    the wall of insignias and the month grid get more per row rather than more
