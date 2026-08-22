@@ -2403,7 +2403,7 @@ function openQuestEditor(opts) {
   const scheduleType = q ? (q.scheduleType || "once") : (opts.scheduleType || "once");
   questEditorState = { id: q ? q.id : null };
   document.getElementById("questEditorTitle").textContent = q ? "Edit task" : "Add task";
-  document.getElementById("questTitle").value = q ? q.title : "";
+  document.getElementById("questTitle").value = q ? q.title : (opts.title || "");
   document.getElementById("questDate").value = q ? q.scheduledDate : (opts.date || iso(new Date()));
   document.getElementById("questScheduleType").value = scheduleType;
   document.getElementById("questSource").innerHTML = questSourceOptions(sourceValue);
@@ -2412,7 +2412,7 @@ function openQuestEditor(opts) {
   document.getElementById("questAttr").innerHTML = attrs.map((a) => `<option value="${a}"${selectedAttr === a ? " selected" : ""}>${escapeHtml(attrName(a))}</option>`).join("");
   renderQuestWeekdays(q ? q.repeatDays : (opts.days || []));
   document.getElementById("questDueTime").value = q ? (q.dueTime || "") : (opts.dueTime || "");
-  document.getElementById("questEstMinutes").value = (q && q.estMinutes) ? q.estMinutes : "";
+  document.getElementById("questEstMinutes").value = q ? (q.estMinutes || "") : (opts.estMinutes || "");
   document.getElementById("deleteQuestBtn").style.display = q ? "" : "none";
   syncQuestScheduleFields();
   syncQuestAttrToSource();
@@ -2634,6 +2634,7 @@ function updateAgendaNow() {
 }
 
 function renderDays() {
+  keyRow = -1;   // the rows it pointed at are about to be replaced
   const wrap = document.getElementById("daysGrid");
   wrap.innerHTML = "";
   const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
@@ -3262,6 +3263,7 @@ function buildViewShell() {
     if (backdrop) backdrop.remove();
   }
   renderSidebar();
+  initQuickAdd();
 }
 
 // Nav is built from the module list, so a pursuit you add appears in it and one
@@ -3366,6 +3368,217 @@ function routeTo(view, opts) {
     if (!(opts && opts.keepScroll)) window.scrollTo(0, 0);
   }
   renderSidebarLive();
+}
+
+// ===== KEYBOARD =====
+// A board you tick fifteen times a day should be operable without a mouse.
+// Single keys, no chords, and nothing fires while you are typing — the capture
+// box would otherwise eat every shortcut in the alphabet.
+const KEY_HELP = [
+  ["1 – 4", "Today · Week · Pursuits · Cabinet"],
+  ["j / k", "Move down / up the day"],
+  ["Space", "Tick the focused task"],
+  ["e", "Edit the focused task"],
+  ["n", "New task (jumps to the capture box)"],
+  ["t", "Back to Today"],
+  ["?", "This list"],
+];
+let keyRow = -1;
+function keyRows() {
+  const view = viewEl(currentView);
+  return view ? [...view.querySelectorAll(".linked-unified")] : [];
+}
+function paintKeyCursor() {
+  document.querySelectorAll(".is-kbd").forEach((el) => el.classList.remove("is-kbd"));
+  const rows = keyRows();
+  if (keyRow < 0 || keyRow >= rows.length) return;
+  const row = rows[keyRow];
+  row.classList.add("is-kbd");
+  row.scrollIntoView({ block: "nearest" });
+}
+function moveKeyCursor(delta) {
+  const rows = keyRows();
+  if (!rows.length) return;
+  keyRow = keyRow < 0 ? (delta > 0 ? 0 : rows.length - 1) : Math.max(0, Math.min(rows.length - 1, keyRow + delta));
+  paintKeyCursor();
+}
+function showKeyHelp() {
+  const body = KEY_HELP.map(([k, what]) => `<div class="kh-row"><kbd>${escapeHtml(k)}</kbd><span>${escapeHtml(what)}</span></div>`).join("");
+  let el = document.getElementById("keyHelp");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "keyHelp";
+    el.className = "modal-backdrop";
+    el.innerHTML = `<div class="modal glass" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" style="max-width:420px;">
+      <h3>Keyboard</h3><div class="kh-list">${body}</div>
+      <div class="modal-actions"><button type="button" class="primary" data-close-help>Close</button></div></div>`;
+    document.body.appendChild(el);
+    el.addEventListener("click", (e) => { if (e.target === el || e.target.hasAttribute("data-close-help")) closeModal("keyHelp"); });
+  }
+  openModal("keyHelp");
+}
+function initKeyboard() {
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    const typing = t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
+    if (typing) return;
+    if (topOpenModal() && e.key !== "?") return;
+
+    const rows = keyRows();
+    switch (e.key) {
+      case "1": case "2": case "3": case "4":
+        e.preventDefault(); keyRow = -1; routeTo(VIEW_IDS[Number(e.key) - 1]); break;
+      case "t": e.preventDefault(); keyRow = -1; routeTo("today"); break;
+      case "j": e.preventDefault(); moveKeyCursor(1); break;
+      case "k": e.preventDefault(); moveKeyCursor(-1); break;
+      case " ": {
+        if (keyRow < 0 || !rows[keyRow]) return;
+        e.preventDefault();
+        const box = rows[keyRow].querySelector("input[type=checkbox]");
+        if (box) box.click();
+        break;
+      }
+      case "e": {
+        if (keyRow < 0 || !rows[keyRow]) return;
+        e.preventDefault();
+        const id = rows[keyRow].dataset.questId;
+        if (id) openQuestEditor({ id });
+        break;
+      }
+      case "n": {
+        e.preventDefault();
+        routeTo("today");
+        const input = document.getElementById("quickAddInput");
+        if (input) input.focus();
+        break;
+      }
+      case "?": e.preventDefault(); showKeyHelp(); break;
+      default: break;
+    }
+  });
+}
+
+// ===== QUICK CAPTURE =====
+// The gap between thinking of something and it being in the app was a modal
+// with six fields. This is one line, on the screen you are already looking at.
+// It never guesses silently: everything it understood is shown back as chips
+// before you commit, and "add as written" is always one click away.
+function quickAddHtml() {
+  return `<form class="qadd" id="quickAdd" autocomplete="off">
+    <span class="qadd-ico" aria-hidden="true">${moduleIconSvg("pencil")}</span>
+    <input id="quickAddInput" type="text" maxlength="160" placeholder="Add a task — “gym 6pm 1h”" aria-label="Add a task">
+    <span class="qadd-chips" id="quickAddChips" aria-live="polite"></span>
+    <button type="button" class="qadd-more" id="quickAddMore" title="Open the full editor" aria-label="Open the full editor">⋯</button>
+    <button type="submit" class="qadd-go primary" id="quickAddGo">Add</button>
+  </form>`;
+}
+function quickAddParse(raw) {
+  return Forge.parseQuickTask(raw, { date: iso(addDays(selectedWeekStart, getTodayDayIndex())) });
+}
+function renderQuickAddChips() {
+  const input = document.getElementById("quickAddInput");
+  const host = document.getElementById("quickAddChips");
+  if (!input || !host) return;
+  const raw = input.value.trim();
+  if (!raw) { host.innerHTML = ""; return; }
+  const parsed = quickAddParse(raw);
+  const bits = [];
+  if (parsed.dueTime) bits.push(`<span class="qchip">${escapeHtml(fmtTime12(parsed.dueTime))}</span>`);
+  if (parsed.estMinutes) bits.push(`<span class="qchip">${escapeHtml(fmtDuration(parsed.estMinutes))}</span>`);
+  if (parsed.scheduleType === "weekly") {
+    const d = parsed.repeatDays;
+    const label = d.length === 7 ? "Daily" : d.length === 5 && d.join() === "1,2,3,4,5" ? "Weekdays"
+      : d.map((i) => dayNames()[i].slice(0, 3)).join(" ");
+    bits.push(`<span class="qchip">${escapeHtml(label)}</span>`);
+  }
+  // Only offer the literal reading when the grammar actually took something —
+  // otherwise it is an option to do nothing.
+  host.innerHTML = bits.length
+    ? bits.join("") + `<button type="button" class="qchip qchip-raw" id="quickAddRaw" title="Add the whole line as the title">as written</button>`
+    : "";
+}
+async function quickAddSubmit(literal) {
+  const input = document.getElementById("quickAddInput");
+  if (!input) return;
+  const raw = input.value.trim();
+  if (!raw) return;
+  const parsed = literal
+    ? { title: raw, dueTime: "", estMinutes: 0, scheduleType: "once", scheduledDate: iso(addDays(selectedWeekStart, getTodayDayIndex())), repeatDays: [] }
+    : quickAddParse(raw);
+  if (!parsed.title) { input.focus(); return; }
+  const attr = "Discipline";
+  const quest = {
+    id: forgeId("q"), title: parsed.title,
+    scheduleType: parsed.scheduleType,
+    scheduledDate: parsed.scheduleType === "once" ? parsed.scheduledDate : "",
+    repeatDays: parsed.scheduleType === "weekly" ? parsed.repeatDays : [],
+    dueTime: parsed.dueTime, estMinutes: parsed.estMinutes,
+    areaId: "", goalId: "", attr, category: attrCat(attr),
+    order: getUnifiedQuests().length, createdAt: new Date().toISOString(),
+  };
+  settings.quests.push(quest);
+  // Seed this week's occurrences so the row appears already unchecked rather
+  // than missing until the next week rolls over.
+  const wk = getWeekData();
+  questOccurrencesInWeek(quest).forEach((d) => { wk.checks[questCheckId(quest, d)] = false; });
+  input.value = "";
+  renderQuickAddChips();
+  await persistSettings();
+  await persistWeekByKey(weekKey());
+  renderStructure(); applyWeekToUI();
+  showUndo(`Added “${quest.title}”`, async () => {
+    settings.quests = getUnifiedQuests().filter((q) => q.id !== quest.id);
+    await persistSettings();
+    renderStructure(); applyWeekToUI();
+  });
+}
+function initQuickAdd() {
+  const today = viewEl("today");
+  if (!today || document.getElementById("quickAdd")) return;
+  const shell = document.createElement("div");
+  shell.innerHTML = quickAddHtml();
+  const form = shell.firstElementChild;
+  today.insertBefore(form, today.firstChild);
+  const input = document.getElementById("quickAddInput");
+  input.addEventListener("input", renderQuickAddChips);
+  form.addEventListener("submit", (e) => { e.preventDefault(); quickAddSubmit(false); });
+  document.getElementById("quickAddMore").onclick = () => {
+    const raw = input.value.trim();
+    const parsed = raw ? quickAddParse(raw) : null;
+    openQuestEditor(parsed ? {
+      date: parsed.scheduledDate, scheduleType: parsed.scheduleType,
+      days: parsed.repeatDays, dueTime: parsed.dueTime, title: parsed.title, estMinutes: parsed.estMinutes,
+    } : { date: iso(addDays(selectedWeekStart, getTodayDayIndex())) });
+    input.value = ""; renderQuickAddChips();
+  };
+  form.addEventListener("click", (e) => {
+    if (e.target.id === "quickAddRaw") { e.preventDefault(); quickAddSubmit(true); }
+  });
+}
+
+// ===== UNDO =====
+// A checkbox that fires a sound, a particle burst and a combo counter makes a
+// mis-tap expensive. One level of undo, five seconds, bottom-left.
+let undoTimer = null;
+function showUndo(message, action) {
+  let el = document.getElementById("undoBar");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "undoBar";
+    el.className = "undo-bar";
+    el.setAttribute("role", "status");
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span class="undo-msg">${escapeHtml(message)}</span><button type="button" class="undo-btn">Undo</button>`;
+  el.classList.add("on");
+  el.querySelector(".undo-btn").onclick = async () => {
+    el.classList.remove("on");
+    clearTimeout(undoTimer);
+    await action();
+  };
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => el.classList.remove("on"), 5000);
 }
 
 function initViews() {
@@ -3563,6 +3776,7 @@ function focusablesIn(md) {
 // opened — both restored when the last one closes.
 let scrollLockY = 0;
 let preModalFocus = null;
+let pendingFocus = null;
 function lockPageScroll() {
   if (document.body.classList.contains("modal-open")) return;
   scrollLockY = window.scrollY || document.documentElement.scrollTop || 0;
@@ -3594,12 +3808,27 @@ function openModal(id) {
   // from wherever the page left it and walk straight out of the sheet.
   const field = md.querySelector(".modal :is(input:not([type=hidden]):not([type=file]):not([disabled]), select, textarea):not(.modal-head *)")
     || focusablesIn(md)[0];
-  if (field) setTimeout(() => { try { field.focus({ preventScroll: true }); } catch (e) {} }, 0);
+  // Deferred so the dialog is laid out first — but a sheet opened and closed
+  // inside the same tick would otherwise land focus on a hidden element, which
+  // the browser refuses and warns about. Cancelled by closeModal.
+  clearTimeout(pendingFocus);
+  if (field) pendingFocus = setTimeout(() => {
+    if (!md.classList.contains("active")) return;
+    try { field.focus({ preventScroll: true }); } catch (e) {}
+  }, 0);
   return md;
 }
 function closeModal(id) {
   const md = document.getElementById(id);
   if (!md) return;
+  // Move focus out BEFORE hiding. Setting aria-hidden on an ancestor of the
+  // focused element is refused by the browser and logs a warning: the element
+  // stays reachable by assistive tech while being invisible to everyone else.
+  clearTimeout(pendingFocus);
+  if (md.contains(document.activeElement)) {
+    const back = (preModalFocus && document.contains(preModalFocus)) ? preModalFocus : document.body;
+    try { back.focus({ preventScroll: true }); } catch (e) { document.activeElement.blur(); }
+  }
   md.classList.remove("active");
   md.setAttribute("aria-hidden", "true");
   if (!topOpenModal()) {
@@ -4223,6 +4452,18 @@ function bindEvents() {
     if (!e.target.matches("[data-save]") || !PICKED.has(e.target.type)) return;
     saveWeekField(e.target);
     updateLive();
+    // Ticking a task fires a sound, a particle burst and a combo counter, so a
+    // mis-tap is expensive to undo by hand. Offer it for five seconds.
+    const box = e.target;
+    if (box.type === "checkbox" && box.checked) {
+      const row = box.closest("[data-quest-id]");
+      const title = row ? (row.querySelector(".q-text") || {}).textContent : "";
+      showUndo(title ? `Done: ${title}` : "Marked done", () => {
+        box.checked = false;
+        saveWeekField(box);
+        updateLive();
+      });
+    }
   });
   // A Quest Log tile is a link to the pursuit it reports on.
   document.addEventListener("click", e => {
@@ -4668,7 +4909,8 @@ function structuredCloneSafe(obj) { return JSON.parse(JSON.stringify(obj)); }
 // ===== INIT =====
 async function init() {
   bindEvents();  // event delegation + button handlers — once, up front
-  initViews();   // build the four screens before anything renders into them
+  initViews();     // build the four screens before anything renders into them
+  initKeyboard();  // single-key operation, once the screens exist
 
   // Instant paint from the last-known cache so a reload never flashes the empty shell.
   // Writes stay suppressed (booting) so this can't clobber fresher server state.

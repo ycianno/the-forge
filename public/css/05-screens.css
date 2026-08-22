@@ -1869,3 +1869,67 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   max-height: none; overflow: visible;
 }
 .cabinet-body .cab-tabs { margin-top: 0; }
+
+/* ===========================================================================
+ * QUICK CAPTURE · UNDO · KEYBOARD
+ * ======================================================================== */
+.qadd {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--glass); box-shadow: var(--e-1);
+}
+.qadd:focus-within { border-color: var(--accent-primary); box-shadow: var(--e-1), 0 0 0 3px color-mix(in srgb, var(--accent-primary) 15%, transparent); }
+.qadd-ico { display: inline-flex; flex: 0 0 auto; color: var(--muted-2); }
+.qadd-ico .ic { width: 16px; height: 16px; }
+.qadd input {
+  flex: 1 1 auto; min-width: 0;
+  background: transparent; border: 0; box-shadow: none;
+  padding: 8px 0; font-size: var(--t-md);
+}
+.qadd input:focus { background: transparent; box-shadow: none; }
+.qadd-chips { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+.qchip {
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .04em;
+  padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  color: var(--accent-primary);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+.qchip-raw { color: var(--muted); border-color: var(--line); background: transparent; cursor: pointer; }
+.qchip-raw:hover { color: var(--text); border-color: var(--line-strong); background: rgba(255,255,255,.05); transform: none; box-shadow: none; }
+.qadd-more { flex: 0 0 auto; padding: 6px 10px; font-size: var(--t-md); line-height: 1; color: var(--muted); background: transparent; border-color: transparent; }
+.qadd-more:hover { color: var(--text); background: rgba(255,255,255,.06); transform: none; box-shadow: none; }
+.qadd-go { flex: 0 0 auto; padding: 8px 16px; font-size: var(--t-sm); }
+
+.undo-bar {
+  position: fixed; left: var(--s-4); bottom: var(--s-4); z-index: 2200;
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 10px var(--s-3) 10px var(--s-4);
+  border: 1px solid var(--line-strong); border-radius: var(--r-pill);
+  background: rgba(12,12,18,.95); box-shadow: var(--e-3);
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.undo-bar.on { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.undo-msg { font-size: var(--t-sm); font-weight: 600; color: var(--text-dim); max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo-btn { padding: 5px 12px; font-size: var(--t-xs); font-weight: 800; }
+
+/* The keyboard cursor is a rail, not a highlight — it has to read at a glance
+   without competing with the accent that already marks each row's pursuit. */
+.linked-unified.is-kbd { outline: 2px solid var(--accent-primary); outline-offset: 1px; border-radius: var(--r-sm); }
+.kh-list { display: flex; flex-direction: column; gap: 6px; }
+.kh-row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: var(--s-3); font-size: var(--t-sm); color: var(--muted); }
+.kh-row kbd {
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: var(--t-2xs); font-weight: 700;
+  padding: 4px 8px; border-radius: var(--r-xs); text-align: center;
+  color: var(--text); border: 1px solid var(--line-strong); background: rgba(255,255,255,.05);
+}
+
+@media (max-width: 640px) {
+  /* No keyboard, and the row would wrap to three lines — the drawer and the
+     day's own add button already cover capture on a phone. */
+  .qadd-go { display: none; }
+  .qadd-chips { display: none; }
+  .undo-bar { left: var(--s-2); right: var(--s-2); bottom: calc(72px + env(safe-area-inset-bottom, 0px)); justify-content: space-between; }
+}

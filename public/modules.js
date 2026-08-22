@@ -595,6 +595,94 @@
     return out;
   }
 
+  // ----- quick capture -----------------------------------------------------
+  // Adding a task meant a modal with six fields, so anything you thought of
+  // away from the app stayed unthought-of. This turns one line — "gym 6pm 1h",
+  // "read 20min daily", "call mum fri" — into a task. It is deliberately a
+  // small, predictable grammar rather than natural language: the caller shows
+  // back exactly what was understood, so it is never a guess you cannot see.
+  const DAY_WORDS = {
+    sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2,
+    wed: 3, weds: 3, wednesday: 3, thu: 4, thur: 4, thurs: 4, thursday: 4,
+    fri: 5, friday: 5, sat: 6, saturday: 6,
+  };
+
+  function parseQuickTask(input, opts) {
+    const options = opts || {};
+    let text = " " + String(input || "").trim() + " ";
+    const found = { title: "", dueTime: "", estMinutes: 0, scheduleType: "once", repeatDays: [], matched: [] };
+    const eat = (re, take) => {
+      const m = text.match(re);
+      if (!m) return false;
+      take(m);
+      text = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
+      return true;
+    };
+
+    // Duration first: "20min" must not be read as a time later on.
+    eat(/\s(\d{1,2})\s*h(?:r|rs|our|ours)?\s*(\d{1,2})?\s*(?:m|min|mins|minute|minutes)?(?=\s)/i, (m) => {
+      found.estMinutes = Number(m[1]) * 60 + (m[2] ? Number(m[2]) : 0);
+      found.matched.push("duration");
+    });
+    if (!found.estMinutes) {
+      eat(/\s(\d{1,3})\s*(?:m|min|mins|minute|minutes)(?=\s)/i, (m) => {
+        found.estMinutes = Number(m[1]);
+        found.matched.push("duration");
+      });
+    }
+
+    // Recurrence.
+    const setDays = (days) => {
+      found.scheduleType = "weekly";
+      found.repeatDays = [...new Set(days)].sort((a, b) => a - b);
+      found.matched.push("repeat");
+    };
+    if (!eat(/\s(?:every\s?day|daily)(?=\s)/i, () => setDays([0, 1, 2, 3, 4, 5, 6]))) {
+      if (!eat(/\sweekdays?(?=\s)/i, () => setDays([1, 2, 3, 4, 5]))) {
+        eat(/\sweekends?(?=\s)/i, () => setDays([0, 6]));
+      }
+    }
+    // Named days, with or without a leading "every": "every mon wed", "fri".
+    const dayHits = [];
+    let guard = 0;
+    while (guard++ < 8) {
+      const before = text;
+      eat(new RegExp(`\\s(?:every\\s+)?(${Object.keys(DAY_WORDS).join("|")})(?=\\s)`, "i"), (m) => {
+        dayHits.push(DAY_WORDS[m[1].toLowerCase()]);
+      });
+      if (text === before) break;
+    }
+    if (dayHits.length) setDays(found.repeatDays.concat(dayHits));
+
+    // Time. 12-hour with a meridiem, or an explicit 24-hour clock; a bare
+    // number is never a time, because "read 20" is a page count far more often
+    // than it is eight in the evening.
+    eat(/\s(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?=\s)/i, (m) => {
+      let h = Number(m[1]) % 12;
+      if (m[3].toLowerCase() === "pm") h += 12;
+      found.dueTime = `${String(h).padStart(2, "0")}:${m[2] || "00"}`;
+      found.matched.push("time");
+    });
+    if (!found.dueTime) {
+      eat(/\s(?:at\s+)?([01]?\d|2[0-3]):([0-5]\d)(?=\s)/, (m) => {
+        found.dueTime = `${String(Number(m[1])).padStart(2, "0")}:${m[2]}`;
+        found.matched.push("time");
+      });
+    }
+
+    // Whatever is left is the title, minus the connectives the grammar ate
+    // around.
+    found.title = text
+      .replace(/\s+/g, " ")
+      .replace(/\s*[,;]\s*$/, "")
+      .replace(/\b(?:at|on|every|for)\s*$/i, "")
+      .trim();
+
+    if (found.scheduleType === "weekly" && !found.repeatDays.length) found.scheduleType = "once";
+    if (found.scheduleType === "once") found.scheduledDate = options.date || "";
+    return found;
+  }
+
   // ----- weekly boss: roster, resolution, damage ---------------------------
   // Which boss a week fields and how much of its HP you have taken off are
   // pure functions of (settings, week, quests) — so they live here, where the
@@ -722,7 +810,7 @@
     PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     BOSSES, BOSS_ATTR, bossKeyHash, bossForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
-    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, planLoad,
+    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, planLoad, parseQuickTask, DAY_WORDS,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });
