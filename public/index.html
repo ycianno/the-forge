@@ -17,8 +17,8 @@
   <link rel="stylesheet" href="css/02-base.css?v=5" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=4" />
-  <link rel="stylesheet" href="css/05-screens.css?v=39" />
-  <link rel="stylesheet" href="css/06-mobile.css?v=7" />
+  <link rel="stylesheet" href="css/05-screens.css?v=40" />
+  <link rel="stylesheet" href="css/06-mobile.css?v=8" />
 </head>
 <body>
   <main class="shell">
@@ -188,8 +188,29 @@
       </div>
     </section>
 
+    <!-- THE WEEK'S PULSE.
+         Seven cells on the same black-body ramp the month grid and the year map
+         use, so "how is the week going" is one glance rather than a scroll
+         through seven day cards. Painted by renderWeekPulse(). -->
+    <section class="section week-pulse glass" id="weekPulse">
+      <div class="wp-head">
+        <span class="wp-title">The week so far</span>
+        <span class="wp-pace" id="wpPace">—</span>
+      </div>
+      <div class="wp-days" id="wpDays"></div>
+      <div class="wp-foot"><span id="wpSummary">—</span></div>
+    </section>
+
+    <!-- THE WEEKLY BOSS.
+         A fight card, not a status strip. Every id renderBoss() writes to is
+         kept; what is new is the clock, the finisher line and the arena that
+         gives the portrait somewhere to stand. -->
     <section class="section boss-card glass" id="boss">
-      <div class="boss-emoji" id="bossEmoji">🪨</div>
+      <div class="boss-arena">
+        <span class="boss-aura" aria-hidden="true"></span>
+        <div class="boss-emoji" id="bossEmoji">🪨</div>
+        <span class="boss-hp-ring" id="bossHpRing" aria-hidden="true"></span>
+      </div>
       <div class="boss-body">
         <div class="boss-top"><span class="boss-kicker">⚔️ Weekly Boss<span class="boss-hunt" id="bossHunt" hidden></span></span><span class="boss-status" id="bossStatus">—</span></div>
         <div class="boss-name" id="bossName">—</div>
@@ -201,7 +222,9 @@
           </span>
           <span class="boss-dmg-split" id="bossDmgSplit"></span>
         </div>
-        <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
+        <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-clock" id="bossClock"></span></div>
+        <div class="boss-finisher" id="bossFinisher" hidden></div>
+        <div class="boss-taunt" id="bossTaunt"></div>
       </div>
     </section>
 
@@ -756,7 +779,7 @@
   <script src="fx-stage.js?v=2"></script>
   <script src="forge-stage.js?v=10"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=111"></script>
+  <script src="app.js?v=112"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

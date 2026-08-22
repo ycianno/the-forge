@@ -3140,6 +3140,7 @@ function updateLive() {
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
   renderBoss();
+  if (currentView === "week") renderWeekPulse();
   renderSidebarLive();   // level, streak and boss HP follow the same data
   // The stat sheet reads the same profile Game.render() just recomputed, but
   // walking every week to draw a room nobody is looking at is pure waste.
@@ -3603,7 +3604,7 @@ function viewEl(id) { return document.getElementById(`view-${id}`); }
 // re-homes the node so there is never a second copy of a day's ids in the page.
 function viewOfSection(id) {
   if (id === "daily") return currentView === "week" ? "week" : "today";
-  if (id === "boss" || id === "scoreboard" || id === "review") return "week";
+  if (id === "boss" || id === "scoreboard" || id === "review" || id === "weekPulse") return "week";
   if (id === "activity") return "month";
   return "pursuits";
 }
@@ -3661,6 +3662,7 @@ function buildViewShell() {
   // sits above the board because the board is seven cards tall and an enemy you
   // have to scroll to find is not a threat.
   move("week", weekBar);
+  move("week", document.getElementById("weekPulse"));
   move("week", document.getElementById("boss"));
   move("week", document.getElementById("scoreboard"));
   move("week", document.getElementById("review"));
@@ -3872,6 +3874,7 @@ function routeTo(view, opts) {
   }
   if (next === "today") { initTodayModes(); syncAnvil({ snap: true }); }
   else if (window.ForgeStage) ForgeStage.stop();
+  if (next === "week") renderWeekPulse();
   if (changed) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
     // button or bottom tab has to fill it just the same.
@@ -4525,6 +4528,86 @@ function computeBossDamage() {
 // changes, which is what keeps browsing back through history silent.
 let lastBossKey = null, lastBossDmg = null, lastBossWeakDmg = null, lastBossHp = null;
 
+// ===== THE WEEK'S PULSE =====
+// Seven days, on the black-body ramp the month grid and the year map already
+// speak. Week could tell you how today was going and how the whole week scored,
+// and nothing in between — which day you dropped was a question you answered by
+// scrolling seven cards. The pace line is the other half: at this rate, where
+// does the week land, and is that above the grade a streak needs.
+function renderWeekPulse() {
+  const wrap = document.getElementById("wpDays");
+  if (!wrap) return;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const grade = settings.streakGrade || 75;
+  let doneAll = 0, totalAll = 0, elapsed = 0, best = null, worst = null;
+
+  wrap.innerHTML = byWeekOrder(
+    Array.from({ length: 7 }, (_, i) => i), (i) => i
+  ).map((di) => {
+    const date = addDays(selectedWeekStart, di);
+    const isToday = date.getTime() === today.getTime();
+    const future = date > today;
+    const info = future ? null : dayPctInfo(date);
+    if (info) {
+      doneAll += info.done; totalAll += info.total;
+      if (info.total > 0) {
+        elapsed++;
+        if (!best || info.pct > best.pct) best = { pct: info.pct, di };
+        if (!worst || info.pct < worst.pct) worst = { pct: info.pct, di };
+      }
+    }
+    const lvl = info ? hmLevel(info.pct) : 0;
+    const none = !info && !future;
+    const label = dayNames()[di].slice(0, 3);
+    const title = `${label} — ${info ? `${info.pct}% (${info.done}/${info.total})` : future ? "not yet" : "no record"}`;
+    return `<button class="wp-day d${lvl}${none ? " none" : ""}${future ? " future" : ""}${isToday ? " today" : ""}" type="button" data-day-jump="${di}" title="${escapeHtml(title)}"${future ? ' tabindex="-1"' : ""}>
+      <span class="wp-dow">${escapeHtml(label)}</span>
+      <span class="wp-num">${info ? info.pct + "%" : future ? "·" : "—"}</span>
+      <span class="wp-sub">${info && info.total ? `${info.done}/${info.total}` : ""}</span>
+    </button>`;
+  }).join("");
+
+  const pctSoFar = totalAll ? Math.round(doneAll / totalAll * 100) : 0;
+  const pace = document.getElementById("wpPace");
+  if (pace) {
+    // Pace is what you have actually done over what the days so far asked of
+    // you — not a projection onto the days you have not lived yet, which would
+    // read as a promise the app cannot make.
+    pace.textContent = elapsed ? `${pctSoFar}% of what this week has asked so far` : "The week has not started";
+    pace.classList.toggle("is-good", elapsed > 0 && pctSoFar >= grade);
+    pace.classList.toggle("is-short", elapsed > 0 && pctSoFar < grade);
+  }
+  const sum = document.getElementById("wpSummary");
+  if (sum) {
+    if (!elapsed) sum.textContent = `A streak week needs ${grade}%.`;
+    else if (best && worst && best.di !== worst.di) {
+      sum.textContent = `Best ${dayNames()[best.di]} at ${best.pct}% · weakest ${dayNames()[worst.di]} at ${worst.pct}% · a streak week needs ${grade}%.`;
+    } else {
+      sum.textContent = `${doneAll} of ${totalAll} done so far · a streak week needs ${grade}%.`;
+    }
+  }
+}
+
+// Which weak-category quests are still open, worth the most first. The 2x
+// weighting decides most fights, and "you have three of these left" is a
+// different sentence from "here are the three".
+function bossFinishers(limit) {
+  const d = computeBossDamage();
+  const weak = d.boss.weak;
+  const wk = getWeekData();
+  const checks = (wk && wk.checks) || {};
+  const rows = Forge.questOccurrenceRows(getUnifiedQuests(), selectedWeekStart);
+  const seen = new Set();
+  const out = [];
+  rows.forEach((row) => {
+    const cat = row.q.category || Forge.CAT_OF_ATTR[row.q.attr] || "discipline";
+    if (cat !== weak || checks[row.id] || seen.has(row.q.id)) return;
+    seen.add(row.q.id);
+    out.push(row.q.title);
+  });
+  return out.slice(0, limit || 3);
+}
+
 function renderBoss() {
   const panel = document.getElementById("boss");
   if (!panel) return;
@@ -4602,6 +4685,49 @@ function renderBoss() {
       `${attrName} hits 2× — ${d.weakLeft} left, worth +${d.weakLeftWorth}%`;
     else if (d.weakTot > 0) hint.textContent = `Every ${attrName} quest cleared. The rest is on you.`;
     else hint.textContent = `Weak to ${attrName} · those quests hit 2×`;
+  }
+
+  // A fight has a clock. Without one the boss was a bar that either filled or
+  // did not, and "you have two days" is the single most useful thing this card
+  // can say on a Friday.
+  const clock = document.getElementById("bossClock");
+  if (clock) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const end = addDays(selectedWeekStart, 6);
+    const left = Math.round((end - today) / 86400000);
+    if (defeated) clock.textContent = "";
+    else if (left < 0) clock.textContent = "This week is over.";
+    else if (left === 0) clock.textContent = "Last day.";
+    else clock.textContent = `${left + 1} day${left ? "s" : ""} left.`;
+    clock.classList.toggle("is-urgent", !defeated && left >= 0 && left <= 1);
+  }
+
+  // Name the quests that would end it, not just how many there are.
+  const fin = document.getElementById("bossFinisher");
+  if (fin) {
+    const names = (!defeated && d.weakLeft > 0) ? bossFinishers(3) : [];
+    if (names.length) {
+      fin.innerHTML = `<span class="bf-k">Finish it with</span>` +
+        names.map((n) => `<span class="bf-q">${escapeHtml(n)}</span>`).join("");
+      fin.hidden = false;
+    } else {
+      fin.innerHTML = "";
+      fin.hidden = true;
+    }
+  }
+
+  // The portrait stands in its own light: the aura is the boss's remaining
+  // health, so a boss you have barely touched glowers and a beaten one is ash.
+  const arena = panel.querySelector(".boss-arena");
+  if (arena) {
+    const hpLeft = defeated ? 0 : Math.max(0, Math.round((1 - dmg / grade) * 100));
+    arena.style.setProperty("--hp", hpLeft + "%");
+    arena.classList.toggle("is-hurt", !defeated && hpLeft < 50);
+    if (bossGained) {
+      arena.classList.remove("is-struck");
+      void arena.offsetWidth;          // restart the animation, not queue it
+      arena.classList.add("is-struck");
+    }
   }
 
   // Defeat celebration — once per week; silent backfill on first ever run.
@@ -5233,6 +5359,24 @@ function bindEvents() {
     if (selectedDayIso === cell.dataset.date) { closeDayInsights(); return; }
     openDayInsights(date, dayPctInfo(date));
   });
+  // A cell in the pulse is a door into that day's card on the board below.
+  const wpDays = document.getElementById("wpDays");
+  if (wpDays) wpDays.addEventListener("click", (e) => {
+    const cell = e.target.closest("[data-day-jump]");
+    if (!cell || cell.classList.contains("future")) return;
+    const di = Number(cell.dataset.dayJump);
+    const cards = document.querySelectorAll("#daysGrid .day-card");
+    // The board draws today first on a phone and in calendar order on a desktop,
+    // so find the card by its own day index rather than by position.
+    const card = [...cards].find((c) => c.querySelector(`[id^="dayBadge-${di}"]`) || c.querySelector(`.edit-day-btn[data-day-index="${di}"]`));
+    if (!card) return;
+    if (card.tagName === "DETAILS" && !card.open) card.open = true;
+    card.classList.remove("is-pinged");
+    void card.offsetWidth;
+    card.classList.add("is-pinged");
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+
   const dayDetail = document.getElementById("dayDetail");
   if (dayDetail) dayDetail.addEventListener("click", (e) => {
     if (e.target.closest(".dd-close")) { closeDayInsights(); return; }

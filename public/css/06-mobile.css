@@ -176,7 +176,20 @@ html { scroll-padding-top: 84px; }
   details.section-card > summary .pill { display: none; } /* was overflowing the card */
   details.section-card > summary .xp-chip { display: none; } /* keep mobile headers calm */
   details.section-card > summary { padding: 16px; gap: 10px; align-items: center; }
+  /* The fight card is a portrait beside a body, which at 375px leaves the body
+     about 200px wide. Shrink the arena and let the meta lines stack rather than
+     squeezing five of them into a column. */
+  .boss-card { gap: 12px; padding: 16px; align-items: flex-start; }
+  .boss-arena { width: 58px; height: 58px; }
+  .boss-emoji { font-size: 30px; }
   .boss-name { font-size: 19px; line-height: 1.15; }
+  .boss-top { flex-wrap: wrap; }
+  .boss-dmg { flex-wrap: wrap; gap: 6px; }
+  .boss-dmg-bar { flex-basis: 100%; }
+  .boss-dmg-split { white-space: normal; }
+  .boss-meta { flex-wrap: wrap; gap: 4px 10px; }
+  .bf-q { max-width: 100%; }
+  .boss-taunt { white-space: normal; }
   .boss-label { font-size: var(--t-2xs); }
 
   /* --- Trim the hero so the daily quests are a shorter scroll away --- */
