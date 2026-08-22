@@ -1951,6 +1951,13 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 #view-today > #questsHub { margin: 0; }
 
 /* ----- sidebar ----- */
+/* ===========================================================================
+ * THE SIDEBAR
+ * ---------------------------------------------------------------------------
+ * The two surfaces that are on screen in every room. The rule that shapes both:
+ * the sidebar is for places, the top bar is for actions. What each carries, and
+ * in what order, is the user's — see the Layout tab in settings.
+ * ======================================================================== */
 .sidebar {
   position: sticky; top: 92px;
   display: flex; flex-direction: column; gap: var(--s-4);
@@ -1958,6 +1965,10 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--glass); box-shadow: var(--e-2), var(--edge);
 }
+/* Blocks are ordered by the user, so the separators have to come from position
+   rather than from a rule hard-coded onto one of them. */
+.sidebar > * + * { padding-top: var(--s-4); border-top: 1px solid var(--line); }
+.sidebar > .sv-foot:empty { display: none; padding: 0; border: none; }
 .sv-id { display: flex; align-items: center; gap: var(--s-3); }
 .sv-lvl {
   display: grid; place-items: center; flex: 0 0 auto;
@@ -2008,6 +2019,59 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .sv-boss-hp { display: block; height: 5px; margin: 7px 0 5px; border-radius: var(--r-pill); background: rgba(255,255,255,.08); overflow: hidden; }
 .sv-boss-hp i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--red), var(--amber)); }
 .sv-boss-sub { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); }
+/* The other two things the live block can be. Same shell, different subject —
+   the boss is a permanent advert for a mechanic not everyone plays. */
+.sv-live {
+  display: block; width: 100%; text-align: left;
+  padding: var(--s-3); border-radius: var(--r-sm);
+  background: rgba(255,255,255,.03); border: 1px solid var(--line); color: var(--text);
+}
+.sv-live:hover { transform: none; box-shadow: none; border-color: var(--line-strong); }
+.sv-live-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.sv-live-top b { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-xs); }
+.sv-live-v { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-md); color: var(--heat-3); }
+.sv-live-bar { display: block; height: 5px; margin: 7px 0 5px; border-radius: var(--r-pill); background: rgba(255,255,255,.08); overflow: hidden; }
+.sv-live-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--heat-2), var(--heat-4)); }
+.sv-live-sub { display: block; font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); }
+.sv-live-streak .sv-live-v { text-shadow: 0 0 12px var(--heat-glow); }
+.sv-live-streak.is-cold .sv-live-v { color: var(--muted-2); text-shadow: none; }
+
+/* ----- the Layout panel ------------------------------------------------- */
+.chrome-list { display: flex; flex-direction: column; gap: 6px; }
+.chrome-row {
+  /* The name takes what it needs and the note gives way — the other order let
+     a long note squeeze "Focus timer" down to "Focus…". */
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center; gap: var(--s-3);
+  padding: 9px 12px; border-radius: var(--r-sm);
+  background: rgba(255,255,255,.03); border: 1px solid var(--line);
+  cursor: grab;
+}
+.chrome-row.is-off { opacity: .5; cursor: default; }
+.chrome-row.is-dragging { opacity: .4; }
+.chrome-row.is-over { border-color: var(--accent-primary); box-shadow: 0 -2px 0 var(--accent-primary) inset; }
+.chrome-toggle { display: flex; align-items: center; gap: var(--s-2); min-width: 0; cursor: pointer; }
+/* Form inputs in this app are full-width by default, which a checkbox inherits
+   as a 50px-wide box that eats the label beside it. */
+.chrome-toggle input[type="checkbox"] { width: 15px; height: 15px; flex: 0 0 auto; margin: 0; }
+.chrome-name { font-weight: 700; font-size: var(--t-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chrome-note { font-size: var(--t-2xs); color: var(--muted-2); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chrome-move { display: inline-flex; gap: 3px; flex: 0 0 auto; }
+.chrome-move button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0; border-radius: var(--r-sm);
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+}
+.chrome-move button .ic { width: 13px; height: 13px; flex: 0 0 auto; }
+.chrome-move button:disabled { opacity: .28; cursor: default; }
+@media (max-width: 560px) {
+  .chrome-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .chrome-note { display: none; }
+}
+/* The settings dialog is narrow; the notes are commentary, not instructions. */
+@media (max-width: 760px) {
+  .chrome-note { font-size: 10px; }
+}
 
 @media (max-width: 1023px) {
   .app-frame { grid-template-columns: minmax(0, 1fr); }

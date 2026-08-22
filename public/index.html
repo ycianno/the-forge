@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=5" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=4" />
-  <link rel="stylesheet" href="css/05-screens.css?v=44" />
+  <link rel="stylesheet" href="css/05-screens.css?v=47" />
   <link rel="stylesheet" href="css/06-mobile.css?v=8" />
 </head>
 <body>
@@ -33,7 +33,7 @@
         <button class="ghost nav-icon desktop-nav-item" id="soundToggle" title="Sound on" aria-label="Mute sounds"><svg viewBox="0 0 24 24" class="ic"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openCabinetBtn" title="Cabinet" aria-label="Cabinet"><svg viewBox="0 0 24 24" class="ic"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0V4zM6 6H3v1a3 3 0 0 0 3 3M18 6h3v1a3 3 0 0 1-3 3"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openSettingsBtn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" class="ic"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
-        <a href="/api/logout" class="danger nav-icon desktop-nav-item" title="Logout" aria-label="Logout" style="margin-left: 6px;"><svg viewBox="0 0 24 24" class="ic"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></a>
+        <a href="/api/logout" id="logoutLink" class="danger nav-icon desktop-nav-item" title="Logout" aria-label="Logout" style="margin-left: 6px;"><svg viewBox="0 0 24 24" class="ic"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></a>
 
         <!-- Mobile bottom tab bar. Order matches the sidebar: the screens in the
              order you move through them, then the drawer of actions. -->
@@ -405,6 +405,7 @@
           <button class="settings-tab" data-settings-tab="goals">Game rules</button>
           <button class="settings-tab" data-settings-tab="profile">Profile</button>
           <button class="settings-tab" data-settings-tab="appearance">Themes</button>
+          <button class="settings-tab" data-settings-tab="layout">Layout</button>
           <button class="settings-tab" data-settings-tab="data">Data</button>
           <button class="settings-tab" data-settings-tab="sync">Sync</button>
         </div>
@@ -456,6 +457,30 @@
           <label class="label">Color Theme</label>
           <p class="hint" style="margin-bottom: 12px;">Choose a color palette for the entire interface.</p>
           <div class="theme-grid" id="themeGrid"></div>
+        </div>
+
+        <!-- Layout Tab — what the sidebar and the header carry, and in what order -->
+        <div class="settings-panel" id="settingsLayout" data-panel="layout" style="display:none;">
+          <label class="label">Header actions</label>
+          <p class="hint" style="margin-bottom: 12px;">The top bar is for things you <em>do</em>. Anything that is a place — the calendar, the reports, the cabinet — already has a door in the sidebar, so those are off unless you want them back.</p>
+          <div class="chrome-list" id="headerChromeList"></div>
+
+          <label class="label" style="margin-top: 22px;">Sidebar</label>
+          <p class="hint" style="margin-bottom: 12px;">Which blocks the sidebar carries, top to bottom.</p>
+          <div class="chrome-list" id="sidebarChromeList"></div>
+
+          <label class="label" style="margin-top: 22px;">What the sidebar tracks</label>
+          <p class="hint" style="margin-bottom: 12px;">The live block at the foot of the sidebar.</p>
+          <select id="sidebarLiveSelect">
+            <option value="boss">This week's boss</option>
+            <option value="today">Today's progress</option>
+            <option value="streak">The streak</option>
+            <option value="none">Nothing</option>
+          </select>
+
+          <div class="modal-actions" style="justify-content:flex-start;margin-top:22px;">
+            <button id="chromeResetBtn" type="button">Reset to defaults</button>
+          </div>
         </div>
 
         <!-- Data Tab -->
@@ -791,7 +816,7 @@
   <script src="fx-stage.js?v=2"></script>
   <script src="forge-stage.js?v=10"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=116"></script>
+  <script src="app.js?v=119"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

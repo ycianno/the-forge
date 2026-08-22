@@ -3268,9 +3268,15 @@ function renderStructure() {
   applySectionVisibility();
   renderScoreboard();
   renderReview();
-  // The cabinet is a screen now, so it has to be repainted when data arrives —
-  // not only when something opens it.
-  if (currentView === "cabinet") paintCabinet();
+  // The sidebar is built from the module list and from the user's chrome
+  // configuration, and buildViewShell() runs before the first fetch — so both
+  // are defaults until this point. Rebuilding here is also what makes a pursuit
+  // you just added appear in the sidebar without a reload.
+  renderSidebar();
+  applyChrome();
+  // The cabinet is a pane of Character now, so it has to be repainted when data
+  // arrives — not only when something opens it.
+  if (currentView === "character") paintCabinet();
 }
 // updateLive() only refreshes values in DOM that already exists. Safe to call
 // on every change, including while a field has focus — it never replaces the
@@ -3594,8 +3600,14 @@ function renderXpChips() {
 
 // ===== SETTINGS TABS =====
 function initSettingsTabs() {
-  const tabs = document.querySelectorAll('.settings-tab');
-  const panels = document.querySelectorAll('.settings-panel');
+  // Scoped to the settings dialog. `.settings-tab` is the app's tab-strip look
+  // and the record, the character sheet and the cabinet all reuse it — an
+  // unscoped query meant clicking "Trends" ran this handler too, found no
+  // matching panel, and hid every settings panel behind the user's back.
+  const modal = document.getElementById('settingsModal');
+  if (!modal) return;
+  const tabs = modal.querySelectorAll('.settings-tab');
+  const panels = modal.querySelectorAll('.settings-panel');
   
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
@@ -3612,6 +3624,7 @@ function initSettingsTabs() {
       
       // Render content for specific tabs
       if (target === 'appearance') renderThemeGrid();
+      if (target === 'layout') initChromePanel();
       if (target === 'modules') { renderModulesEditor(); renderStatsEditor(); }
       if (target === 'sync') loadSyncStatus();
     });
@@ -3880,6 +3893,7 @@ function buildViewShell() {
   // Character: the cabinet is who you have become, not a separate building.
   unwrapModalInto(document.getElementById("charPaneCabinet"), "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
+  applyChrome();
   initQuickAdd();
 }
 
@@ -3920,6 +3934,198 @@ function unwrapModalInto(room, modalId, opts) {
   return body;
 }
 
+// ===== THE CHROME =====
+// The sidebar and the top bar are the two things on screen no matter which room
+// you are in, and until now they were whatever had accumulated. Two rules now
+// hold them together:
+//
+//   1. The sidebar is for *places* and the top bar is for *actions*. Calendar,
+//      Reports and Cabinet were buttons in the top bar that opened rooms which
+//      already have doors three inches to the left. They are still available —
+//      they are simply off by default, because a second door to the same room
+//      is not a feature.
+//   2. Both are configurable, and the configuration is one ordered list of ids
+//      each. Membership is visibility and position is order, so there is no way
+//      for "shown" and "where" to disagree.
+const HEADER_ACTIONS = {
+  focus:    { label: "Focus timer", el: "openFocusBtn",    note: "A mode, not a place" },
+  sound:    { label: "Sound",       el: "soundToggle",     note: "Mute everything" },
+  settings: { label: "Settings",    el: "openSettingsBtn", note: "This dialog" },
+  logout:   { label: "Log out",     el: "logoutLink",      note: "" },
+  calendar: { label: "Calendar",    el: "openCalendarBtn", note: "Also the Month room" },
+  reports:  { label: "Reports",     el: "openReportBtn",   note: "Also Month → Trends" },
+  cabinet:  { label: "Cabinet",     el: "openCabinetBtn",  note: "Also Character → Cabinet" },
+};
+const SIDEBAR_BLOCKS = {
+  identity: { label: "Who you are",  note: "Level, name, XP and streak" },
+  rooms:    { label: "The rooms",    note: "Today, Week, Month, Character, Pursuits" },
+  pursuits: { label: "Your pursuits", note: "A jump to each one" },
+  live:     { label: "The live block", note: "Whatever you pick below" },
+};
+const CHROME_DEFAULTS = {
+  header: ["focus", "sound", "settings", "logout"],
+  sidebar: ["identity", "rooms", "pursuits", "live"],
+  live: "boss",
+};
+function getChrome() {
+  const c = (settings && settings.chrome) || {};
+  const clean = (list, catalog, fallback) => {
+    const arr = Array.isArray(list) ? list.filter((k) => catalog[k]) : null;
+    return arr && arr.length ? [...new Set(arr)] : fallback.slice();
+  };
+  return {
+    header: clean(c.header, HEADER_ACTIONS, CHROME_DEFAULTS.header),
+    sidebar: clean(c.sidebar, SIDEBAR_BLOCKS, CHROME_DEFAULTS.sidebar),
+    live: ["boss", "today", "streak", "none"].includes(c.live) ? c.live : CHROME_DEFAULTS.live,
+  };
+}
+function setChrome(patch) {
+  settings.chrome = Object.assign(getChrome(), patch);
+  persistSettings();
+  applyChrome();
+  renderSidebar();
+}
+// Show, hide and reorder the buttons that are already in the document rather
+// than rebuilding the bar. Every one of them has a handler bound by id in
+// bindEvents(), and rebuilding is how you lose those without noticing.
+function applyChrome() {
+  const nav = document.getElementById("mainNav");
+  if (!nav) return;
+  const order = getChrome().header;
+  Object.keys(HEADER_ACTIONS).forEach((k) => {
+    const el = document.getElementById(HEADER_ACTIONS[k].el);
+    if (el) el.hidden = !order.includes(k);
+  });
+  // Insert before the mobile tab bar, which shares this container and must stay
+  // after every desktop action.
+  const firstTab = nav.querySelector(".tab-btn");
+  order.forEach((k) => {
+    const el = document.getElementById(HEADER_ACTIONS[k].el);
+    if (el) nav.insertBefore(el, firstTab || null);
+  });
+}
+
+// ----- the Layout panel ---------------------------------------------------
+// One list per surface. A row is draggable on a desktop and carries explicit
+// up/down buttons everywhere, because drag-and-drop on a phone is a coin toss
+// and reordering is not the place to gamble.
+function chromeRowsHtml(kind) {
+  const chrome = getChrome();
+  const catalog = kind === "header" ? HEADER_ACTIONS : SIDEBAR_BLOCKS;
+  const on = chrome[kind];
+  const off = Object.keys(catalog).filter((k) => !on.includes(k));
+  const row = (k, isOn, i, n) => `
+    <div class="chrome-row${isOn ? "" : " is-off"}" data-chrome-key="${escapeHtml(k)}"${isOn ? ' draggable="true"' : ""}>
+      <label class="chrome-toggle">
+        <input type="checkbox" data-chrome-on="${escapeHtml(k)}"${isOn ? " checked" : ""}>
+        <span class="chrome-name">${escapeHtml(catalog[k].label)}</span>
+      </label>
+      <span class="chrome-note">${escapeHtml(catalog[k].note || "")}</span>
+      <span class="chrome-move">
+        <button type="button" class="chrome-up" data-chrome-move="-1" aria-label="Move up"${!isOn || i === 0 ? " disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M18 15l-6-6-6 6"/></svg></button>
+        <button type="button" class="chrome-down" data-chrome-move="1" aria-label="Move down"${!isOn || i === n - 1 ? " disabled" : ""}><svg viewBox="0 0 24 24" class="ic"><path d="M6 9l6 6 6-6"/></svg></button>
+      </span>
+    </div>`;
+  return on.map((k, i) => row(k, true, i, on.length)).join("")
+       + off.map((k) => row(k, false, 0, 0)).join("");
+}
+function renderChromePanel() {
+  const h = document.getElementById("headerChromeList");
+  if (h) { h.dataset.kind = "header"; h.innerHTML = chromeRowsHtml("header"); }
+  const b = document.getElementById("sidebarChromeList");
+  if (b) { b.dataset.kind = "sidebar"; b.innerHTML = chromeRowsHtml("sidebar"); }
+  const sel = document.getElementById("sidebarLiveSelect");
+  if (sel) sel.value = getChrome().live;
+}
+function chromeToggle(kind, key, on) {
+  const list = getChrome()[kind].slice();
+  const i = list.indexOf(key);
+  if (on && i < 0) list.push(key);
+  if (!on && i >= 0) list.splice(i, 1);
+  // A surface with nothing on it is not a preference, it is a mistake you
+  // cannot undo from the surface itself.
+  if (!list.length) return renderChromePanel();
+  setChrome({ [kind]: list });
+  renderChromePanel();
+}
+function chromeMove(kind, key, delta) {
+  const list = getChrome()[kind].slice();
+  const i = list.indexOf(key);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  list.splice(j, 0, list.splice(i, 1)[0]);
+  setChrome({ [kind]: list });
+  renderChromePanel();
+}
+function chromeDropBefore(kind, key, beforeKey) {
+  const list = getChrome()[kind].slice();
+  const i = list.indexOf(key);
+  if (i < 0 || key === beforeKey) return;
+  list.splice(i, 1);
+  const at = beforeKey ? list.indexOf(beforeKey) : list.length;
+  list.splice(at < 0 ? list.length : at, 0, key);
+  setChrome({ [kind]: list });
+  renderChromePanel();
+}
+function initChromePanel() {
+  let dragKey = null;
+  ["headerChromeList", "sidebarChromeList"].forEach((id) => {
+    const list = document.getElementById(id);
+    if (!list || list._wired) return;
+    list._wired = true;
+    const kind = () => list.dataset.kind;
+    list.addEventListener("change", (e) => {
+      const box = e.target.closest("[data-chrome-on]");
+      if (box) chromeToggle(kind(), box.dataset.chromeOn, box.checked);
+    });
+    list.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-chrome-move]");
+      if (!btn) return;
+      const row = btn.closest("[data-chrome-key]");
+      if (row) chromeMove(kind(), row.dataset.chromeKey, Number(btn.dataset.chromeMove));
+    });
+    list.addEventListener("dragstart", (e) => {
+      const row = e.target.closest("[data-chrome-key]");
+      if (!row) return;
+      dragKey = row.dataset.chromeKey;
+      row.classList.add("is-dragging");
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    });
+    list.addEventListener("dragend", () => {
+      list.querySelectorAll(".is-dragging, .is-over").forEach((n) => n.classList.remove("is-dragging", "is-over"));
+      dragKey = null;
+    });
+    list.addEventListener("dragover", (e) => {
+      if (!dragKey) return;
+      e.preventDefault();
+      const row = e.target.closest("[data-chrome-key]");
+      list.querySelectorAll(".is-over").forEach((n) => n.classList.remove("is-over"));
+      if (row && !row.classList.contains("is-off")) row.classList.add("is-over");
+    });
+    list.addEventListener("drop", (e) => {
+      if (!dragKey) return;
+      e.preventDefault();
+      const row = e.target.closest("[data-chrome-key]");
+      chromeDropBefore(kind(), dragKey, row && !row.classList.contains("is-off") ? row.dataset.chromeKey : null);
+      dragKey = null;
+    });
+  });
+  const sel = document.getElementById("sidebarLiveSelect");
+  if (sel && !sel._wired) {
+    sel._wired = true;
+    sel.addEventListener("change", () => setChrome({ live: sel.value }));
+  }
+  const reset = document.getElementById("chromeResetBtn");
+  if (reset && !reset._wired) {
+    reset._wired = true;
+    reset.addEventListener("click", () => {
+      setChrome({ header: CHROME_DEFAULTS.header.slice(), sidebar: CHROME_DEFAULTS.sidebar.slice(), live: CHROME_DEFAULTS.live });
+      renderChromePanel();
+    });
+  }
+  renderChromePanel();
+}
+
 // Nav is built from the module list, so a pursuit you add appears in it and one
 // you hide disappears from it. Before this the links, the five bottom tabs and
 // the scroll-spy map were three hand-maintained copies of the same six built-in
@@ -3945,11 +4151,13 @@ function renderSidebar() {
     <button class="sv-sub" type="button" data-jump="${escapeHtml(m.id)}" style="--ac:${pursuitColor(m)}">
       <span class="sv-dot" aria-hidden="true"></span>${escapeHtml(m.name)}
     </button>`).join("");
-  side.innerHTML = `
-    <div class="sv-id" id="sidebarIdentity"></div>
-    <nav class="sv-nav" role="tablist" aria-label="Views">${nav}</nav>
-    <div class="sv-group"><span class="sv-group-k">Pursuits</span>${pursuits}</div>
-    <div class="sv-foot" id="sidebarBoss"></div>`;
+  const blocks = {
+    identity: `<div class="sv-id" id="sidebarIdentity"></div>`,
+    rooms:    `<nav class="sv-nav" role="tablist" aria-label="Views">${nav}</nav>`,
+    pursuits: pursuits ? `<div class="sv-group"><span class="sv-group-k">Pursuits</span>${pursuits}</div>` : "",
+    live:     `<div class="sv-foot" id="sidebarBoss"></div>`,
+  };
+  side.innerHTML = getChrome().sidebar.map((k) => blocks[k] || "").join("");
   renderSidebarLive();
 }
 // Values only — never markup, so this is safe to call on every update.
@@ -3971,17 +4179,46 @@ function renderSidebarLive() {
         <div class="sv-streak">${streak ? `🔥 ${streak} day${streak === 1 ? "" : "s"}${shield}` : "No streak yet"}</div>
       </div>`;
   }
-  const bossFoot = document.getElementById("sidebarBoss");
-  if (bossFoot) {
-    const d = computeBossDamage();
-    bossFoot.innerHTML = d.hasQuests
-      ? `<button class="sv-boss" type="button" data-view="today" title="${escapeHtml(d.boss.taunt)}">
-           <span class="sv-boss-top"><span>${d.boss.emoji}</span><b>${escapeHtml(d.boss.name)}</b></span>
-           <span class="sv-boss-hp"><i style="width:${Math.max(0, 100 - d.dmg)}%"></i></span>
-           <span class="sv-boss-sub">${Math.max(0, 100 - d.dmg)}% HP left</span>
-         </button>`
-      : "";
+  renderSidebarFoot();
+}
+
+// The live block. It used to be the boss and only the boss; for someone who
+// does not fight it, that was a permanent advert for a mechanic they ignore.
+function renderSidebarFoot() {
+  const foot = document.getElementById("sidebarBoss");
+  if (!foot) return;
+  const mode = getChrome().live;
+  if (mode === "none") { foot.innerHTML = ""; return; }
+
+  if (mode === "today") {
+    const date = addDays(selectedWeekStart, getTodayDayIndex());
+    const info = dayPctInfo(date);
+    const pct = info ? info.pct : 0;
+    foot.innerHTML = `<button class="sv-live" type="button" data-view="today" title="Today's progress">
+        <span class="sv-live-top"><b>Today</b><span class="sv-live-v">${pct}%</span></span>
+        <span class="sv-live-bar"><i style="width:${pct}%"></i></span>
+        <span class="sv-live-sub">${info ? `${info.done} of ${info.total} done` : "Nothing scheduled"}</span>
+      </button>`;
+    return;
   }
+  if (mode === "streak") {
+    const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+    const n = prof ? (prof.dayStreak || 0) : 0;
+    const cooling = prof && prof.streakUsed > 0;
+    foot.innerHTML = `<button class="sv-live sv-live-streak${n ? "" : " is-cold"}" type="button" data-view="today" title="Day streak">
+        <span class="sv-live-top"><b>Streak</b><span class="sv-live-v">${n}</span></span>
+        <span class="sv-live-sub">${n ? (cooling ? "cooling — a grace day is in use" : `${n} day${n === 1 ? "" : "s"} at temperature`) : "cold — clear today to light it"}</span>
+      </button>`;
+    return;
+  }
+  const d = computeBossDamage();
+  foot.innerHTML = d.hasQuests
+    ? `<button class="sv-boss" type="button" data-view="week" title="${escapeHtml(d.boss.taunt)}">
+         <span class="sv-boss-top"><span>${d.boss.emoji}</span><b>${escapeHtml(d.boss.name)}</b></span>
+         <span class="sv-boss-hp"><i style="width:${Math.max(0, 100 - d.dmg)}%"></i></span>
+         <span class="sv-boss-sub">${Math.max(0, 100 - d.dmg)}% HP left</span>
+       </button>`
+    : "";
 }
 
 // One writer of which view is on screen. Also re-homes Daily, which is the same
