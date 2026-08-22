@@ -1693,18 +1693,95 @@ function hmLevel(pct) {
   if (pct < 100) return 3;
   return 4;
 }
+// One day, opened in place. This used to be `insightsModal` — a dialog you got
+// to by clicking a 12px square and then had to dismiss to click the next one,
+// which made comparing two days a sequence of four gestures. Inline it is a
+// caption for the grid: click along the row and the panel just follows.
+let selectedDayIso = null;
 function openDayInsights(date, info) {
-  document.getElementById("insightsTitle").textContent =
-    date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
-  let html;
+  const panel = document.getElementById("dayDetail");
+  if (!panel) return;
+  selectedDayIso = iso(date);
+  const title = date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+  const lvl = info ? hmLevel(info.pct) : 0;
+  let body;
   if (!info) {
-    html = "No data recorded for this day.";
+    body = `<p class="dd-empty">Nothing was scheduled for this day.</p>`;
   } else {
-    html = `<strong>Completion:</strong> ${info.pct}% &nbsp;(${info.done}/${info.total} quests)<br><br>`;
-    html += info.items.map((item) => `${item.done ? "✅" : "▫️"} ${escapeHtml(item.title)}`).join("<br>");
+    const items = info.items.map((it) => `
+      <li class="dd-item${it.done ? " done" : ""}">
+        <span class="dd-mark" aria-hidden="true"></span>
+        <span class="dd-name">${escapeHtml(it.title)}</span>
+      </li>`).join("");
+    body = `<ul class="dd-list">${items}</ul>`;
   }
-  document.getElementById("insightsContent").innerHTML = html;
-  openModal("insightsModal");
+  panel.innerHTML = `
+    <div class="dd-head">
+      <span class="dd-heat d${lvl}" aria-hidden="true"></span>
+      <div class="dd-titles">
+        <span class="dd-title">${escapeHtml(title)}</span>
+        <span class="dd-sub">${info ? `${info.pct}% · ${info.done} of ${info.total} done` : "No record"}</span>
+      </div>
+      <button class="dd-goto" type="button" data-goto-week="${escapeHtml(iso(date))}">Open this week<svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
+      <button class="dd-close" type="button" aria-label="Close day"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    ${body}`;
+  panel.hidden = false;
+  markSelectedDay();
+  // Opened from the year map the panel is a screen above the click, so bring it
+  // into view rather than silently updating something you cannot see.
+  const box = panel.getBoundingClientRect();
+  if (box.top < 0 || box.bottom > window.innerHeight) {
+    panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+function closeDayInsights() {
+  const panel = document.getElementById("dayDetail");
+  selectedDayIso = null;
+  if (panel) { panel.hidden = true; panel.innerHTML = ""; }
+  markSelectedDay();
+}
+// The selected ring is written separately from the panel so that redrawing the
+// month (or the year map) does not lose which day you were looking at.
+function markSelectedDay() {
+  document.querySelectorAll(".cal-cell[data-date]").forEach((c) => {
+    c.classList.toggle("picked", !!selectedDayIso && c.dataset.date === selectedDayIso);
+  });
+}
+
+// ===== THE RECORD (Month) =====
+// Four panes over one span of history. Painting is lazy — Trends walks every
+// week in the database, and doing that on arrival at the room would cost the
+// same as opening a report you did not ask for.
+let monthTab = "calendar";
+const MONTH_PANE_PAINT = {
+  calendar: () => { if (!calViewDate) calViewDate = new Date(); renderCalendarMonth(); renderHeatmap(); },
+  trends:   () => renderTrends(),
+  season:   () => renderSeason(),
+  year:     () => renderYear(),
+};
+function showMonthTab(name) {
+  if (!MONTH_PANE_PAINT[name]) name = "calendar";
+  monthTab = name;
+  document.querySelectorAll("[data-month-tab]").forEach((t) => {
+    const on = t.dataset.monthTab === name;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", String(on));
+  });
+  ["calendar", "trends", "season", "year"].forEach((k) => {
+    const pane = document.getElementById("monthPane" + k[0].toUpperCase() + k.slice(1));
+    if (pane) pane.classList.toggle("active", k === name);
+  });
+  MONTH_PANE_PAINT[name]();
+}
+function initMonthTabs() {
+  const bar = document.querySelector(".month-tabs");
+  if (!bar || bar._wired) return;
+  bar._wired = true;
+  bar.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-month-tab]");
+    if (t) showMonthTab(t.dataset.monthTab);
+  });
 }
 function renderHeatmap() {
   const grid = document.getElementById("heatmapGrid");
@@ -1750,6 +1827,10 @@ function renderHeatmap() {
 function updateStreakAndHeatmap() {
   const grade = settings.streakGrade || 75;
   renderHeatmap();
+  // The month grid reads the same data as the map above it. Painting only the
+  // map left the calendar showing whatever the task model looked like on the
+  // first route — a cell reading 0/3 beside a day detail reading 0 of 5.
+  if (calViewDate && document.getElementById("calGrid")) renderCalendarMonth();
 
   let streak = 0;
   let currentWeekStart = getStartOfWeek(new Date());
@@ -3002,9 +3083,18 @@ function updateProgress() {
 
 // ===== CALENDAR (month view) =====
 let calViewDate = null;
+// Every one of these used to open its own sheet. They are all the same room
+// now, so they are all the same call with a different pane on top.
+function openRecord(tab) {
+  if (!document.getElementById("view-month")) return false;
+  routeTo("month");
+  initMonthTabs();
+  showMonthTab(tab || "calendar");
+  return true;
+}
 function openCalendar() {
   calViewDate = new Date();
-  if (document.getElementById("view-month")) { routeTo("month"); renderCalendarMonth(); return; }
+  if (openRecord("calendar")) return;
   renderCalendarMonth();
   openModal("calendarModal");
 }
@@ -3039,13 +3129,15 @@ function renderCalendarMonth() {
     const isFuture = date > today;
     const info = isFuture ? null : dayPctInfo(date);
     const lvl = info ? hmLevel(info.pct) : 0;
+    const none = !info && !isFuture ? " none" : "";
     if (info && info.done > 0) { activeDays++; questsDone += info.done; }
     if (info && info.total > 0) { sumPct += info.pct; ratedDays++; }
     const meta = (info && info.total) ? `<span class="cal-meta">${info.done}/${info.total}</span>` : "";
-    cells += `<button class="cal-cell d${lvl}${isToday ? " today" : ""}${isFuture ? " future" : ""}" data-date="${iso(date)}"${isFuture ? ' tabindex="-1"' : ""}><span class="cal-num">${d}</span>${meta}</button>`;
+    cells += `<button class="cal-cell d${lvl}${none}${isToday ? " today" : ""}${isFuture ? " future" : ""}" data-date="${iso(date)}"${isFuture ? ' tabindex="-1"' : ""}><span class="cal-num">${d}</span>${meta}</button>`;
   }
   grid.innerHTML = cells;
   const avg = ratedDays ? Math.round(sumPct / ratedDays) : 0;
+  markSelectedDay();
   const sum = document.getElementById("calSummary");
   if (sum) sum.innerHTML =
     `<span class="cs-item"><strong>${activeDays}</strong> active days</span>` +
@@ -3313,25 +3405,49 @@ function buildViewShell() {
     if (sec.closest(".view")) return;
     move("pursuits", sec);
   });
-  // Month: the calendar was a modal you opened to *look* at something, which is
-  // the definition of a place. Unwrap it in situ — the grid, the nav and the
-  // summary keep their ids, so renderCalendarMonth() does not know it moved.
-  unwrapModalInto("month", "calendarModal", { drop: ["#calClose"], first: true });
+  // Month: five modals were places, not dialogs — you went to them to *look* at
+  // something, which is the definition of a room. Each one's body is unwrapped
+  // into a pane of the record, keeping every id, so renderCalendarMonth(),
+  // renderTrends(), renderSeason() and renderYear() do not know they moved.
+  move("month", document.getElementById("monthRoom"));
+  const calPane = document.getElementById("monthPaneCalendar");
+  unwrapModalInto(calPane, "calendarModal", { first: true });
+  // The heat map goes under the month grid: the same question at a different
+  // resolution, which is why they never belonged in different rooms.
+  if (calPane) calPane.appendChild(document.getElementById("activity"));
+  // The day detail was `insightsModal` — a dialog you opened from a heat cell
+  // and dismissed. It is a caption for the grid above it, so it lives there.
+  if (calPane) {
+    const detail = document.createElement("div");
+    detail.className = "day-detail";
+    detail.id = "dayDetail";
+    detail.hidden = true;
+    calPane.insertBefore(detail, document.getElementById("activity"));
+  }
+  // The pane's tab already says Trends; a second heading saying Performance
+  // Report is chrome the dialog needed and the room does not.
+  unwrapModalInto(document.getElementById("monthPaneTrends"), "reportsModal", { remove: ["#closeReportBtn", "h3"] });
+  // Season keeps Share recap and loses Close; "Year in Review" was a button
+  // that opened another modal and is now simply the next tab along.
+  unwrapModalInto(document.getElementById("monthPaneSeason"), "seasonModal", { remove: ["#seasonCloseBtn", "#openYearBtn"] });
+  unwrapModalInto(document.getElementById("monthPaneYear"), "yearModal", { remove: ["#yearCloseBtn"] });
+
   // Character: the cabinet is who you have become, not a separate building.
-  unwrapModalInto("character", "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
+  unwrapModalInto(viewEl("character"), "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
   initQuickAdd();
 }
 
-// Take a modal's body out of its backdrop and hang it in a room, keeping every
-// id inside intact. `drop` names the buttons whose whole `.modal-actions` row
-// should go with the chrome — named by button rather than by taking the first
+// Take a modal's body out of its backdrop and hang it in a container, keeping
+// every id inside intact. `drop` names buttons whose whole `.modal-actions` row
+// goes with the chrome — named by button rather than by taking the first
 // `.modal-actions` in the tree, because the Records form inside the cabinet has
-// one of its own and removing that would take its Save button with it.
-function unwrapModalInto(view, modalId, opts) {
+// one of its own and removing that would take its Save button with it. `remove`
+// takes single buttons out of a row that is otherwise worth keeping: Season's
+// footer loses Close but keeps Share recap.
+function unwrapModalInto(room, modalId, opts) {
   const backdrop = document.getElementById(modalId);
   const body = backdrop && backdrop.querySelector(".modal");
-  const room = viewEl(view);
   if (!body || !room) return null;
   const head = body.querySelector(".modal-head");
   if (head) head.remove();
@@ -3340,6 +3456,10 @@ function unwrapModalInto(view, modalId, opts) {
     const row = btn && btn.closest(".modal-actions");
     if (row) row.remove();
     else if (btn) btn.remove();
+  });
+  ((opts && opts.remove) || []).forEach((sel) => {
+    const node = body.querySelector(sel);
+    if (node) node.remove();
   });
   body.classList.remove("modal", "glass");
   body.removeAttribute("role");
@@ -3460,7 +3580,7 @@ function routeTo(view, opts) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
     // button or bottom tab has to fill it just the same.
     if (next === "character") paintCabinet();
-    if (next === "month") { if (!calViewDate) calViewDate = new Date(); renderCalendarMonth(); }
+    if (next === "month") { initMonthTabs(); showMonthTab(monthTab); }
     renderDays();
     loadWeekFields();
     updateProgress();
@@ -3731,7 +3851,7 @@ function initMobileTabBar() {
   // More drawer items
   const moreActions = {
     'moreScoreboardBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('scoreboard'); },
-    'moreReportsBtn': () => { moreDrawer.classList.remove('active'); openModal("reportsModal"); },
+    'moreReportsBtn': () => { moreDrawer.classList.remove('active'); if (!openRecord("trends")) openModal("reportsModal"); },
     'moreSettingsBtn': () => { moreDrawer.classList.remove('active'); openSettings(); },
     'moreProjectsBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('projects'); },
     'moreDietBtn': () => { moreDrawer.classList.remove('active'); scrollToSection('diet'); },
@@ -4335,8 +4455,8 @@ function renderSeason() {
     sync();
   }
 }
-function openSeason() { seasonOffset = 0; renderSeason(); openModal("seasonModal"); }
-function closeSeason() { closeModal("seasonModal"); }
+function openSeason() { seasonOffset = 0; if (openRecord("season")) return; renderSeason(); openModal("seasonModal"); }
+function closeSeason() { if (document.getElementById("view-month")) { routeTo("today"); return; } closeModal("seasonModal"); }
 function addSeasonGoalFromForm() {
   const type = (document.getElementById("sgType") || {}).value || "xp";
   const target = Math.max(1, Number((document.getElementById("sgTarget") || {}).value) || 1);
@@ -4385,8 +4505,8 @@ function renderYear() {
   const attrBlock = attrs.length ? `<div class="tr-block"><div class="tr-title">XP by attribute</div><div class="ya-bars">${attrBars}</div></div>` : "";
   body.innerHTML = statsHtml + monthly + attrBlock;
 }
-function openYear() { yearOffset = 0; renderYear(); openModal("yearModal"); }
-function closeYear() { closeModal("yearModal"); }
+function openYear() { yearOffset = 0; if (openRecord("year")) return; renderYear(); openModal("yearModal"); }
+function closeYear() { if (document.getElementById("view-month")) { routeTo("today"); return; } closeModal("yearModal"); }
 
 // ===== FOCUS TIMER =====
 let focusState = null;
@@ -4770,14 +4890,24 @@ function bindEvents() {
   if (calNext) calNext.onclick = () => calShiftMonth(1);
   const calTodayBtn = document.getElementById("calToday");
   if (calTodayBtn) calTodayBtn.onclick = () => { calViewDate = new Date(); renderCalendarMonth(); };
+  // A day in the month grid opens its detail below the grid. Jumping to the
+  // week is now the explicit second step it always should have been: clicking
+  // a cell to *read* a day used to teleport you out of the room.
   const calGrid = document.getElementById("calGrid");
   if (calGrid) calGrid.addEventListener("click", (e) => {
     const cell = e.target.closest(".cal-cell[data-date]");
     if (!cell || cell.classList.contains("future") || cell.classList.contains("empty")) return;
     const date = new Date(cell.dataset.date + "T00:00:00");
-    selectedWeekStart = getStartOfWeek(date);
+    if (selectedDayIso === cell.dataset.date) { closeDayInsights(); return; }
+    openDayInsights(date, dayPctInfo(date));
+  });
+  const dayDetail = document.getElementById("dayDetail");
+  if (dayDetail) dayDetail.addEventListener("click", (e) => {
+    if (e.target.closest(".dd-close")) { closeDayInsights(); return; }
+    const goto = e.target.closest("[data-goto-week]");
+    if (!goto) return;
+    selectedWeekStart = getStartOfWeek(new Date(goto.dataset.gotoWeek + "T00:00:00"));
     applyWeekToUI();
-    closeCalendar();
     scrollToSection("daily");
   });
   const openCabinetHeroBtn = document.getElementById("openCabinetHeroBtn");
@@ -4821,8 +4951,6 @@ function bindEvents() {
 
 
   // Insights Modal
-  const closeInsightsBtn = document.getElementById("closeInsightsBtn");
-  if (closeInsightsBtn) closeInsightsBtn.onclick = () => closeModal("insightsModal");
 
   // Reports Modal
   // Focus timer
@@ -4850,6 +4978,7 @@ function bindEvents() {
 
   const openReportBtn = document.getElementById("openReportBtn");
   if (openReportBtn) openReportBtn.onclick = () => {
+    if (openRecord("trends")) return;
     openModal("reportsModal");
     renderTrends();
   };
@@ -4869,10 +4998,14 @@ function bindEvents() {
   if (seasonNext) seasonNext.onclick = () => { if (seasonOffset > 0) seasonOffset--; renderSeason(); };
   const seasonShareBtn = document.getElementById("seasonShareBtn");
   if (seasonShareBtn) seasonShareBtn.onclick = () => { if (window.shareSeasonCard) window.shareSeasonCard(curSeasonSummary()); };
-  const seasonModal = document.getElementById("seasonModal");
-  if (seasonModal) {
-    seasonModal.addEventListener("click", (e) => {
-      if (e.target === seasonModal) return closeSeason();
+  // Adding and removing a season goal was delegated from the modal backdrop.
+  // Once Season became a pane that node is gone, and with it both buttons —
+  // silently, because a listener on a null element is simply never attached.
+  // Bind to whichever container Season actually lives in.
+  const seasonHost = document.getElementById("monthPaneSeason") || document.getElementById("seasonModal");
+  if (seasonHost) {
+    seasonHost.addEventListener("click", (e) => {
+      if (e.target === seasonHost && seasonHost.id === "seasonModal") return closeSeason();
       const del = e.target.closest && e.target.closest(".sg-del");
       if (del) return removeSeasonGoal(del.getAttribute("data-goal"));
       if (e.target.id === "sgAdd") return addSeasonGoalFromForm();
@@ -4963,6 +5096,7 @@ function bindEvents() {
   // Init settings tabs
   initSettingsTabs();
   initCabinetTabs();
+  initMonthTabs();
   wireModulesEditor();
   wireStatsEditor();
   

@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=5" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=4" />
-  <link rel="stylesheet" href="css/05-screens.css?v=33" />
+  <link rel="stylesheet" href="css/05-screens.css?v=34" />
   <link rel="stylesheet" href="css/06-mobile.css?v=7" />
 </head>
 <body>
@@ -204,6 +204,24 @@
         </div>
         <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
       </div>
+    </section>
+
+    <!-- THE RECORD.
+         Four panes, one backward-looking question each. Every pane is filled at
+         boot by MOVING the body of a modal into it (see buildViewShell), so the
+         calendar, the trends, the season and the year keep every id they had
+         and their renderers do not know they stopped being dialogs. -->
+    <section class="section month-room glass" id="monthRoom">
+      <div class="settings-tabs month-tabs" role="tablist" aria-label="The record">
+        <button class="settings-tab active" data-month-tab="calendar" role="tab" aria-selected="true" aria-controls="monthPaneCalendar" type="button">Calendar</button>
+        <button class="settings-tab" data-month-tab="trends" role="tab" aria-selected="false" aria-controls="monthPaneTrends" type="button">Trends</button>
+        <button class="settings-tab" data-month-tab="season" role="tab" aria-selected="false" aria-controls="monthPaneSeason" type="button">Season</button>
+        <button class="settings-tab" data-month-tab="year" role="tab" aria-selected="false" aria-controls="monthPaneYear" type="button">Year</button>
+      </div>
+      <div class="month-pane active" id="monthPaneCalendar" role="tabpanel" aria-labelledby="monthTabCalendar"></div>
+      <div class="month-pane" id="monthPaneTrends" role="tabpanel"></div>
+      <div class="month-pane" id="monthPaneSeason" role="tabpanel"></div>
+      <div class="month-pane" id="monthPaneYear" role="tabpanel"></div>
     </section>
 
     <details id="scoreboard" class="section section-card glass" open>
@@ -573,18 +591,6 @@
     </div>
 
 
-
-    <!-- Heatmap Insights Modal -->
-    <div class="modal-backdrop" id="insightsModal" aria-hidden="true">
-      <div class="modal glass" role="dialog" aria-modal="true">
-        <h3 id="insightsTitle">Week Insights</h3>
-        <div id="insightsContent" style="margin-top: 16px; font-size: 14px; line-height: 1.6; color: var(--text-dim);"></div>
-        <div class="modal-actions">
-          <button id="closeInsightsBtn" type="button" class="primary">Close</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Reports Modal -->
     <div class="modal-backdrop" id="reportsModal" aria-hidden="true">
       <div class="modal glass" role="dialog" aria-modal="true" style="max-width: 600px;">
@@ -698,7 +704,7 @@
         <div class="cal-summary" id="calSummary"></div>
         <div class="cal-dow" id="calDow"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
         <div class="cal-grid" id="calGrid"></div>
-        <p class="hint cal-foot">Color shows that day's completion. Click a day to jump to its week and log it.</p>
+        <p class="hint cal-foot">Heat is that day's completion, ash through white-hot. Click a day to read it.</p>
       </div>
     </div>
 
@@ -709,7 +715,7 @@
   <script src="game.js?v=35"></script>
   <script src="fx-stage.js?v=2"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=100"></script>
+  <script src="app.js?v=104"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

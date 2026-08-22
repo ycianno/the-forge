@@ -950,13 +950,24 @@
 .cal-cell.empty { background: none; border: none; cursor: default; }
 .cal-cell.future { opacity: 0.35; cursor: default; }
 .cal-cell.today { box-shadow: 0 0 0 2px var(--accent-primary); }
-.cal-cell.d1 { background: color-mix(in srgb, var(--accent-success) 14%, transparent); }
-.cal-cell.d2 { background: color-mix(in srgb, var(--accent-success) 28%, transparent); }
-.cal-cell.d3 { background: color-mix(in srgb, var(--accent-success) 45%, transparent); }
-.cal-cell.d4 { background: color-mix(in srgb, var(--accent-success) 64%, transparent); }
+.cal-cell.picked { border-color: var(--text); box-shadow: 0 0 0 2px var(--text); }
+/* The month grid and the year map are the same measurement at two resolutions,
+   so they now speak one language: the black-body ramp, ash through white-hot.
+   Green-tinted month cells beside an orange heat map read as two unrelated
+   scores of the same day. A day with no record stays the empty surface — at
+   12px that distinction did not matter, at month-cell size it does. */
+.cal-cell.d0 { background: var(--heat-0); }
+.cal-cell.d1 { background: var(--heat-1); }
+.cal-cell.d2 { background: var(--heat-2); }
+.cal-cell.d3 { background: var(--heat-3); }
+.cal-cell.d4 { background: var(--heat-4); box-shadow: 0 0 14px var(--heat-glow); }
+.cal-cell.d4.today { box-shadow: 0 0 0 2px var(--accent-primary), 0 0 14px var(--heat-glow); }
+.cal-cell.none { background: rgba(255,255,255,0.03); }
+.cal-cell.d3 .cal-num, .cal-cell.d4 .cal-num { color: #1a1005; }
+.cal-cell.d4 .cal-meta { color: rgba(26,16,5,0.75); }
 .cal-num { font-weight: 800; font-size: 14px; font-family: 'Outfit', sans-serif; }
 .cal-meta { font-size: var(--t-2xs); font-weight: 700; color: var(--muted); align-self: flex-end; }
-.cal-cell.d3 .cal-meta, .cal-cell.d4 .cal-meta { color: rgba(255,255,255,0.9); }
+.cal-cell.d3 .cal-meta { color: rgba(26,16,5,0.75); }
 .cal-foot { margin-top: 14px; text-align: center; }
 @media (max-width: 640px) { .cal-num { font-size: var(--t-xs); } .cal-meta { display: none; } .cal-cell { padding: 4px 5px; } .cal-title { font-size: 16px; min-width: 120px; } }
 
@@ -1915,6 +1926,57 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
    overriding it from here put a percentage badge past the edge of a phone. */
 @container pane (min-width: 481px) and (max-width: 720px) {
   .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ===========================================================================
+ * THE RECORD (Month)
+ * ---------------------------------------------------------------------------
+ * One room, four panes, five retired modals. The panes are the cabinet's tab
+ * pattern reused rather than reinvented — a second way to switch panes in the
+ * same app would be one too many.
+ * ======================================================================== */
+.month-room { padding: var(--s-5); }
+.month-tabs { margin-top: 0; margin-bottom: var(--s-4); }
+.month-pane { display: none; }
+.month-pane.active { display: flex; flex-direction: column; gap: var(--s-5); }
+/* The pane bodies arrived as modal bodies; the pane is already the surface. */
+.month-pane > .room-body { padding: 0; border: none; background: none; box-shadow: none; }
+.month-pane > #activity { margin: 0; }
+
+/* One day, opened in place under the grid it belongs to. */
+.day-detail {
+  padding: var(--s-4);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  background: rgba(255,255,255,0.03);
+  box-shadow: var(--e-1);
+}
+.day-detail[hidden] { display: none; }
+.dd-head { display: flex; align-items: center; gap: var(--s-3); }
+.dd-heat { width: 30px; height: 30px; border-radius: var(--r-sm); flex: 0 0 auto; background: rgba(255,255,255,0.05); }
+.dd-heat.d0 { background: var(--heat-0); }
+.dd-heat.d1 { background: var(--heat-1); }
+.dd-heat.d2 { background: var(--heat-2); }
+.dd-heat.d3 { background: var(--heat-3); }
+.dd-heat.d4 { background: var(--heat-4); box-shadow: 0 0 12px var(--heat-glow); }
+.dd-titles { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.dd-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md); }
+.dd-sub { font-size: var(--t-2xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-2); }
+.dd-goto { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.dd-goto .ic { width: 14px; height: 14px; }
+.dd-close { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; padding: 0; width: 30px; height: 30px; background: transparent; border: 1px solid var(--line); color: var(--muted); }
+.dd-close .ic { width: 14px; height: 14px; flex: 0 0 auto; }
+.dd-empty { margin: var(--s-3) 0 0; color: var(--muted); font-size: var(--t-sm); }
+.dd-list { list-style: none; margin: var(--s-4) 0 0; padding: 0; display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.dd-item { display: flex; align-items: center; gap: var(--s-2); font-size: var(--t-sm); color: var(--muted); min-width: 0; }
+.dd-mark { width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto; border: 1.5px solid var(--line-strong); }
+.dd-item.done .dd-mark { background: var(--heat-3); border-color: var(--heat-3); box-shadow: 0 0 8px var(--heat-glow); }
+.dd-item.done .dd-name { color: var(--text); }
+.dd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .month-room { padding: var(--s-3); }
+  .dd-goto span, .dd-goto { font-size: var(--t-2xs); }
+  .dd-list { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ===========================================================================
