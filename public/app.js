@@ -1749,6 +1749,71 @@ function markSelectedDay() {
   });
 }
 
+// ===== THE PLAN (Pursuits) =====
+// Pursuits is the only room whose job was already coherent, and the only one
+// with nothing at the top of it saying what that job is. Plan health — the one
+// readout that says whether the week you have designed is a week anyone could
+// win — existed, but only inside the settings dialog, behind a tab, which is
+// the last place you would go looking for it.
+function renderPlanHead() {
+  const body = document.getElementById("planHeadBody");
+  if (!body) return;
+  const quests = getUnifiedQuests();
+  const load = Forge.planLoad(quests, selectedWeekStart);
+
+  if (!load.total) {
+    body.innerHTML = `<p class="pl-empty">Nothing is scheduled this week. Add tasks inside a pursuit below, or pick a starter plan from Edit pursuits.</p>`;
+    return;
+  }
+
+  // Rituals and quests, counted the same way the board splits them, so the
+  // number here and the headings on Today can never disagree.
+  const rows = Forge.questOccurrenceRows(quests, selectedWeekStart);
+  const rituals = rows.filter((r) => r.q.scheduleType === "weekly").length;
+  const oneOffs = rows.length - rituals;
+
+  const avg = load.total / 7;
+  const band = planBandFor(avg);
+  const heaviest = load.perDay[load.heaviest];
+  const dayMins = load.minutes / 7;
+  const costLine = load.minutes
+    ? `about ${fmtDuration(Math.round(dayMins))} a day${load.unestimated ? "+" : ""}`
+    : "no time estimates yet";
+
+  body.innerHTML = `
+    <div class="pl-state" data-band="${band.id}">
+      <span class="pl-band">${escapeHtml(band.label)}</span>
+      <span class="pl-note">${escapeHtml(band.note)}</span>
+    </div>
+    <div class="pl-figures">
+      <div class="pl-fig"><b>${load.total}</b><span>scheduled this week</span></div>
+      <div class="pl-fig"><b>${Math.round(avg * 10) / 10}</b><span>a day</span></div>
+      <div class="pl-fig"><b>${escapeHtml(costLine.replace(/^about /, ""))}</b><span>a day, roughly</span></div>
+      <div class="pl-fig"><b>${rituals}</b><span>ritual${rituals === 1 ? "" : "s"}</span></div>
+      <div class="pl-fig"><b>${oneOffs}</b><span>one-off${oneOffs === 1 ? "" : "s"}</span></div>
+    </div>
+    <div class="ph-bars pl-bars" role="img" aria-label="Tasks per day this week">
+      ${weekOrder().map((i) => {
+        const d = load.perDay[i];
+        const h = Math.max(4, Math.round(d.count / Math.max(1, heaviest.count) * 100));
+        return `<span class="ph-bar" title="${escapeHtml(dayNames()[i])}: ${d.count} task${d.count === 1 ? "" : "s"}"><i style="height:${h}%"></i><em>${DOW_INITIAL[i]}</em></span>`;
+      }).join("")}
+    </div>
+    ${heaviest.count ? `<p class="pl-heaviest">Heaviest day is ${escapeHtml(dayNames()[load.heaviest])}, with ${heaviest.count}.</p>` : ""}`;
+}
+function initPlanHead() {
+  const btn = document.getElementById("planEditBtn");
+  if (!btn || btn._wired) return;
+  btn._wired = true;
+  // The pursuit editor is a genuine dialog — you finish it and dismiss it — so
+  // it stays a dialog. It just stops being the only place plan health lives.
+  btn.addEventListener("click", () => {
+    openSettings();
+    const tab = document.querySelector('#settingsModal [data-settings-tab="modules"]');
+    if (tab) tab.click();
+  });
+}
+
 // ===== THE ANVIL =====
 // Today as a place. The engine lives in forge-stage.js and knows nothing about
 // tasks, storage or XP; this is the whole of the seam between them.
@@ -3347,6 +3412,7 @@ function renderStructure() {
   // you just added appear in the sidebar without a reload.
   renderSidebar();
   applyChrome();
+  if (currentView === "pursuits") renderPlanHead();
   // The cabinet is a pane of Character now, so it has to be repainted when data
   // arrives — not only when something opens it.
   if (currentView === "character") paintCabinet();
@@ -3840,6 +3906,7 @@ function viewEl(id) { return document.getElementById(`view-${id}`); }
 function viewOfSection(id) {
   if (id === "daily") return currentView === "week" ? "week" : "today";
   if (id === "boss" || id === "scoreboard" || id === "review" || id === "weekPulse") return "week";
+  if (id === "planHead") return "pursuits";
   if (id === "activity") return "month";
   return "pursuits";
 }
@@ -3919,6 +3986,7 @@ function buildViewShell() {
   // depend on settings having loaded, and this runs before the first fetch —
   // so take what is in the document and let applyModuleLayout() order it once
   // the real module list exists.
+  move("pursuits", document.getElementById("planHead"));
   shell.querySelectorAll("details.section-card").forEach((sec) => {
     if (sec.closest(".view")) return;
     move("pursuits", sec);
@@ -3967,6 +4035,7 @@ function buildViewShell() {
   unwrapModalInto(document.getElementById("charPaneCabinet"), "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
   applyChrome();
+  if (currentView === "pursuits") renderPlanHead();
   initQuickAdd();
 }
 
@@ -4336,6 +4405,7 @@ function routeTo(view, opts) {
   if (next === "today") { initTodayModes(); syncAnvil({ snap: true }); }
   else if (window.ForgeStage) ForgeStage.stop();
   if (next === "week") renderWeekPulse();
+  if (next === "pursuits") { initPlanHead(); renderPlanHead(); }
   if (next !== "character" && window.Effigy) Effigy.stop();
   if (changed) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
@@ -6063,6 +6133,7 @@ function bindEvents() {
   initMonthTabs();
   initCharTabs();
   initTodayModes();
+  initPlanHead();
   wireModulesEditor();
   wireStatsEditor();
   

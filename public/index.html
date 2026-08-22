@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=6" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=5" />
-  <link rel="stylesheet" href="css/05-screens.css?v=51" />
+  <link rel="stylesheet" href="css/05-screens.css?v=53" />
   <link rel="stylesheet" href="css/06-mobile.css?v=8" />
 </head>
 <body>
@@ -323,6 +323,22 @@
       <summary><div class="summary-left"><h2>Daily Quests</h2><p class="hint">One agenda for every task—daily-only or organized inside any pursuit.</p></div><span class="chev">⌄</span></summary>
       <div class="content"><div class="grid grid-2" id="daysGrid"></div></div>
     </details>
+
+    <!-- THE PLAN.
+         Pursuits was the one room with no head — no name, no state, nothing
+         that said what the plan is currently asking of you. Plan health already
+         existed but only inside the settings dialog, which is the last place
+         you would look for it. Painted by renderPlanHead(). -->
+    <section class="section plan-head glass" id="planHead">
+      <div class="pl-top">
+        <div class="pl-titles">
+          <span class="pl-title">The plan</span>
+          <span class="pl-sub">Every pursuit, and what the week actually asks of you</span>
+        </div>
+        <button class="pl-edit" id="planEditBtn" type="button">Edit pursuits<svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+      <div class="pl-body" id="planHeadBody"></div>
+    </section>
 
     <details id="workout" class="section section-card glass" open>
       <summary><div class="summary-left"><h2>Training</h2><p class="hint">Build the plan from scheduled tasks, then log the same sessions from here or Daily.</p></div><div style="display:flex;gap:8px;align-items:center;"><span class="pill green" id="pillWorkout">5 sessions target</span><span class="chev">⌄</span></div></summary>
@@ -832,7 +848,7 @@
   <script src="forge-stage.js?v=18"></script>
   <script src="effigy.js?v=1"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=122"></script>
+  <script src="app.js?v=123"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

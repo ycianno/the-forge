@@ -1123,9 +1123,15 @@
   border-radius: 14px;
   background: color-mix(in srgb, var(--ph) 7%, transparent);
 }
-.plan-health[data-band="light"]      { --ph: var(--blue); }
-.plan-health[data-band="balanced"]   { --ph: var(--green); }
-.plan-health[data-band="heavy"]      { --ph: var(--amber); }
+/* The bands are a temperature, not a traffic light. --green and --blue are
+   remapped into the heat range by the Forge theme, so a semantic palette gave
+   four bands that all looked the same amber; the black-body ramp gives four
+   values that are distinguishable in every theme and says the right thing on
+   its own — a plan can be too cool to shape anything, and it can be hot enough
+   to burn the work. */
+.plan-health[data-band="light"]      { --ph: var(--heat-1); }
+.plan-health[data-band="balanced"]   { --ph: var(--heat-3); }
+.plan-health[data-band="heavy"]      { --ph: var(--heat-4); }
 .plan-health[data-band="overloaded"] { --ph: var(--red); }
 .ph-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .ph-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); }
@@ -2159,6 +2165,56 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   .wp-day { padding: var(--s-2) 2px; }
   .wp-num { font-size: var(--t-sm); }
   .wp-sub { display: none; }
+}
+
+/* ===========================================================================
+ * THE PLAN (Pursuits)
+ * ---------------------------------------------------------------------------
+ * The room's head. It reuses plan health's band tokens and its day bars rather
+ * than drawing a second set — the readout is the same one, it has simply moved
+ * somewhere you would actually go looking for it.
+ * ======================================================================== */
+.plan-head { padding: var(--s-4) var(--s-5); }
+.pl-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap; }
+.pl-titles { display: flex; flex-direction: column; min-width: 0; }
+.pl-title { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); letter-spacing: -.02em; }
+.pl-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
+.pl-edit { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+.pl-edit .ic { width: 14px; height: 14px; flex: 0 0 auto; }
+.pl-body { margin-top: var(--s-4); }
+.pl-empty { margin: 0; color: var(--muted); font-size: var(--t-sm); }
+
+.pl-state { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; --ph: var(--muted-2); }
+.pl-state[data-band="light"]      { --ph: var(--heat-1); }
+.pl-state[data-band="balanced"]   { --ph: var(--heat-3); }
+.pl-state[data-band="heavy"]      { --ph: var(--heat-4); }
+.pl-state[data-band="overloaded"] { --ph: var(--red); }
+.pl-band {
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ph);
+  padding: 3px 10px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ph) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ph) 32%, transparent);
+}
+.pl-note { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
+
+.pl-figures { display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-5); margin-top: var(--s-4); }
+.pl-fig { display: flex; flex-direction: column; line-height: 1.15; }
+.pl-fig b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-md); }
+.pl-fig span { font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); white-space: nowrap; }
+
+/* The band colour has to reach the bars, which read `--ph` from their parent. */
+.pl-bars { --ph: var(--muted-2); }
+.pl-state[data-band="light"]      ~ .pl-bars { --ph: var(--heat-1); }
+.pl-state[data-band="balanced"]   ~ .pl-bars { --ph: var(--heat-3); }
+.pl-state[data-band="heavy"]      ~ .pl-bars { --ph: var(--heat-4); }
+.pl-state[data-band="overloaded"] ~ .pl-bars { --ph: var(--red); }
+.pl-heaviest { margin: 0; font-size: var(--t-2xs); font-weight: 600; color: var(--muted-2); }
+
+@media (max-width: 640px) {
+  .plan-head { padding: var(--s-3) var(--s-4); }
+  .pl-figures { gap: var(--s-2) var(--s-4); }
+  .pl-fig b { font-size: var(--t-sm); }
 }
 
 /* ===========================================================================
