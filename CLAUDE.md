@@ -185,11 +185,31 @@ two of them:
 
 | room | horizon | holds |
 |---|---|---|
-| **Today** | right now | the forge strip, then the day's rows split into **quests** (one-off) and **rituals** (weekly), then the challenges |
+| **Today** | right now | the forge strip (**the anvil**), then the day's rows split into **quests** (one-off) and **rituals** (weekly), then the challenges |
 | **Week** | seven days | the week bar, the week pulse, the boss fight card, the Quest Log, the board, The Bench |
 | **Month** | months and years | one shared header + four panes: Calendar (+ year heat map, inline day detail), Trends, Goals, Year |
-| **Character** | who you are becoming | two panes: the Sheet (identity, shape, rank ladder, the five attributes) and the Cabinet |
-| **Pursuits** | the structure | every pursuit section |
+| **Character** | who you are becoming | two panes: the Sheet (identity, **the effigy**, shape, rank ladder, the five attributes) and the Cabinet |
+| **Pursuits** | the structure | the plan head, then every pursuit section |
+
+### The two canvases
+
+Both follow the same contract: a `window.X` module that owns a canvas and knows
+nothing about tasks, storage or XP. The host hands them data and callbacks; they
+hand back nothing. Both `stop()` the moment their room is not on screen.
+
+- **`forge-stage.js` — the anvil (Today).** Today's tasks as billets you heat and
+  strike. Cost per task is `Forge.strikesFor(estMinutes)` reduced by
+  `Forge.strikesWithUrgency(base, Forge.urgencyOf(due, now))` — the clock spends
+  ceremony down, never up. Completing a piece calls back into `anvilComplete()`,
+  which drives the board's own checkbox so XP/sound/undo/save stay one path.
+  `test/anvil-weight.js` is the gate on the whole economy.
+- **`effigy.js` — the effigy (Character).** The five attributes as five pieces of
+  a forged figure, tiered against `Game.RANKS` so the ladder and the figure
+  measure in one unit. Read-only. Hold to raise the fire and preview the next
+  tier.
+
+Effigy, radar and attribute cards are three views of one set of numbers and are
+cross-linked through `highlightAttr()` — touching any one lights the other two.
 
 Rooms are assembled in `buildViewShell()` by **moving** existing nodes — and by
 `unwrapModalInto()`, which lifts a modal's body out of its backdrop with every
@@ -218,6 +238,14 @@ changing a line. Retired hashes are aliased in `VIEW_ALIASES`, so an old
 - **Canvas hosts need a `ResizeObserver`, not a window resize listener.** The
   anvil measured its host once at mount and laid out for a box 250px wider than
   the one it drew in.
+- **`[hidden]` loses to any rule that sets `display`.** Every `button` and
+  `.nav a` sets `display: inline-flex`, so `el.hidden = true` set the property
+  and changed nothing on screen. There is now one `[hidden] { display: none
+  !important }` in `02-base.css`. Corollary: **verify pixels, not properties** —
+  a DOM check passed while the screen disagreed.
+- **The Forge theme remaps `--green` and `--blue` into the heat range.** A
+  semantic four-colour scale comes out as four ambers. Use the `--heat-*` ramp
+  for anything that has to be told apart.
 
 ### The chrome
 
@@ -238,7 +266,10 @@ Week, the Month record, the Character sheet, focus-as-a-mode, and the anvil.
 A second pass then went back over each room: Today became one screen instead of
 an Anvil/List toggle, Week gained the pulse and a real fight card, the record
 got one cursor and one header, Character became a single sheet with an
-interactive shape, and the chrome became configurable.
+interactive shape, and the chrome became configurable. A third pass gave the two
+rooms you open most a thing you can play with — the anvil grew a hammer, a
+quench and a clock that heats the metal; Character grew the effigy — and gave
+Pursuits the plan head it never had.
 
 There is an optional Discord companion in `agent/` (local Ollama, off by
 default) and a reminder sync path in `sync-reminders.js` / `send-reminders.js`.
