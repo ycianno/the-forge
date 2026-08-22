@@ -344,15 +344,20 @@ html { scroll-padding-top: 84px; }
  * hero one compact week switcher instead of a five-button block.
  * ======================================================================== */
 @media (max-width: 768px) {
-  /* --- Gone on phones ---------------------------------------------------
-     The 52-week heatmap only fits by scrolling sideways, and the attribute
-     radar is a wide-screen readout. Both push the daily quests further down
-     the page without being usable at this width. */
-  #activity,
-  .char-panel { display: none; }
+  /* --- Formerly gone on phones ------------------------------------------
+     Both of these used to be hidden here, and the reason given was that they
+     "push the daily quests further down the page". That reason is gone: the
+     year map lives in Month → Year now and the radar lives in the Character
+     sheet, and neither is anywhere near the daily quests any more. Hiding
+     them meant a phone could never see the year map at all, and never see one
+     of the three linked views of the attributes.
 
-  /* Trophy tiers stay; "Open cabinet" duplicates the Cabinet tab below it. */
-  .ht-open { display: none; }
+     The radar is also no longer the 108px afterthought it was when this rule
+     was written — it carries a wedge per attribute and it is worth the space.
+     The year map still scrolls sideways, which is what a 52-week strip does
+     on any screen and is not a reason to withhold it. */
+  .char-panel { padding-top: 0; }
+  .hero-heatmap .hm-head { flex-wrap: wrap; }
 
   /* "Saved" sits next to the wordmark permanently. Only surface the states
      that actually want attention (saving / queued / failed). */

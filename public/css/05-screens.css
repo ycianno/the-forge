@@ -2431,8 +2431,57 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 .char-tabs { margin-top: 0; margin-bottom: var(--s-4); }
 .char-pane { display: none; }
 .char-pane.active { display: flex; flex-direction: column; gap: 0; }
-.char-pane > .hero { margin: 0; }
 .char-pane > .room-body { padding: 0; border: none; background: none; box-shadow: none; }
+
+/* ----- the sheet, laid out -----
+   Five things about one person, stacked in a column, meant scrolling past the
+   effigy to reach the shape it is drawn from — and those two are wired to
+   highlight each other, which is useless when you cannot see both at once.
+   They sit side by side now.
+   `display: contents` on the hero is what makes that possible without moving
+   any markup: it drops the wrapper's box so the identity card and the shape
+   panel become grid items of the sheet itself. */
+#charPaneSheet.active {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  gap: var(--s-5);
+  align-items: start;
+  grid-template-areas:
+    "identity identity"
+    "effigy   shape"
+    "effigy   ladder"
+    "attrs    attrs";
+}
+#charPaneSheet .hero { display: contents; }
+#charPaneSheet .char-screen { grid-area: identity; }
+#charPaneSheet .char-panel  { grid-area: shape; }
+#charPaneSheet .effigy      { grid-area: effigy; }
+#charPaneSheet .rank-ladder { grid-area: ladder; }
+#charPaneSheet .attr-sheet  { grid-area: attrs; }
+/* The rules that separated a stack are wrong for a grid — the gap does it. */
+#charPaneSheet .rank-ladder,
+#charPaneSheet .attr-sheet { margin-top: 0; padding-top: var(--s-5); }
+#charPaneSheet .char-screen { padding-bottom: var(--s-5); border-bottom: 1px solid var(--line); }
+/* In a column of its own the effigy can be as tall as the two things beside it. */
+#charPaneSheet .ef-stage { height: clamp(320px, 46vh, 520px); }
+
+@media (max-width: 900px) {
+  /* One column, and the order changes: the effigy is the thing you came to
+     look at, so it goes above the readings taken from it. */
+  #charPaneSheet.active {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "identity" "effigy" "shape" "ladder" "attrs";
+    gap: 0;
+  }
+  #charPaneSheet .effigy,
+  #charPaneSheet .char-panel,
+  #charPaneSheet .rank-ladder,
+  #charPaneSheet .attr-sheet {
+    padding-top: var(--s-5); margin-top: var(--s-5); border-top: 1px solid var(--line);
+  }
+  #charPaneSheet .effigy { margin-top: 0; border-top: none; }
+  #charPaneSheet .ef-stage { height: clamp(260px, 38vh, 380px); }
+}
 /* One sheet, not three cards in a stack. The hero, the ladder and the five
    attributes are three readings of one person, and giving each of them its own
    border and its own background is what made Character look like the old
@@ -2444,11 +2493,8 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
   border: none; border-radius: 0; background: none; box-shadow: none;
   padding-left: 0; padding-right: 0;
 }
-.char-pane .rank-ladder,
-.char-pane .attr-sheet { padding-top: var(--s-5); margin-top: var(--s-5); border-top: 1px solid var(--line); }
 .char-pane .hero > .char-screen,
 .char-pane .hero > .char-panel { border: none; background: none; box-shadow: none; padding: 0; }
-.char-pane .hero { gap: var(--s-5); }
 
 /* ----- the effigy -----
    The emotional view of the same five numbers the radar shapes and the cards

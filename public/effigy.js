@@ -47,6 +47,7 @@
     W: 0, H: 0, dpr: 1, running: false, raf: 0, lastT: 0,
     attrs: [], hist: null, boxes: {}, hovering: null,
     tiers: null,        // last seen tiers, so a band crossing can be noticed
+    mountedAt: 0,       // tier-ups during the load settle are not tier-ups
     flash: {},          // per part: 1 → 0 after a tier-up
     breath: 0,
     bellows: 0,          // 0 cold → 1 fully at the fire; driven by press-and-hold
@@ -597,6 +598,7 @@
       window.addEventListener("resize", resize);
     }
     if (st.cv.parentNode !== hostEl) hostEl.appendChild(st.cv);
+    if (!st.mountedAt) st.mountedAt = performance.now();
     if (!st.ro && window.ResizeObserver) {
       st.ro = new ResizeObserver(function () { resize(); });
       st.ro.observe(hostEl);
@@ -632,7 +634,12 @@
       var a = attrFor(part);
       now[part] = a ? tierOf(a.level) : 0;
     });
-    if (st.tiers) {
+    // A page load computes the profile before the weeks arrive and again after,
+    // so every piece appears to cross a band at once and you get five toasts
+    // for opening the app. A real tier-up happens minutes into a session, never
+    // in the first second and a half of one.
+    var settled = st.mountedAt && (performance.now() - st.mountedAt > 1500);
+    if (st.tiers && settled) {
       PARTS.forEach(function (part) {
         if (now[part] > st.tiers[part]) {
           st.flash[part] = 1;

@@ -4033,6 +4033,14 @@ function buildViewShell() {
   move("character", document.getElementById("charRoom"));
   const sheetPane = document.getElementById("charPaneSheet");
   if (sheetPane && hero) sheetPane.insertBefore(hero, sheetPane.firstChild);
+  // The Sheet and the Cabinet were drawing the same four trophy tiers from the
+  // same trophyState(), at two sizes with slightly different wording. Having a
+  // room for trophies and then repeating it on the room next door is the kind
+  // of duplication that makes a whole section feel padded. The Cabinet's is the
+  // fuller one and it is a single tab away, so the Sheet's copy goes; the
+  // effigy's own line already reports the count.
+  const heroTro = document.getElementById("heroTrophies");
+  if (heroTro) heroTro.remove();
 
   // The motivational quote is gone from index.html entirely — it was the one
   // node in the app that answered no question you could ask.
