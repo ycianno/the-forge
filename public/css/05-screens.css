@@ -1929,6 +1929,58 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 }
 
 /* ===========================================================================
+ * FOCUS AS A MODE
+ * ---------------------------------------------------------------------------
+ * A twenty-five minute timer was a dialog with a close button in the corner —
+ * a thing you dismiss, sitting on top of the day it is supposed to be part of.
+ * Entering focus now takes Today over: the rest of the room stops being
+ * rendered, the fire comes up behind the ring, and the chrome you do not need
+ * for the next half hour goes quiet.
+ * ======================================================================== */
+.focus-mode { display: none; }
+.focus-mode[hidden] { display: none; }
+body.in-focus .focus-mode { display: block; }
+/* Everything else in Today recedes. `hidden` on the panel is what keeps this
+   from hiding the room when focus is not running. */
+body.in-focus #view-today > *:not(.focus-mode) { display: none; }
+body.in-focus .sidebar { opacity: .35; filter: saturate(.4); transition: opacity .4s ease; }
+body.in-focus .sidebar:hover { opacity: 1; filter: none; }
+body.in-focus .topbar .nav-icon { opacity: .5; }
+
+.focus-mode > .room-body {
+  position: relative; overflow: hidden;
+  max-width: 620px; margin: max(4vh, var(--s-5)) auto 0;
+  padding: var(--s-6, var(--s-5)) var(--s-5) var(--s-5);
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg);
+  background: var(--glass); box-shadow: var(--e-3, var(--e-2)), var(--edge);
+}
+/* The fire. A hearth glow rising from under the ring rather than a flat panel —
+   the one place in the app where the heat is the point rather than a score. */
+.focus-mode > .room-body::before {
+  content: ""; position: absolute; inset: auto 0 -35% 0; height: 85%;
+  background: radial-gradient(60% 100% at 50% 100%,
+    color-mix(in srgb, var(--heat-3) 26%, transparent), transparent 70%);
+  pointer-events: none;
+  animation: focus-breathe 6s ease-in-out infinite;
+}
+.focus-mode > .room-body > * { position: relative; z-index: 1; }
+@keyframes focus-breathe {
+  0%, 100% { opacity: .65; transform: translateY(4px) scale(1); }
+  50%      { opacity: 1;   transform: translateY(0)   scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-mode > .room-body::before { animation: none; opacity: .8; }
+}
+.focus-mode .modal-head { margin-bottom: var(--s-4); }
+.focus-mode .focus-ring { box-shadow: 0 0 60px var(--heat-glow); }
+.focus-mode .focus-time { font-size: 58px; }
+
+@media (max-width: 640px) {
+  .focus-mode > .room-body { margin-top: var(--s-3); padding: var(--s-4); }
+  .focus-mode .focus-time { font-size: 46px; }
+}
+
+/* ===========================================================================
  * THE CHARACTER SHEET
  * ---------------------------------------------------------------------------
  * The radar used to be the whole answer at 108px beside a callsign: you could

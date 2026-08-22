@@ -3552,6 +3552,17 @@ function buildViewShell() {
   unwrapModalInto(document.getElementById("monthPaneSeason"), "seasonModal", { remove: ["#seasonCloseBtn", "#openYearBtn"] });
   unwrapModalInto(document.getElementById("monthPaneYear"), "yearModal", { remove: ["#yearCloseBtn"] });
 
+  // Focus stops being a window over Today and becomes a mode of it. The setup
+  // and the running timer move into a panel that lives inside the room, so
+  // entering focus dims the day rather than covering it with a box that has a
+  // close button in the corner.
+  const focusHost = document.createElement("div");
+  focusHost.className = "focus-mode";
+  focusHost.id = "focusMode";
+  focusHost.hidden = true;
+  viewEl("today").appendChild(focusHost);
+  unwrapModalInto(focusHost, "focusModal", { keepHead: true });
+
   // Character: the cabinet is who you have become, not a separate building.
   unwrapModalInto(document.getElementById("charPaneCabinet"), "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
@@ -3569,8 +3580,10 @@ function unwrapModalInto(room, modalId, opts) {
   const backdrop = document.getElementById(modalId);
   const body = backdrop && backdrop.querySelector(".modal");
   if (!body || !room) return null;
+  // Focus keeps its head: the title and the close control are exactly the
+  // affordances a mode needs, and the room has no other way out.
   const head = body.querySelector(".modal-head");
-  if (head) head.remove();
+  if (head && !(opts && opts.keepHead)) head.remove();
   ((opts && opts.drop) || []).forEach((sel) => {
     const btn = body.querySelector(sel);
     const row = btn && btn.closest(".modal-actions");
@@ -4634,7 +4647,26 @@ function openYear() { yearOffset = 0; if (openRecord("year")) return; renderYear
 function closeYear() { if (document.getElementById("view-month")) { routeTo("today"); return; } closeModal("yearModal"); }
 
 // ===== FOCUS TIMER =====
+// A timer you sit with for twenty-five minutes should not be a dialog. Focus is
+// a mode Today enters: the rest of the room recedes, the fire comes up behind
+// the ring, and there is one piece on the anvil. Logging is unchanged — the
+// hours still land on the same field they always did.
 let focusState = null;
+function focusHostEl() { return document.getElementById("focusMode"); }
+function enterFocusMode() {
+  const host = focusHostEl();
+  if (!host) return false;
+  routeTo("today");
+  host.hidden = false;
+  document.body.classList.add("in-focus");
+  window.scrollTo(0, 0);
+  return true;
+}
+function exitFocusMode() {
+  const host = focusHostEl();
+  document.body.classList.remove("in-focus");
+  if (host) host.hidden = true;
+}
 function openFocus() {
   const sel = document.getElementById("focusTarget");
   if (sel) sel.innerHTML = getStudyAreas().map((a, i) => `<option value="study:${i}">${escapeHtml(a)}</option>`).join("") + `<option value="project">Project work</option>`;
@@ -4643,7 +4675,15 @@ function openFocus() {
   document.querySelectorAll(".focus-dur").forEach((b) => b.classList.remove("active"));
   const def = document.querySelector('.focus-dur[data-min="25"]'); if (def) def.classList.add("active");
   const c = document.getElementById("focusCustom"); if (c) c.value = "";
+  if (enterFocusMode()) return;
   openModal("focusModal");
+}
+// Leaving before you start costs nothing, so it needs no confirmation. Leaving
+// mid-session goes through endFocus(), which banks the time you did put in.
+function leaveFocus() {
+  if (focusState) return endFocus(false);
+  exitFocusMode();
+  closeModal("focusModal");
 }
 function focusLabel(sel) {
   if (sel && sel.indexOf("study:") === 0) return getStudyAreas()[Number(sel.split(":")[1])] || "Study";
@@ -4674,7 +4714,7 @@ function startFocus(minutes) {
   }, 1000);
 }
 function endFocus(completed) {
-  if (!focusState) { closeModal("focusModal"); return; }
+  if (!focusState) { exitFocusMode(); closeModal("focusModal"); return; }
   const elapsed = focusState.totalSec - Math.max(0, focusState.remainSec);
   const hours = Math.round(elapsed / 3600 * 100) / 100;
   if (hours > 0) {
@@ -4686,6 +4726,7 @@ function endFocus(completed) {
   const label = focusLabel(focusState.sel);
   if (focusState.timer) clearInterval(focusState.timer);
   focusState = null;
+  exitFocusMode();
   closeModal("focusModal");
   if (window.FX && FX.focusDone) FX.focusDone(hours, label, completed);
 }
@@ -5082,7 +5123,7 @@ function bindEvents() {
   const openFocusBtn = document.getElementById("openFocusBtn");
   if (openFocusBtn) openFocusBtn.onclick = openFocus;
   const closeFocusBtn = document.getElementById("closeFocusBtn");
-  if (closeFocusBtn) closeFocusBtn.onclick = () => { if (focusState) endFocus(false); else closeModal("focusModal"); };
+  if (closeFocusBtn) closeFocusBtn.onclick = leaveFocus;
   document.querySelectorAll(".focus-dur").forEach((b) => b.onclick = () => {
     document.querySelectorAll(".focus-dur").forEach((x) => x.classList.remove("active"));
     b.classList.add("active");
