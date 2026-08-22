@@ -1263,11 +1263,15 @@
 .hm-cell { width: var(--hm-cell); height: var(--hm-cell); border-radius: 3px; background: rgba(255,255,255,0.05); cursor: pointer; transition: outline 0.1s ease; }
 .hm-cell.future { background: transparent; cursor: default; pointer-events: none; }
 .hm-cell:not(.future):hover { outline: 1.5px solid var(--text); outline-offset: 1px; }
-.hm-cell.d0 { background: rgba(255,255,255,0.05); }
-.hm-cell.d1 { background: color-mix(in srgb, var(--accent-success) 28%, transparent); }
-.hm-cell.d2 { background: color-mix(in srgb, var(--accent-success) 55%, transparent); }
-.hm-cell.d3 { background: color-mix(in srgb, var(--accent-success) 80%, transparent); }
-.hm-cell.d4 { background: var(--accent-success); box-shadow: 0 0 6px color-mix(in srgb, var(--accent-success) 65%, transparent); }
+/* Black-body, not an alpha ramp of one hue. Incandescence is monotonic in
+   luminance, so the scale reads as "more" without a legend and survives
+   greyscale — which an alpha ramp does not. It has always been called a heat
+   map; this is the first time it has been one. */
+.hm-cell.d0 { background: var(--heat-0); }
+.hm-cell.d1 { background: var(--heat-1); }
+.hm-cell.d2 { background: var(--heat-2); }
+.hm-cell.d3 { background: var(--heat-3); }
+.hm-cell.d4 { background: var(--heat-4); box-shadow: 0 0 6px var(--heat-glow); }
 
 .hm-legend .hm-cell { cursor: default; }
 

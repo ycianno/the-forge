@@ -81,8 +81,82 @@
   --heat-glow: rgba(249, 115, 22, 0.30);
 }
 
-/* ===== THEME SYSTEM ===== */
-:root, [data-theme="true-black"] {
+/* ===========================================================================
+ * FORGE — the default.
+ * ---------------------------------------------------------------------------
+ * A smith's shop is dark, cold iron, and one small intensely hot spot. That is
+ * simultaneously the right picture of the craft this app is about and the right
+ * information design for something opened every day: heat is scarce, so heat
+ * means something. The ground is graphite with a slight warm bias rather than a
+ * neutral grey — a pure grey reads as unconsidered, and a brown one (see Warm
+ * Ember below) reads as a filter over the whole room instead of a fire in it.
+ *
+ * The material — the heat ramp, the metal edges, the chip radius — is NOT here.
+ * It lives in the scale block above, so every theme in this file gets metal
+ * plates and orange sparks, and only the accent hue changes between them.
+ * ======================================================================== */
+:root, [data-theme="forge"] {
+  --bg: #0c0c0f;
+  --bg-2: #131318;
+  --glass: rgba(22, 22, 27, 0.90);
+  --glass-2: rgba(30, 30, 36, 0.80);
+  --glass-3: rgba(255, 255, 255, 0.04);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --text: #f4f2f0;
+  --text-dim: #cbc7c2;
+  --muted: #9a948d;
+  --muted-2: #6b6660;
+  --blue: #f97316;
+  --blue-2: #c2410c;
+  --green: #f59e0b;
+  --amber: #fbbf24;
+  --red: #ef4444;
+  --violet: #fb923c;
+  --accent-primary: #f97316;
+  --accent-secondary: #fbbf24;
+  --accent-success: #f59e0b;
+  /* The ambient wash is nearly nothing. If the room glows, the metal cannot. */
+  --body-gradient-1: rgba(249, 115, 22, 0.07);
+  --body-gradient-2: rgba(194, 65, 12, 0.05);
+  --body-gradient-3: rgba(251, 191, 36, 0.04);
+  --body-bg-top: #0c0c0f;
+  --body-bg-mid: #0f0f13;
+  --body-bg-bot: #0a0a0d;
+  --radius: var(--r-lg);
+  --shadow: var(--e-2);
+  --glow-green: 0 0 20px rgba(245, 158, 11, 0.30);
+  --glow-blue: 0 0 20px rgba(249, 115, 22, 0.30);
+  --gradient-brand: linear-gradient(135deg, var(--heat-2), var(--heat-4));
+  --gradient-success-bg: rgba(249, 115, 22, 0.14);
+  --gradient-success-text: #fdba74;
+  --orb-color: #f97316;
+  --orb-glow: 0 0 18px rgba(249, 115, 22, 0.45);
+  --orb-ring: rgba(249, 115, 22, 0.45);
+  --score-glow: rgba(249, 115, 22, 0.32);
+  --score-ring-inset: rgba(249, 115, 22, 0.12);
+  --hero-glow: rgba(249, 115, 22, 0.10);
+  --eyebrow-bg: rgba(249, 115, 22, 0.10);
+  --eyebrow-border: rgba(249, 115, 22, 0.24);
+  --eyebrow-text: #fed7aa;
+  --h1-gradient: linear-gradient(to right, #fff, #fcd34d);
+  --pill-green-text: #fdba74;
+  --pill-green-bg: rgba(249, 115, 22, 0.10);
+  --pill-green-border: rgba(249, 115, 22, 0.20);
+  --pill-amber-text: #fcd34d;
+  --pill-amber-bg: rgba(251, 191, 36, 0.10);
+  --pill-amber-border: rgba(251, 191, 36, 0.20);
+  --pill-blue-text: #fed7aa;
+  --pill-blue-bg: rgba(194, 65, 12, 0.12);
+  --pill-blue-border: rgba(194, 65, 12, 0.24);
+  --primary-shadow: rgba(249, 115, 22, 0.35);
+  --primary-shadow-hover: rgba(249, 115, 22, 0.60);
+}
+
+/* ===== THEME SYSTEM =====
+ * Everything below is colour only, and now genuinely optional: they are skins
+ * over the Forge material, not ten different apps. */
+[data-theme="true-black"] {
   --bg: #030305;
   --bg-2: #09090c;
   --glass: rgba(16, 16, 22, 0.75);

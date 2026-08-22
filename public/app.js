@@ -959,7 +959,11 @@ let saveTimer = null;
 let booting = true;   // suppresses persistence during the instant cache-paint at startup
 
 // ===== THEMES =====
+// Forge is the default and sits first. The ten below it are colour-only skins
+// over the same material — metal plates, chip radii, heat sparks — because all
+// of that lives in the scale block, not in a theme.
 const THEMES = [
+  { id: 'forge', name: 'Forge', preview: '#0c0c0f', gradient: 'linear-gradient(135deg, #7c2d12, #fbbf24)' },
   { id: 'true-black', name: 'True Black', preview: '#030305', gradient: 'linear-gradient(135deg, #38bdf8, #8b5cf6)' },
   { id: 'crimson-night', name: 'Crimson', preview: '#14060a', gradient: 'linear-gradient(135deg, #ef4444, #f43f5e)' },
   { id: 'deep-forest', name: 'Deep Forest', preview: '#021a07', gradient: 'linear-gradient(135deg, #22c55e, #14b8a6)' },
@@ -1299,7 +1303,7 @@ function renderThemeGrid() {
   const grid = document.getElementById('themeGrid');
   if (!grid) return;
   grid.innerHTML = '';
-  const currentTheme = settings.theme || 'true-black';
+  const currentTheme = settings.theme || 'forge';
   THEMES.forEach(theme => {
     const swatch = document.createElement('button');
     swatch.className = `theme-swatch ${currentTheme === theme.id ? 'active' : ''}`;

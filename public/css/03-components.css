@@ -393,17 +393,6 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
 .heatmap-scroll::-webkit-scrollbar { display: none; }
 .heatmap-grid { display: flex; gap: 5px; width: max-content; margin: 0 auto; }
 
-/* It has always been called a heat map. Black-body ramp instead of grass green:
- * incandescence is monotonic in luminance, so it reads as "more" without a
- * legend and still reads in greyscale. A missed day is quenched, not alarmed —
- * cold slate, because red on a habit tracker punishes where it should describe. */
-.heatmap-cell.lvl-0 { background: var(--heat-0); }
-.heatmap-cell.lvl-1 { background: var(--heat-1); }
-.heatmap-cell.lvl-2 { background: var(--heat-2); }
-.heatmap-cell.lvl-3 { background: var(--heat-3); box-shadow: 0 0 10px var(--heat-glow); }
-.heatmap-cell.lvl-fail { background: rgba(100, 116, 139, 0.22); border: 1px solid rgba(148, 163, 184, 0.3); }
-.heatmap-cell.lvl-current { background: var(--heat-0); border: 1px solid var(--heat-3); box-shadow: 0 0 8px var(--heat-glow); }
-
 /* ===== QUOTE & FOOTER ===== */
 /* ===== VISUAL REPORT ===== */
 .report-visual {
