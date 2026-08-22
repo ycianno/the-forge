@@ -4029,12 +4029,28 @@ function computeBossDamage() {
   getWeekData();   // preserve the side effect callers relied on
   return d;
 }
+// Baseline for boss-hit detection. renderBoss() is called from updateLive(),
+// which runs on every debounced keystroke, so "the number changed" is not the
+// same question as "a hit landed". These are reset when the selected week
+// changes, which is what keeps browsing back through history silent.
+let lastBossKey = null, lastBossDmg = null, lastBossWeakDmg = null, lastBossHp = null;
+
 function renderBoss() {
   const panel = document.getElementById("boss");
   if (!panel) return;
   ensureBossPick(selectedWeekStart);
   const d = computeBossDamage();
   const boss = d.boss, dmg = d.dmg;
+  // Only a real INCREASE counts as a hit, and only within the same week. The
+  // first render of a session has no baseline, so it cannot fire either.
+  const bossKey = iso(selectedWeekStart);
+  const sameWeek = lastBossKey === bossKey;
+  const prevDmg = sameWeek ? lastBossDmg : null;
+  const prevWeak = sameWeek ? lastBossWeakDmg : null;
+  const bossGained = prevDmg != null && dmg > prevDmg;
+  const bossWeakHit = bossGained && prevWeak != null && d.weakDmg > prevWeak;
+  if (!sameWeek) lastBossHp = null;
+  lastBossKey = bossKey; lastBossDmg = dmg; lastBossWeakDmg = d.weakDmg;
   const grade = settings.streakGrade || 75;
   const defeated = dmg >= grade;
   const attrName = BOSS_ATTR[boss.weak] || boss.weak;
@@ -4060,7 +4076,23 @@ function renderBoss() {
     }
   }
   const fill = document.getElementById("bossHpFill");
-  if (fill) { const hp = Math.max(0, Math.round((1 - dmg / grade) * 100)); fill.style.width = (defeated ? 100 : hp) + "%"; }
+  if (fill) {
+    const hp = Math.max(0, Math.round((1 - dmg / grade) * 100));
+    const target = defeated ? 100 : hp;
+    // On a landed hit the bar overshoots past the new value and settles back —
+    // that recoil is the difference between "a bar updated" and "that hurt".
+    // Every other render (a keystroke, a re-paint) just sets the width.
+    if (bossGained && window.FXStage) {
+      FXStage.spring("bossHp", target, (v) => { fill.style.width = Math.max(0, v) + "%"; },
+        { from: lastBossHp != null ? lastBossHp : target, stiffness: 330, damping: 16 });
+    } else {
+      fill.style.width = target + "%";
+    }
+    lastBossHp = target;
+  }
+  if (bossGained && window.FX && FX.bossHit) {
+    FX.bossHit({ from: panel, damage: dmg - prevDmg, weak: bossWeakHit });
+  }
   panel.classList.toggle("defeated", defeated);
 
   // The 2x weighting decides most fights and used to be a static line of text.

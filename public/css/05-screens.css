@@ -29,27 +29,40 @@
 
 /* --- identity: level orb + name + xp bar --- */
 .char-identity { display: flex; align-items: center; gap: 22px; }
+/* ===========================================================================
+ * THE BILLET  (was: the level orb)
+ * ---------------------------------------------------------------------------
+ * This is the hero element of the character screen, and it used to be a soul
+ * gem: a 108px sphere with a radial face, a halo that breathed forever, and a
+ * second halo that span faster the higher your rank. That is Diablo's mana orb.
+ *
+ * It is now a block of metal seen edge-on. Rank changes the MATERIAL — rough
+ * iron, ground, polished, edged, etched, and finally metal with heat still in
+ * it — which is six legible states instead of five opacity values, and it says
+ * the thing the rank ladder already says: you are not collecting glow, you are
+ * getting better at a craft.
+ * ======================================================================== */
 .lvl-orb {
   position: relative;
   width: 108px; height: 108px;
   flex-shrink: 0;
-  border-radius: 50%;
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   text-align: center;
-  background: radial-gradient(circle at 50% 32%, rgba(255,255,255,0.10), transparent 62%), var(--bg-2);
-  box-shadow: 0 0 50px var(--score-glow), inset 0 3px 12px rgba(0,0,0,0.65);
-}
-.lvl-orb::after {
-  content: "";
-  position: absolute; inset: -3px;
-  border-radius: 50%;
-  padding: 3px;
-  background: var(--gradient-brand);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  pointer-events: none;
+  /* Default material: rough iron. Each rank below overrides these three. */
+  --bil-face: #14141a;
+  --bil-spec: rgba(255, 255, 255, 0.05);
+  --bil-heat: transparent;
+  background:
+    linear-gradient(180deg, var(--bil-spec), transparent 42%),
+    radial-gradient(120% 90% at 50% 120%, var(--bil-heat), transparent 62%),
+    var(--bil-face);
+  box-shadow:
+    inset 0 1px 0 var(--bil-spec),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6),
+    var(--e-2);
+  transition: background 0.5s ease, box-shadow 0.5s ease;
 }
 .lvl-k {
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.22em;
@@ -61,10 +74,11 @@
   font-size: 46px;
   line-height: 0.9;
   letter-spacing: -0.03em;
-  background: var(--h1-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 4px 20px var(--score-glow);
+  /* Stamped into the face, not glowing off it. The brand gradient here put a
+     cool blue-violet number on hot metal — the one place in the hero where the
+     old palette and the new one were arguing in the same 46px. */
+  color: var(--text);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.75), 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 .char-meta { flex: 1; min-width: 0; }
 
@@ -72,7 +86,7 @@
 .xp-bar {
   position: relative;
   height: 16px;
-  border-radius: 99px;
+  border-radius: var(--r-pill);
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: inset 0 2px 6px rgba(0,0,0,0.6);
@@ -82,8 +96,11 @@
   height: 100%;
   width: 0%;
   border-radius: inherit;
-  background: var(--gradient-brand);
-  box-shadow: 0 0 16px var(--score-glow), inset 0 1px 1px rgba(255,255,255,0.4);
+  /* Molten: dull at the tail, brightest at the leading edge — the part that
+     just moved. XP accumulates and never decays, so this is metal that has been
+     worked, not a furnace that could cool. */
+  background: linear-gradient(90deg, var(--heat-1) 0%, var(--heat-2) 55%, var(--heat-4) 100%);
+  box-shadow: 0 0 16px var(--heat-glow), inset 0 1px 1px rgba(255,255,255,0.22);
   transition: width 0.7s cubic-bezier(0.34, 1.4, 0.5, 1);
   position: relative;
   overflow: hidden;
@@ -91,11 +108,11 @@
 .xp-bar-fill::after {
   content: "";
   position: absolute; inset: 0;
-  background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,0.35) 50%, transparent 80%);
-  transform: translateX(-120%);
-  animation: xp-shimmer 2.6s ease-in-out infinite;
+  /* The shimmer used to run forever. A bar that sparkles for four idle hours is
+     lying about liveness, and it repaints every frame the app is open. The
+     leading edge in the gradient above does the same job for free. */
+  background: linear-gradient(90deg, transparent 70%, rgba(255, 247, 237, 0.16) 100%);
 }
-@keyframes xp-shimmer { 0%,60% { transform: translateX(-120%);} 100% { transform: translateX(220%);} }
 .xp-legend {
   display: flex; justify-content: space-between; align-items: baseline;
   font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.02em;
@@ -173,7 +190,7 @@
 .attr-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
 .attr-name { flex: 1; font-weight: 700; font-size: 14px; }
 .attr-prog {
-  height: 7px; border-radius: 99px;
+  height: 7px; border-radius: var(--r-pill);
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.05);
   overflow: hidden;
@@ -238,39 +255,6 @@
 /* ===========================================================================
  * DOPAMINE FX  (fx.js)
  * ======================================================================== */
-.fx-xp-pop {
-  position: fixed;
-  z-index: 2200;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 900;
-  font-size: 16px;
-  letter-spacing: 0.01em;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.6);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  animation: fx-rise 1.05s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
-}
-@keyframes fx-rise {
-  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.7); }
-  18%  { opacity: 1; transform: translate(-50%, -90%) scale(1.12); }
-  100% { opacity: 0; transform: translate(-50%, -180%) scale(1); }
-}
-.fx-burst {
-  position: fixed;
-  z-index: 2150;
-  width: 22px; height: 22px;
-  margin: -11px 0 0 -11px;
-  border-radius: 50%;
-  border: 2px solid #38bdf8;
-  pointer-events: none;
-  animation: fx-burst 0.55s ease-out forwards;
-}
-.fx-burst.big { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
-@keyframes fx-burst {
-  0%   { opacity: 0.8; transform: scale(0.3); }
-  100% { opacity: 0;   transform: scale(2.1); }
-}
-
 .fx-combo {
   position: fixed;
   top: 92px; right: 26px;
@@ -306,38 +290,35 @@
   overflow: hidden;
 }
 .fx-overlay.show { background: rgba(2,2,4,0.4); }
+/* The celebration card is a struck plate, not a glowing pane: chamfered corners
+ * instead of a 24px pill, metal edges instead of a cyan hairline, and no
+ * accent-coloured bloom. The card is the one thing that must read instantly,
+ * so it stays DOM — it carries text, theme tokens and the self-hosted fonts. */
 .fx-card {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 30px 54px;
-  border-radius: 24px;
-  background: rgba(12,12,18,0.9);
-  border: 1px solid var(--accent-primary);
-  box-shadow: 0 30px 90px rgba(0,0,0,0.7), 0 0 60px var(--score-glow);
-  backdrop-filter: blur(24px);
+  border-radius: var(--r-lg);
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.6),
+    0 30px 90px rgba(0, 0, 0, 0.7);
   opacity: 0; transform: scale(0.7) translateY(10px);
   transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.7,0.5,1);
 }
 .fx-overlay.show .fx-card { opacity: 1; transform: scale(1) translateY(0); }
-.fx-card-k { font-size: var(--t-sm); font-weight: 900; letter-spacing: 0.32em; color: var(--accent-primary); }
+.fx-card-k { font-size: var(--t-sm); font-weight: 900; letter-spacing: 0.32em; color: var(--heat-3); }
+/* The value took `color` from the spec inline, but --h1-gradient clipped to
+   text with -webkit-text-fill-color:transparent beat it every time — which is
+   why every celebration still printed blue-violet no matter what fx.js asked
+   for. Same bug the level number had. */
 .fx-card-lv {
   font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 48px; line-height: 1; letter-spacing: -0.03em;
-  background: var(--h1-gradient);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  text-shadow: 0 6px 30px var(--score-glow);
+  color: var(--text);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), 0 6px 26px rgba(0, 0, 0, 0.5);
 }
 .fx-card-rank { font-size: var(--t-sm); font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
-
-.fx-confetti { position: absolute; inset: 0; pointer-events: none; }
-.confetti-piece {
-  position: absolute; top: -16px;
-  width: 9px; height: 15px; border-radius: 2px;
-  opacity: 0.95;
-  animation: fx-fall 1.9s linear forwards;
-}
-@keyframes fx-fall {
-  0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(105vh) rotate(540deg); opacity: 0.9; }
-}
 
 @media (max-width: 768px) {
   .fx-combo { top: auto; bottom: 86px; right: 14px; padding: 6px 12px; }
@@ -397,25 +378,27 @@
 .rank-insignia.sm .ic { width: 18px; height: 18px; }
 .char-subline .rank-pips { margin-left: 2px; }
 
-/* level orb: conic XP-to-next progress ring + gentle glow */
+/* XP to the next level, as heat running round the edge of the billet.
+ * There used to be TWO `.lvl-orb::after` rules — this conic one and a
+ * gradient-brand ring above it — fighting over the same pseudo-element. This is
+ * the one, and it is the standard masked gradient-border so it follows the
+ * billet's radius instead of assuming a circle.
+ * The breathing `orb-glow` is gone with the spin: a hero element that pulses
+ * forever is not alive, it is just moving. */
 .lvl-orb::after {
   content: "";
-  position: absolute; inset: -4px;
-  border-radius: 50%;
-  padding: 0;
-  background: conic-gradient(var(--accent-primary) var(--xp-deg, 0deg), rgba(255,255,255,0.08) var(--xp-deg, 0deg));
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px));
-          mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px));
-  -webkit-mask-composite: source-over;
-          mask-composite: add;
+  position: absolute; inset: -3px;
+  border-radius: calc(var(--r-lg) + 3px);
+  padding: 3px;
+  background: conic-gradient(from 180deg,
+    var(--heat-3) var(--xp-deg, 0deg),
+    rgba(255, 255, 255, 0.07) var(--xp-deg, 0deg));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
   pointer-events: none;
-  transition: --xp-deg 0.6s ease;
 }
-.lvl-orb { animation: orb-glow 3.8s ease-in-out infinite; isolation: isolate; }
-@keyframes orb-glow {
-  0%, 100% { box-shadow: 0 0 34px var(--score-glow), inset 0 3px 12px rgba(0,0,0,0.65); }
-  50%      { box-shadow: 0 0 56px var(--score-glow), inset 0 3px 12px rgba(0,0,0,0.65); }
-}
+.lvl-orb { isolation: isolate; }
 
 /* --- Rank-tiered orb frame + Legendary Aura ---------------------------------
    The aura is a masked conic halo that bleeds out around the orb; its richness
@@ -424,29 +407,82 @@
 .lvl-aura {
   position: absolute; inset: -16px; border-radius: 50%;
   pointer-events: none; z-index: -1; opacity: 0;
-  background: conic-gradient(from 0deg,
-    var(--accent-primary), transparent 25%,
-    var(--accent-primary) 50%, transparent 75%, var(--accent-primary));
-  -webkit-mask: radial-gradient(farthest-side, transparent 56%, #000 72%);
-          mask: radial-gradient(farthest-side, transparent 56%, #000 72%);
-  filter: blur(2px);
+  /* A bloom, not a halo: heat spilling off the metal onto what is behind it.
+     The conic gradient that used to live here only existed to be rotated. */
+  background: radial-gradient(closest-side,
+    var(--heat-2), rgba(124, 45, 18, 0.35) 55%, transparent 78%);
+  filter: blur(9px);
   transition: opacity 0.6s ease;
 }
-.char-screen[data-rank="apprentice"]  .lvl-aura { opacity: 0.22; }
-.char-screen[data-rank="journeyman"]  .lvl-aura { opacity: 0.32; }
-.char-screen[data-rank="artisan"]     .lvl-aura { opacity: 0.45; }
-.char-screen[data-rank="master"]      .lvl-aura { opacity: 0.62; filter: blur(3px); }
-.char-screen[data-rank="forgemaster"] .lvl-aura { opacity: 0.92; filter: blur(3px); }
-/* Forgemaster gets a second, slower counter-rotating ring for depth */
-.char-screen[data-rank="forgemaster"] .lvl-orb { box-shadow: 0 0 46px var(--score-glow), 0 0 12px var(--accent-primary), inset 0 3px 12px rgba(0,0,0,0.65); }
-.char-screen[data-rank="master"]      .lvl-orb { box-shadow: 0 0 42px var(--score-glow), inset 0 3px 12px rgba(0,0,0,0.65); }
-
-@media (prefers-reduced-motion: no-preference) {
-  .char-screen[data-rank="artisan"]     .lvl-aura { animation: aura-spin 14s linear infinite; }
-  .char-screen[data-rank="master"]      .lvl-aura { animation: aura-spin 10s linear infinite; }
-  .char-screen[data-rank="forgemaster"] .lvl-aura { animation: aura-spin 7s  linear infinite; }
+/* THE LADDER, AS MATERIAL.
+ * game.js writes data-rank on .char-screen. Each step is a real stage of
+ * finishing a piece of metal, in order: rough off the anvil, ground flat,
+ * polished, edged, etched, and finally a piece with heat still in it. Nothing
+ * here moves — the escalation is entirely in the surface, which is the point.
+ * Initiate inherits the defaults set on .lvl-orb (rough iron). */
+.char-screen[data-rank="apprentice"] .lvl-orb {
+  --bil-face: #191920;
+  --bil-spec: rgba(255, 255, 255, 0.08);
 }
-@keyframes aura-spin { to { transform: rotate(360deg); } }
+.char-screen[data-rank="journeyman"] .lvl-orb {
+  --bil-face: #1e1e26;
+  --bil-spec: rgba(255, 255, 255, 0.13);
+}
+.char-screen[data-rank="artisan"] .lvl-orb {
+  --bil-face: #23232c;
+  --bil-spec: rgba(255, 255, 255, 0.18);
+  /* edged: a ground chamfer catching the light */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 1px 0 0 rgba(255, 255, 255, 0.10),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.65),
+    var(--e-2);
+}
+.char-screen[data-rank="master"] .lvl-orb {
+  --bil-face: #26262f;
+  --bil-spec: rgba(255, 255, 255, 0.22);
+  /* etched: a fine tooled grain across the face */
+  background-image:
+    repeating-linear-gradient(115deg,
+      rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 7px),
+    linear-gradient(180deg, var(--bil-spec), transparent 42%),
+    radial-gradient(120% 90% at 50% 120%, var(--bil-heat), transparent 62%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.7),
+    var(--e-2);
+}
+/* Forgemaster is the only rank with heat still in the metal. It is the top of
+ * the ladder the app is named after, so it is the one state allowed to glow —
+ * and only from below, the way a billet holds heat longest at its core. */
+.char-screen[data-rank="forgemaster"] .lvl-orb {
+  --bil-face: #26262f;
+  --bil-spec: rgba(255, 255, 255, 0.24);
+  --bil-heat: rgba(194, 65, 12, 0.55);
+  background-image:
+    repeating-linear-gradient(115deg,
+      rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 7px),
+    linear-gradient(180deg, var(--bil-spec), transparent 42%),
+    radial-gradient(120% 95% at 50% 118%, var(--bil-heat), transparent 64%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.7),
+    0 0 26px var(--heat-glow),
+    var(--e-2);
+}
+
+/* The aura element stays in the markup but stops being a halo. At the top two
+ * ranks it is the faint bloom heat throws onto the surface around it; below
+ * that it is nothing at all. */
+.char-screen[data-rank="master"]      .lvl-aura { opacity: 0.18; }
+.char-screen[data-rank="forgemaster"] .lvl-aura { opacity: 0.45; }
+
+/* The spin is gone. Making the halo turn faster at higher rank is a soul-gem
+ * idea from a different genre — and two of the three tiers it escalated to are
+ * unreachable anyway. Rank should change the MATERIAL, not the speed of a
+ * rotating glow; that redraw is the billet, and it comes later. Until then the
+ * escalating opacity above carries the ladder on its own, and the app has one
+ * fewer thing animating forever behind a surface nobody is looking at. */
 
 /* weekly chip relocated into the hero */
 .week-chip {
@@ -475,7 +511,7 @@
 /* --- Hero Class chip (Soul Evolution) --- */
 .class-chip {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px 3px 7px; border-radius: 99px;
+  padding: 3px 10px 3px 7px; border-radius: var(--r-chip);
   font-size: var(--t-xs); font-weight: 800; letter-spacing: 0.01em;
   color: var(--cc, var(--accent-primary));
   background: color-mix(in srgb, var(--cc, var(--accent-primary)) 14%, transparent);
@@ -501,8 +537,8 @@
 .daily-missions.all-done .dm-count { color: #34d399; }
 /* Quests hub: segmented Daily | Weekly toggle in the card header */
 .quests-hub .dm-head { align-items: center; }
-.qh-tabs { display: inline-flex; gap: 2px; padding: 3px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 99px; }
-.qh-tab { padding: 4px 13px; font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: transparent; border: none; border-radius: 99px; cursor: pointer; transition: color 0.15s ease, background 0.15s ease; }
+.qh-tabs { display: inline-flex; gap: 2px; padding: 3px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: var(--r-chip); }
+.qh-tab { padding: 4px 13px; font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); background: transparent; border: none; border-radius: var(--r-chip); cursor: pointer; transition: color 0.15s ease, background 0.15s ease; }
 .qh-tab:hover { color: var(--text-dim); background: rgba(255,255,255,0.06); transform: none; box-shadow: none; }
 .qh-tab.on { color: #04140c; background: var(--accent-secondary, #34d399); }
 .dm-empty { font-size: var(--t-xs); color: var(--muted); padding: 8px 2px; }
@@ -551,21 +587,33 @@
   border: 2px solid var(--line-strong);
   background: rgba(0, 0, 0, 0.3);
   position: relative; flex: 0 0 auto; cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  /* Percussive: the attack is immediate and the settle is what you see.
+     cubic-bezier(.2,0,0,1) front-loads the whole change into the first
+     frames — a hammer does not ease in. */
+  transition: background 160ms cubic-bezier(.2,0,0,1),
+              border-color 160ms cubic-bezier(.2,0,0,1),
+              box-shadow 200ms cubic-bezier(.2,0,0,1);
 }
 .check input[type="checkbox"]:hover { border-color: var(--accent-primary); }
+/* The strike. This is the most-repeated moment in the product, and the reward
+ * for it used to be a blue-violet gradient. */
 .check input[type="checkbox"]:checked {
-  background: var(--gradient-brand);
+  background: var(--heat-3);
   border-color: transparent;
-  box-shadow: 0 0 12px var(--score-glow);
+  box-shadow: 0 0 12px var(--heat-glow);
 }
-.check input[type="checkbox"]:checked::after {
+.check input[type="checkbox"]::after {
   content: "";
   position: absolute; left: 6px; top: 2px;
   width: 6px; height: 11px;
   border: solid #fff; border-width: 0 2.5px 2.5px 0;
-  transform: rotate(45deg);
+  transform: rotate(45deg) scale(0);
+  transform-origin: 60% 55%;
+  opacity: 0;
+  /* Overshoot past 1 and recoil back. This is where the hit reads. */
+  transition: transform 240ms cubic-bezier(.2, 1.85, .4, 1), opacity 90ms linear;
 }
+.check input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1); opacity: 1; }
 
 /* quest rows */
 .check.quest { align-items: center; }
@@ -576,7 +624,10 @@
   color: var(--muted); opacity: 0.6;
   transition: color 0.2s ease, opacity 0.2s ease;
 }
-.check.quest input:checked ~ .q-text { color: var(--muted-2); text-decoration: line-through; opacity: 0.7; }
+/* Done reads as MADE, not deleted. Struck-through-and-faded is the grammar of
+ * "cancelled"; in a product about making yourself, a finished task should be
+ * cooled metal — still solid, still there, just no longer glowing. */
+.check.quest input:checked ~ .q-text { color: var(--muted); opacity: 0.82; }
 .check.quest input:checked ~ .q-xp { color: var(--gradient-success-text); opacity: 1; }
 
 /* per-task attribute dot — click to set which stat a daily habit trains */
@@ -602,7 +653,7 @@
 .goal-card-actions button:hover, .quest-row-actions button:hover { color: var(--text); border-color: var(--accent-primary); }
 .goal-card-actions .ic, .quest-row-actions .ic { width: 15px; height: 15px; }
 .goal-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 10px 0; }
-.goal-status, .quest-date-badge { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border-radius: 99px; padding: 4px 9px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: var(--muted); font-size: var(--t-2xs); font-weight: 800; }
+.goal-status, .quest-date-badge { display: inline-flex; align-items: center; gap: 5px; min-width: 0; border-radius: var(--r-chip); padding: 4px 9px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: var(--muted); font-size: var(--t-2xs); font-weight: 800; }
 .quest-date-badge .ic { width: 11px; height: 11px; }
 .quest-date-badge.is-weekly { color: var(--ac, var(--accent-primary)); border-color: color-mix(in srgb, var(--ac, var(--accent-primary)) 28%, transparent); background: color-mix(in srgb, var(--ac, var(--accent-primary)) 8%, transparent); }
 .goal-status.in-progress { color: var(--accent-primary); border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent); background: color-mix(in srgb, var(--accent-primary) 10%, transparent); }
@@ -694,7 +745,7 @@
 
 .check .task-meta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; flex: 0 1 auto; min-width: 0; }
 .check .quest-source-badge, .check .task-kind-badge { display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; min-width: 0; border-radius: 7px; white-space: nowrap; font-family: 'Outfit', sans-serif; font-size: var(--t-2xs); font-weight: 850; line-height: 1; }
-.check .quest-source-badge { max-width: 112px; padding: 4px 9px; border-radius: 99px; color: var(--ac, var(--muted)); border: 1px solid color-mix(in srgb, var(--ac, #94a3b8) 38%, transparent); background: color-mix(in srgb, var(--ac, #94a3b8) 15%, transparent); text-transform: uppercase; letter-spacing: .045em; }
+.check .quest-source-badge { max-width: 112px; padding: 4px 9px; border-radius: var(--r-chip); color: var(--ac, var(--muted)); border: 1px solid color-mix(in srgb, var(--ac, #94a3b8) 38%, transparent); background: color-mix(in srgb, var(--ac, #94a3b8) 15%, transparent); text-transform: uppercase; letter-spacing: .045em; }
 .check .source-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--ac, #94a3b8); box-shadow: 0 0 8px color-mix(in srgb, var(--ac, #94a3b8) 72%, transparent); }
 .check .source-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; line-height: inherit; }
 .check .task-kind-badge { flex: 0 0 auto; padding: 5px 7px; color: var(--muted); border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.035); letter-spacing: .02em; }
@@ -741,8 +792,8 @@
 .hero-count { flex: 0 0 auto; font-family: 'Outfit', sans-serif; font-weight: 800; text-align: right; white-space: nowrap; }
 .hero-count b { font-size: 30px; color: var(--text); }
 .hero-count span { font-size: 15px; color: var(--muted-2); margin-left: 3px; }
-.hero-gauge { position: relative; height: 9px; margin-top: 16px; border-radius: 99px; background: rgba(0,0,0,.4); overflow: hidden; border: 1px solid rgba(255,255,255,.05); }
-.hero-gauge > span, .hero-gauge .bar-fill { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, color-mix(in srgb, var(--ac, #8b93a7) 55%, #000), var(--ac, #8b93a7)); box-shadow: 0 0 16px color-mix(in srgb, var(--ac, #8b93a7) 70%, transparent); transition: width .3s ease; }
+.hero-gauge { position: relative; height: 9px; margin-top: 16px; border-radius: var(--r-pill); background: rgba(0,0,0,.4); overflow: hidden; border: 1px solid rgba(255,255,255,.05); }
+.hero-gauge > span, .hero-gauge .bar-fill { display: block; height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, color-mix(in srgb, var(--ac, #8b93a7) 55%, #000), var(--ac, #8b93a7)); box-shadow: 0 0 16px color-mix(in srgb, var(--ac, #8b93a7) 70%, transparent); transition: width .3s ease; }
 .hero-cap { display: block; margin-top: 9px; font-size: var(--t-2xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .hero-track { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 16px; }
 .hero-track::before { content: ""; position: absolute; left: 17px; right: 17px; top: 50%; height: 2px; transform: translateY(-50%); background: rgba(255,255,255,.06); }
@@ -805,7 +856,7 @@
 .pursuit-plan-head { align-items: flex-start; }
 .pursuit-plan-hint { margin: 5px 0 0; color: var(--muted-2); font-size: var(--t-xs); line-height: 1.35; }
 .pursuit-plan-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex: 0 0 auto; }
-.plan-progress { padding: 5px 9px; border-radius: 99px; color: var(--muted); background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); font-size: var(--t-2xs); font-weight: 800; white-space: nowrap; }
+.plan-progress { padding: 5px 9px; border-radius: var(--r-chip); color: var(--muted); background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); font-size: var(--t-2xs); font-weight: 800; white-space: nowrap; }
 .quest-session-notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 7px; flex: 1 0 100%; width: 100%; padding: 8px 0 1px 0; border-top: 1px solid rgba(255,255,255,.055); }
 .quest-session-notes label { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .quest-session-notes label > span { flex: 0 0 auto; width: 26px; color: var(--ac, var(--muted)); font-size: var(--t-2xs); font-weight: 900; text-transform: uppercase; }
@@ -872,7 +923,7 @@
   color: var(--ac, #94a3b8);
   background: color-mix(in srgb, var(--ac, #94a3b8) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--ac, #94a3b8) 40%, transparent);
-  border-radius: 99px; padding: 4px 10px; margin-right: 4px; white-space: nowrap;
+  border-radius: var(--r-chip); padding: 4px 10px; margin-right: 4px; white-space: nowrap;
 }
 /* a dot before the label */
 .attr-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ac, #94a3b8); margin-right: 6px; flex: 0 0 auto; }
@@ -884,7 +935,7 @@
 .cal-nav-btn:hover { background: rgba(255,255,255,0.12); }
 .cal-nav-btn .ic { width: 16px; height: 16px; }
 .cal-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 18px; min-width: 150px; }
-.cal-today-btn { margin-left: auto; padding: 7px 14px; border-radius: 99px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--text); font-weight: 700; cursor: pointer; }
+.cal-today-btn { margin-left: auto; padding: 7px 14px; border-radius: var(--r-chip); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--text); font-weight: 700; cursor: pointer; }
 .cal-today-btn:hover { border-color: var(--accent-primary); }
 .cal-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 14px; font-size: var(--t-sm); color: var(--muted); }
 .cs-item strong { color: var(--text); font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 15px; margin-right: 4px; }
@@ -922,7 +973,7 @@
   color: var(--gradient-success-text);
   background: var(--pill-green-bg);
   border: 1px solid var(--pill-green-border);
-  border-radius: 99px;
+  border-radius: var(--r-chip);
   padding: 4px 9px;
   margin-right: 4px;
   white-space: nowrap;
@@ -1000,7 +1051,7 @@
 .ph-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); }
 .ph-band {
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-  padding: 3px 8px; border-radius: 99px; color: var(--ph);
+  padding: 3px 8px; border-radius: var(--r-chip); color: var(--ph);
   border: 1px solid color-mix(in srgb, var(--ph) 45%, transparent);
   background: color-mix(in srgb, var(--ph) 12%, transparent);
 }
@@ -1021,7 +1072,7 @@
 .mod-presets { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.08); }
 .mod-presets-label { display: block; font-size: var(--t-xs); font-weight: 700; color: var(--muted); margin-bottom: 8px; }
 .mod-presets-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.mod-preset { padding: 7px 14px; border-radius: 99px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: var(--text); font-weight: 700; font-size: var(--t-sm); cursor: pointer; }
+.mod-preset { padding: 7px 14px; border-radius: var(--r-chip); border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: var(--text); font-weight: 700; font-size: var(--t-sm); cursor: pointer; }
 .mod-preset:hover { background: rgba(255,255,255,0.1); border-color: var(--accent-primary); }
 .mod-add { margin-top: 12px; }
 .mod-add-toggle { width: 100%; padding: 10px; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.18); background: rgba(255,255,255,0.02); color: var(--text); font-weight: 700; cursor: pointer; }
@@ -1037,7 +1088,7 @@
 }
 .today-tag {
   display: inline-block; margin-left: 10px; vertical-align: middle;
-  padding: 3px 9px; border-radius: 99px;
+  padding: 3px 9px; border-radius: var(--r-chip);
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--accent-primary);
   background: var(--eyebrow-bg); border: 1px solid var(--eyebrow-border);
@@ -1233,9 +1284,8 @@
   }
 }
 
-/* Forge brand mark (topbar) */
-.brand-mark { display: inline-grid; place-items: center; width: 26px; height: 26px; flex-shrink: 0; }
-.brand-mark svg { width: 24px; height: 24px; fill: var(--accent-primary); filter: drop-shadow(0 0 6px var(--score-glow)); }
+/* Forge brand mark moved to 03-components.css — the auth pages need it too
+ * and they only load tokens/base/components. One definition, three pages. */
 
 /* ===========================================================================
  * TROPHIES — dashboard summary (in the hero, where the heatmap used to live)
@@ -1249,7 +1299,7 @@
 .ht-open {
   display: inline-flex; align-items: center; gap: 2px; padding: 5px 8px 5px 12px;
   font-size: var(--t-xs); font-weight: 600; color: var(--muted);
-  background: transparent; border: 1px solid var(--line); border-radius: 99px;
+  background: transparent; border: 1px solid var(--line); border-radius: var(--r-chip);
 }
 .ht-open .ic { width: 14px; height: 14px; }
 .ht-open:hover { color: var(--text); border-color: var(--line-strong); }
@@ -1271,7 +1321,7 @@
 .ht-today-k { font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-2); }
 .ht-today-none { font-size: var(--t-xs); color: var(--muted); }
 .ht-chip {
-  font-size: var(--t-2xs); font-weight: 700; padding: 3px 10px; border-radius: 99px;
+  font-size: var(--t-2xs); font-weight: 700; padding: 3px 10px; border-radius: var(--r-chip);
   color: var(--bc); border: 1px solid color-mix(in srgb, var(--bc) 45%, transparent);
   background: color-mix(in srgb, var(--bc) 12%, transparent);
 }
@@ -1389,7 +1439,7 @@
 }
 .cab-summary:empty { display: none; }
 .cab-prog { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.cab-prog-bar { flex: 1; min-width: 0; height: 9px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
+.cab-prog-bar { flex: 1; min-width: 0; height: 9px; border-radius: var(--r-pill); background: rgba(0,0,0,0.4); overflow: hidden; }
 .cab-prog-bar span { display: block; height: 100%; border-radius: inherit; background: var(--gradient-brand); box-shadow: 0 0 12px var(--score-glow); transition: width 0.6s cubic-bezier(0.34,1.4,0.5,1); }
 .cab-prog-txt { font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); white-space: nowrap; }
 .rarity-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; }
@@ -1411,7 +1461,7 @@
 .ins-filter {
   flex: 0 0 auto; scroll-snap-align: start;
   font-size: var(--t-xs); font-weight: 600; color: var(--muted);
-  padding: 6px 12px; border-radius: 99px; white-space: nowrap;
+  padding: 6px 12px; border-radius: var(--r-chip); white-space: nowrap;
   background: transparent; border: 1px solid var(--line);
 }
 .ins-filter:hover { color: var(--text); border-color: var(--line-strong); transform: none; box-shadow: none; }
@@ -1443,7 +1493,7 @@
 /* Progress on a locked tile. A lock icon says "not yet"; "37 / 40" says how
    much further, which is the only version anyone acts on. */
 .badge-prog { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
-.badge-prog-bar { flex: 1; min-width: 0; height: 3px; border-radius: 99px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.badge-prog-bar { flex: 1; min-width: 0; height: 3px; border-radius: var(--r-pill); background: rgba(255,255,255,0.1); overflow: hidden; }
 .badge-prog-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--muted); transition: width 0.5s ease; }
 .badge-prog-n { font-size: var(--t-2xs); font-weight: 800; color: var(--muted-2); white-space: nowrap; letter-spacing: 0.02em; }
 
@@ -1535,7 +1585,7 @@
 .rec-add-btn {
   flex-shrink: 0;
   font-size: var(--t-xs); font-weight: 800; color: var(--text);
-  padding: 7px 14px; border-radius: 99px;
+  padding: 7px 14px; border-radius: var(--r-chip);
   background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
@@ -1544,7 +1594,7 @@
 .rec-starters { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-top: 14px; }
 .rec-starter {
   font-size: var(--t-xs); font-weight: 700; color: var(--text-dim);
-  padding: 7px 13px; border-radius: 99px;
+  padding: 7px 13px; border-radius: var(--r-chip);
   background: rgba(255,255,255,0.03); border: 1px dashed var(--line-strong);
 }
 .rec-starter:hover { color: var(--text); border-style: solid; border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 12%, transparent); transform: none; box-shadow: none; }
@@ -1552,7 +1602,7 @@
 /* The record → insignia link, which the pane never used to mention. */
 .rec-nudge { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .rec-nudge:empty { display: none; }
-.rec-nudge-bar { flex: 1; min-width: 0; max-width: 160px; height: 5px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
+.rec-nudge-bar { flex: 1; min-width: 0; max-width: 160px; height: 5px; border-radius: var(--r-pill); background: rgba(0,0,0,0.4); overflow: hidden; }
 .rec-nudge-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--gradient-brand); box-shadow: 0 0 10px var(--score-glow); transition: width 0.6s ease; }
 .rec-nudge-txt { font-size: var(--t-xs); color: var(--muted); }
 .rec-nudge-txt strong { color: var(--text-dim); font-weight: 800; }
@@ -1563,14 +1613,14 @@
 .rec-best-prev { font-size: var(--t-2xs); color: var(--muted-2); }
 .rec-beat {
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.02em; color: var(--text-dim);
-  padding: 3px 9px; border-radius: 99px;
+  padding: 3px 9px; border-radius: var(--r-chip);
   background: transparent; border: 1px solid var(--line-strong);
 }
 .rec-beat:hover { color: var(--text); border-color: var(--rc, var(--accent-primary)); background: color-mix(in srgb, var(--rc) 14%, transparent); transform: none; box-shadow: none; }
 
 .rec-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .rec-filters:empty { display: none; }
-.rec-filter { font-size: var(--t-2xs); font-weight: 700; color: var(--muted); padding: 4px 10px; border-radius: 99px; background: transparent; border: 1px solid var(--line); }
+.rec-filter { font-size: var(--t-2xs); font-weight: 700; color: var(--muted); padding: 4px 10px; border-radius: var(--r-chip); background: transparent; border: 1px solid var(--line); }
 .rec-filter:hover { color: var(--text); border-color: var(--line-strong); transform: none; box-shadow: none; }
 .rec-filter.on { color: var(--text); border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 12%, transparent); }
 
@@ -1592,7 +1642,7 @@
 .rec-body { flex: 1; min-width: 0; }
 .rec-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .rec-title { font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
-.rec-metric { flex-shrink: 0; font-size: var(--t-xs); font-weight: 800; color: var(--rc, var(--accent-primary)); background: color-mix(in srgb, var(--rc) 14%, transparent); padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.rec-metric { flex-shrink: 0; font-size: var(--t-xs); font-weight: 800; color: var(--rc, var(--accent-primary)); background: color-mix(in srgb, var(--rc) 14%, transparent); padding: 2px 8px; border-radius: var(--r-chip); white-space: nowrap; }
 .rec-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; font-size: var(--t-2xs); color: var(--muted); }
 .rec-meta .rec-cat { color: var(--text-dim); font-weight: 700; }
 .rec-auto { font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
@@ -1636,8 +1686,8 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .tr-bar-fill.gx { background: var(--accent-primary); }
 .tr-skip { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
 .tr-skip-name { flex: 0 0 42%; font-size: var(--t-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tr-skip-bar { flex: 1; height: 7px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
-.tr-skip-fill { display: block; height: 100%; background: var(--accent-primary); border-radius: 99px; }
+.tr-skip-bar { flex: 1; height: 7px; border-radius: var(--r-pill); background: rgba(0,0,0,0.4); overflow: hidden; }
+.tr-skip-fill { display: block; height: 100%; background: var(--accent-primary); border-radius: var(--r-pill); }
 .tr-skip-rate { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-xs); color: var(--muted); min-width: 34px; text-align: right; }
 /* Per-attribute trend sparklines */
 .tr-sparks { display: flex; flex-direction: column; gap: 4px; }
@@ -1665,8 +1715,8 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .sg-del { padding: 0; width: 24px; height: 24px; background: transparent; border: none; color: var(--muted); }
 .sg-del .ic { width: 15px; height: 15px; }
 .sg-del:hover { color: #fca5a5; transform: none; box-shadow: none; background: transparent; }
-.sg-bar { height: 7px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
-.sg-fill { display: block; height: 100%; border-radius: 99px; background: var(--accent-secondary, #34d399); }
+.sg-bar { height: 7px; border-radius: var(--r-pill); background: rgba(0,0,0,0.4); overflow: hidden; }
+.sg-fill { display: block; height: 100%; border-radius: var(--r-pill); background: var(--accent-secondary, #34d399); }
 .season-goal.done .sg-fill { background: #34d399; }
 .sg-meta { font-size: var(--t-2xs); font-weight: 700; color: var(--muted); margin-top: 6px; }
 .season-empty { font-size: var(--t-sm); color: var(--muted); padding: 10px 2px; }
@@ -1678,8 +1728,8 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .ya-row { display: flex; align-items: center; gap: 12px; }
 .ya-head { flex: 0 0 30%; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ya-name { font-size: var(--t-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ya-bar { flex: 1; height: 8px; border-radius: 99px; background: rgba(0,0,0,0.4); overflow: hidden; }
-.ya-fill { display: block; height: 100%; border-radius: 99px; }
+.ya-bar { flex: 1; height: 8px; border-radius: var(--r-pill); background: rgba(0,0,0,0.4); overflow: hidden; }
+.ya-fill { display: block; height: 100%; border-radius: var(--r-pill); }
 .ya-val { flex: 0 0 auto; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-xs); color: var(--muted); min-width: 56px; text-align: right; }
 
 /* Carbon — graphite mono / minimal */
@@ -1724,12 +1774,12 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 @media (max-width: 560px) { .boss-hunt { display: none; } }
 .boss-status { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); color: #fca5a5; white-space: nowrap; }
 .boss-name { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 24px; letter-spacing: -0.02em; margin: 2px 0 10px; }
-.boss-hp { height: 14px; border-radius: 99px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.06); overflow: hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,0.6); }
+.boss-hp { height: 14px; border-radius: var(--r-pill); background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.06); overflow: hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,0.6); }
 .boss-hp-fill { height: 100%; width: 100%; border-radius: inherit; background: linear-gradient(90deg, #ef4444, #f97316); box-shadow: 0 0 12px rgba(239,68,68,0.5); transition: width 0.6s cubic-bezier(0.34,1.4,0.5,1); }
 /* Damage breakdown. The HP bar says how close the boss is to dying; this says
    where that damage came from, which is the part the 2x weighting decides. */
 .boss-dmg { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
-.boss-dmg-bar { display: flex; flex: 1; min-width: 0; height: 4px; border-radius: 99px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.boss-dmg-bar { display: flex; flex: 1; min-width: 0; height: 4px; border-radius: var(--r-pill); background: rgba(255,255,255,0.07); overflow: hidden; }
 .boss-dmg-seg { display: block; height: 100%; transition: width 0.5s ease; }
 .boss-dmg-weak { background: var(--accent-primary); box-shadow: 0 0 8px var(--score-glow); }
 .boss-dmg-other { background: var(--muted-2); opacity: 0.7; }
@@ -1787,7 +1837,7 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .sv-lvl span { font-size: 8px; font-weight: 800; letter-spacing: .14em; color: var(--muted-2); }
 .sv-idmeta { min-width: 0; flex: 1 1 auto; }
 .sv-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sv-xpbar { height: 4px; margin: 6px 0 5px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.sv-xpbar { height: 4px; margin: 6px 0 5px; border-radius: var(--r-pill); background: rgba(255,255,255,.08); overflow: hidden; }
 .sv-xpbar i { display: block; height: 100%; border-radius: inherit; background: var(--gradient-brand); }
 .sv-streak { font-size: var(--t-2xs); font-weight: 700; color: var(--muted); }
 
@@ -1823,7 +1873,7 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .sv-boss:hover { transform: none; box-shadow: none; border-color: var(--line-strong); }
 .sv-boss-top { display: flex; align-items: center; gap: 6px; font-size: var(--t-xs); }
 .sv-boss-top b { font-family: 'Outfit', sans-serif; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sv-boss-hp { display: block; height: 5px; margin: 7px 0 5px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.sv-boss-hp { display: block; height: 5px; margin: 7px 0 5px; border-radius: var(--r-pill); background: rgba(255,255,255,.08); overflow: hidden; }
 .sv-boss-hp i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--red), var(--amber)); }
 .sv-boss-sub { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); }
 
@@ -1891,7 +1941,7 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .qadd-chips { display: flex; align-items: center; gap: 5px; flex: 0 0 auto; }
 .qchip {
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: .04em;
-  padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  padding: 3px 8px; border-radius: var(--r-chip); white-space: nowrap;
   color: var(--accent-primary);
   border: 1px solid color-mix(in srgb, var(--accent-primary) 34%, transparent);
   background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
@@ -1933,3 +1983,42 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   .qadd-chips { display: none; }
   .undo-bar { left: var(--s-2); right: var(--s-2); bottom: calc(72px + env(safe-area-inset-bottom, 0px)); justify-content: space-between; }
 }
+
+/* ===========================================================================
+ * THE STREAK — temperature, not a shield.
+ * Written by Game.render() as data-heat on #dayStreak: lit (alive), cooling
+ * (grace day spent — one bad day from cold), cold (broken).
+ * ======================================================================== */
+#dayStreak { transition: color .45s ease, text-shadow .45s ease; }
+#dayStreak[data-heat="lit"]     { color: var(--heat-4); text-shadow: 0 0 12px var(--heat-glow); }
+#dayStreak[data-heat="cooling"] { color: var(--heat-2); text-shadow: none; }
+#dayStreak[data-heat="cold"]    { color: var(--muted-2); text-shadow: none; }
+
+/* ===========================================================================
+ * REDUCED MOTION
+ * The .fx-* celebration layer had no guard at all: confetti, overlay scale-ins
+ * and the combo bump ran regardless. Motion is about to get more percussive,
+ * which makes this a real accessibility debt rather than a nicety. Nothing here
+ * removes feedback — the state still changes, it just stops moving.
+ * ======================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .fx-overlay, .fx-card, .fx-combo, .fx-badge-toast {
+    animation: none !important;
+    transition: opacity 120ms linear !important;
+    transform: none !important;
+  }
+  .check input[type="checkbox"]::after { transition: opacity 90ms linear !important; }
+  .check input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1) !important; }
+  .xp-bar-fill { transition: none !important; }
+}
+
+/* ===========================================================================
+ * SHAKE TARGET
+ * FXStage writes --shake-x/--shake-y here. #viewStack is chosen deliberately:
+ * it holds the game content and nothing position:fixed, so a transform on it
+ * cannot become the containing block for the mobile tab bar or the twelve
+ * modal backdrops (all of which live inside .shell). translate3d keeps it on
+ * the compositor. The properties are absent when idle, so this costs nothing.
+ * ======================================================================== */
+#viewStack { transform: translate3d(var(--shake-x, 0), var(--shake-y, 0), 0); }
+@media (prefers-reduced-motion: reduce) { #viewStack { transform: none; } }

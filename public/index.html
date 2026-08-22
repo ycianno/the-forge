@@ -13,12 +13,12 @@
        cascade is exactly what it was as a single file. Sequential slices, not a
        re-grouping: 01 tokens/themes, 02 base+topbar+hero, 03 components,
        04 the early responsive blocks, 05 the screens, 06 the mobile passes. -->
-  <link rel="stylesheet" href="css/01-tokens.css?v=3" />
-  <link rel="stylesheet" href="css/02-base.css?v=3" />
-  <link rel="stylesheet" href="css/03-components.css?v=4" />
+  <link rel="stylesheet" href="css/01-tokens.css?v=5" />
+  <link rel="stylesheet" href="css/02-base.css?v=5" />
+  <link rel="stylesheet" href="css/03-components.css?v=9" />
   <link rel="stylesheet" href="css/04-responsive.css?v=3" />
-  <link rel="stylesheet" href="css/05-screens.css?v=20" />
-  <link rel="stylesheet" href="css/06-mobile.css?v=6" />
+  <link rel="stylesheet" href="css/05-screens.css?v=29" />
+  <link rel="stylesheet" href="css/06-mobile.css?v=7" />
 </head>
 <body>
   <main class="shell">
@@ -83,7 +83,7 @@
         <button class="more-item" id="moreScoreboardBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="m9 13 2 2 4-4"/></svg></span>Quest Log</button>
         <button class="more-item" id="moreDietBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06z"/><path d="M10 2c1 .5 2 2 2 5"/></svg></span>Provisions</button>
         <button class="more-item" id="moreProjectsBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg></span>Workshop</button>
-        <button class="more-item" id="moreReviewBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></span>War Council</button>
+        <button class="more-item" id="moreReviewBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></span>The Bench</button>
         <button class="more-item" id="moreCalendarBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Calendar</button>
         <button class="more-item" id="moreSeasonBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9"/></svg></span>Season</button>
         <button class="more-item" id="moreReportsBtn"><span class="more-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20V10M10 20V4M16 20v-7M3 20h18"/></svg></span>Reports</button>
@@ -134,7 +134,7 @@
         <div class="mission-banner">
           <span class="mission-ico" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg></span>
           <div class="mission-body">
-            <span class="label">Active Mission</span>
+            <span class="label">The work</span>
             <input id="mission" data-save type="text" placeholder="Example: Hit 14 study hours + 5 workouts">
           </div>
         </div>
@@ -237,7 +237,7 @@
     </details>
 
     <details id="review" class="section section-card glass" open>
-      <summary><div class="summary-left"><h2>War Council</h2><p class="hint">At the end of the week, copy this summary and paste it into ChatGPT for analysis.</p></div><span class="chev">⌄</span></summary>
+      <summary><div class="summary-left"><h2>The Bench</h2><p class="hint">At the end of the week, put the work under the light: copy this summary and paste it into ChatGPT for analysis.</p></div><span class="chev">⌄</span></summary>
       <div class="content grid grid-2">
         <div><label class="label" id="lblWins">Wins this week</label><textarea id="wins" data-save></textarea></div>
         <div><label class="label" id="lblMisses">Missed habits / friction</label><textarea id="misses" data-save></textarea></div>
@@ -258,8 +258,8 @@
           <p class="onboard-loop">Check off daily quests → earn XP → level up 5 life attributes → beat the weekly boss.</p>
         </div>
         <div class="onboard-field">
-          <label for="onboardCallsign">Your callsign</label>
-          <input type="text" id="onboardCallsign" maxlength="28" placeholder="Player One" autocomplete="off" />
+          <label for="onboardCallsign">Your maker's mark</label>
+          <input type="text" id="onboardCallsign" maxlength="28" placeholder="Unsigned" autocomplete="off" />
         </div>
         <div class="onboard-field">
           <label>Choose your path</label>
@@ -344,8 +344,8 @@
         <!-- Profile Tab -->
         <div class="settings-panel" id="settingsProfile" data-panel="profile" style="display:none;">
           <p class="settings-intro">Your hero identity and reminders.</p>
-          <label class="label">Callsign</label>
-          <input type="text" id="cfgCallsign" placeholder="Player One" maxlength="28">
+          <label class="label">Maker's mark</label>
+          <input type="text" id="cfgCallsign" placeholder="Unsigned" maxlength="28">
 
           <label class="label" style="margin-top:18px;">Reminders (phone push)</label>
           <label class="check" style="margin:0 0 4px;"><input type="checkbox" id="cfgRemindEnable"><span>Enable push reminders on this device</span></label>
@@ -702,10 +702,11 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="modules.js?v=20"></script>
-  <script src="game.js?v=33"></script>
-  <script src="fx.js?v=9"></script>
-  <script src="app.js?v=95"></script>
+  <script src="modules.js?v=21"></script>
+  <script src="game.js?v=35"></script>
+  <script src="fx-stage.js?v=2"></script>
+  <script src="fx.js?v=13"></script>
+  <script src="app.js?v=96"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

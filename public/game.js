@@ -438,7 +438,14 @@
     setText("lifetimeXp", p.lifetimeXp.toLocaleString());
     setText("weeklyXp", "+" + p.weeklyXp.toLocaleString());
     setText("weeksActive", p.activeWeeks);
-    setText("dayStreak", p.dayStreak + (p.streakUsed > 0 ? " 🛡️" : ""));
+    // The streak is the one mechanic that genuinely decays, so it is the one
+    // that carries heat. The grace day (streakFreeze) is thermal inertia: the
+    // piece stays workable for a while after it leaves the fire. Rendering that
+    // as falling temperature is a more accurate picture of the rule than the
+    // shield was — and "it went cold" is a kinder failure than a broken badge.
+    setText("dayStreak", String(p.dayStreak));
+    const dsEl = document.getElementById("dayStreak");
+    if (dsEl) dsEl.dataset.heat = p.dayStreak <= 0 ? "cold" : (p.streakUsed > 0 ? "cooling" : "lit");
     setText("xpText", p.xpIntoLevel.toLocaleString() + " / " + p.xpForNext.toLocaleString() + " XP");
     setText("xpNextLabel", "to Level " + (p.level + 1));
 
@@ -510,14 +517,14 @@
   // ----- Editable callsign -------------------------------------------------
   let editingCallsign = false;
   function callsignName() {
-    return (typeof settings !== "undefined" && settings && settings.callsign) ? settings.callsign : "Player One";
+    return (typeof settings !== "undefined" && settings && settings.callsign) ? settings.callsign : "Unsigned";
   }
   function renderCallsign() {
     const wrap = document.getElementById("callsign");
     if (!wrap) return;
     wrap.innerHTML =
       `<span class="callsign-text">${escapeHtml(callsignName())}</span>` +
-      `<button class="callsign-edit" id="callsignEdit" aria-label="Rename operator" title="Rename">${ICONS.pencil}</button>`;
+      `<button class="callsign-edit" id="callsignEdit" aria-label="Rename" title="Rename">${ICONS.pencil}</button>`;
     const btn = document.getElementById("callsignEdit");
     if (btn) btn.onclick = startCallsignEdit;
   }

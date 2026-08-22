@@ -71,7 +71,7 @@ h1, h2, h3, .brand {
   gap: 16px;
   padding: 14px 20px;
   margin-bottom: 24px;
-  border-radius: 99px;
+  border-radius: var(--r-chip);
   background: rgba(10, 10, 14, 0.75);
   border: 1px solid var(--line-strong);
   backdrop-filter: blur(28px);
@@ -93,12 +93,12 @@ h1, h2, h3, .brand {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border-radius: 99px;
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--r-chip);
+  background: rgba(194, 65, 12, 0.16);
+  border: 1px solid rgba(249, 115, 22, 0.32);
   font-size: var(--t-xs);
   font-weight: 700;
-  color: #fcd34d;
+  color: var(--heat-4);
 }
 .orb { 
   width: 16px; 
@@ -125,7 +125,7 @@ h1, h2, h3, .brand {
   text-decoration: none;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
-  border-radius: 99px;
+  border-radius: var(--r-chip);
   padding: 10px 16px;
   font-family: 'Inter', sans-serif;
   font-weight: 600;
@@ -200,7 +200,7 @@ button.ghost:hover { background: rgba(255,255,255,0.08); border-color: transpare
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  border-radius: 99px;
+  border-radius: var(--r-chip);
   color: var(--eyebrow-text);
   background: var(--eyebrow-bg);
   border: 1px solid var(--eyebrow-border);
@@ -281,7 +281,7 @@ h1 {
 }
 .score-label { color: var(--muted); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.1em; }
 .status-line { margin-top: 8px; color: var(--text); font-size: 14px; opacity: 0.8; }
-.save-state { display:inline-flex; align-items:center; margin-left:8px; padding:3px 7px; border:1px solid rgba(255,255,255,.08); border-radius:999px; color:var(--muted); font-size: var(--t-2xs); font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+.save-state { display:inline-flex; align-items:center; margin-left:8px; padding:3px 7px; border:1px solid rgba(255,255,255,.08); border-radius:9var(--r-chip); color:var(--muted); font-size: var(--t-2xs); font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
 .save-state[data-state="saving"] { color:var(--accent-primary); border-color:color-mix(in srgb, var(--accent-primary) 35%, transparent); }
 .save-state[data-state="queued"] { color:#fbbf24; border-color:rgba(251,191,36,.35); }
 .save-state[data-state="failed"] { color:#f87171; border-color:rgba(248,113,113,.4); }

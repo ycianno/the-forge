@@ -155,7 +155,7 @@ html { scroll-padding-top: 84px; }
     display: block;
     width: 38px;
     height: 4px;
-    border-radius: 99px;
+    border-radius: var(--r-pill);
     background: var(--line-strong);
     margin: 2px auto 14px;
   }

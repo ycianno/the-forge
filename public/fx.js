@@ -87,96 +87,210 @@
     if (comboEl) comboEl.classList.remove("show", "hot");
   }
 
-  // ----- "+XP" particle pop ------------------------------------------------
+  // ----- "+XP" — the strike ------------------------------------------------
+  // Was two DOM nodes and a 1.1s setTimeout, anchored to a rect captured at
+  // spawn (so scrolling detached the number from its row). It is now canvas:
+  // real gravity, numbers that stack when several land at once, and nothing
+  // left in the document afterwards.
+  //
+  // The combo used to change one CSS class. Now it changes the EVENT: more
+  // sparks, more energy, a hotter palette and a longer hit-stop. The audio has
+  // always climbed a semitone per step (playCheck); the visuals finally agree.
   function xpPop(x, y, amount, color, combo) {
-    const el = document.createElement("div");
-    el.className = "fx-xp-pop";
-    el.style.left = x + "px";
-    el.style.top = y + "px";
-    el.style.color = color;
-    el.textContent = "+" + amount + " XP";
-    document.body.appendChild(el);
-    // tiny burst
-    const ring = document.createElement("div");
-    ring.className = "fx-burst";
-    ring.style.left = x + "px";
-    ring.style.top = y + "px";
-    ring.style.borderColor = color;
-    if (combo >= 5) ring.classList.add("big");
-    document.body.appendChild(ring);
-    setTimeout(() => { el.remove(); ring.remove(); }, 1100);
+    const S = window.FXStage;
+    if (!S) return;                       // canvas layer absent: stay silent
+    const c = Math.max(1, combo || 1);
+    const hot = c >= 5;
+    S.hitstop(hot ? 70 : 45);
+    S.burst(x, y, {
+      count: Math.min(9 + c * 3, 26),
+      energy: 1 + Math.min(c, 8) * 0.09,
+      spread: 2.2,
+      colors: hot
+        ? [heatVar(4), heatVar(5), heatVar(3)]
+        : [heatVar(2), heatVar(3), heatVar(4)]
+    });
+    S.number(x, y - 6, "+" + amount + " XP", {
+      color: color || heatVar(4),
+      size: hot ? 20 : 17,
+      energy: 1 + Math.min(c, 8) * 0.12
+    });
+    if (c >= 3) S.shake(Math.min(1.5 + c * 0.5, 6), 200);
+  }
+  function heatVar(i) {
+    return getComputedStyle(document.documentElement)
+      .getPropertyValue("--heat-" + i).trim() || "#f97316";
   }
 
-  // ----- Level-up celebration ---------------------------------------------
-  const CONFETTI = ["#38bdf8", "#a78bfa", "#34d399", "#fbbf24", "#fb7185"];
-  function levelUp(level, rank) {
-    playLevelUp();
-    vibrate([0, 40, 60, 40, 80]);
+  // ----- The boss takes a hit ---------------------------------------------
+  // The boss was the best idea in the app and it did not feel like anything:
+  // renderBoss() set a width and the HP slid. No impact, no number, no sound.
+  // This is the choreography for one landed hit — the primitives all live in
+  // fx-stage.js, which is why this is twenty lines and not a hundred.
+  //
+  // A weak-point hit is worth 2x, so it lands LOWER and heavier: a bigger body
+  // in the sound, more shake, a longer freeze. You should be able to hear which
+  // kind of hit it was without looking.
+  function bossHit(o) {
+    o = o || {};
+    const S = window.FXStage;
+    const dmg = Math.max(1, Math.round(o.damage || 1));
+    const weak = !!o.weak;
+
+    // Sound: a low body plus a short high transient. Quieter than the tick on
+    // purpose — this can fire alongside playCheck() and must not stack into a
+    // spike loud enough to make someone mute the app for good.
+    blip(weak ? 98 : 146, weak ? 0.20 : 0.15, "sine", 0.10);
+    blip(weak ? 320 : 420, 0.05, "square", 0.045);
+    vibrate(weak ? [0, 28, 30, 18] : [0, 18]);
+
+    if (!S) return;
+    S.hitstop(weak ? 85 : 55);
+    S.shake(Math.min(3 + dmg * (weak ? 1.5 : 0.9), 13), weak ? 300 : 230);
+    S.flash(heatVar(weak ? 2 : 1), weak ? 190 : 130);
+
+    const r = o.from && o.from.getBoundingClientRect ? o.from.getBoundingClientRect() : null;
+    const x = r ? r.left + r.width * (0.35 + Math.random() * 0.3) : window.innerWidth / 2;
+    const y = r ? r.top + r.height * 0.42 : window.innerHeight * 0.35;
+
+    S.number(x, y, "-" + dmg + "%", {
+      color: heatVar(weak ? 5 : 4),
+      size: weak ? 24 : 19,
+      energy: weak ? 1.5 : 1.1
+    });
+    S.burst(x, y, {
+      count: weak ? 24 : 14,
+      energy: weak ? 1.6 : 1.1,
+      spread: 2.6,
+      colors: [heatVar(3), heatVar(4), heatVar(5)]
+    });
+  }
+
+  // ----- One celebration, one toast ---------------------------------------
+  // There used to be seven near-identical overlay blocks and four near-identical
+  // toast blocks in this file, differing by a colour, a string and a particle
+  // count. That duplication was not just ugly — it was the reason the FX layer
+  // never improved, because changing how anything felt cost seven edits.
+  //
+  // It also hid two real bugs:
+  //   1. #fxBadgeToast was a singleton. Whoever fired last clobbered the DOM of
+  //      whoever fired first, mid-animation.
+  //   2. Game.render() can fire a badge, a streak milestone and a class-up in
+  //      one pass. Three .fx-overlay elements, all z-index 3000, all appended to
+  //      body, all scrimming each other. The biggest moment in the app rendered
+  //      as a pile-up.
+  // Both are queues.
+
+  const CELEB_MAX = 3;          // a good day should not owe you ten overlays
+  let celebQ = [], celebBusy = false;
+
+  function celebrate(spec) {
+    // Same kind already waiting? Replace it rather than showing it twice.
+    const dupe = celebQ.findIndex((c) => c.kind && c.kind === spec.kind);
+    if (dupe > -1) celebQ[dupe] = spec;
+    else if (celebQ.length < CELEB_MAX) celebQ.push(spec);
+    if (!celebBusy) nextCeleb();
+  }
+
+  function nextCeleb() {
+    const spec = celebQ.shift();
+    if (!spec) { celebBusy = false; return; }
+    celebBusy = true;
+
+    if (spec.sound) spec.sound();
+    vibrate(spec.vibe || [0, 40, 60, 40, 90]);
+
     const ov = document.createElement("div");
-    ov.className = "fx-overlay";
-    const rankLine = rank ? `${rank.name} · Tier ${rank.tier}` : "";
-    ov.innerHTML = `
-      <div class="fx-confetti"></div>
-      <div class="fx-card">
-        <span class="fx-card-k">LEVEL UP</span>
-        <span class="fx-card-lv">Level ${level}</span>
-        <span class="fx-card-rank">${rankLine}</span>
-      </div>`;
+    ov.className = "fx-overlay" + (spec.cls ? " " + spec.cls : "");
+    ov.innerHTML =
+      '<div class="fx-card">' +
+        '<span class="fx-card-k"' + (spec.color ? ' style="color:' + spec.color + '"' : "") + ">" + spec.k + "</span>" +
+        '<span class="fx-card-lv" style="' + (spec.vSize ? "font-size:" + spec.vSize + ";" : "") +
+          (spec.color ? "color:" + spec.color : "") + '">' + spec.v + "</span>" +
+        '<span class="fx-card-rank">' + (spec.sub || "") + "</span>" +
+      "</div>";
     document.body.appendChild(ov);
-    const field = ov.querySelector(".fx-confetti");
-    for (let i = 0; i < 32; i++) {
-      const p = document.createElement("span");
-      p.className = "confetti-piece";
-      p.style.left = Math.random() * 100 + "%";
-      p.style.background = CONFETTI[i % CONFETTI.length];
-      p.style.animationDelay = (Math.random() * 0.25).toFixed(2) + "s";
-      p.style.transform = `rotate(${Math.random() * 360}deg)`;
-      field.appendChild(p);
+
+    // Sparks come off the canvas now, not from 32-44 absolutely-positioned DOM
+    // nodes falling at a linear rate. They go UP and OUT and are gone in under
+    // half a second, which is what sparks do; confetti flutters down, which is
+    // a birthday party. The canvas sits at 2900 and the card at 3000, so the
+    // card always reads first.
+    const S = window.FXStage;
+    if (S) {
+      const cx = window.innerWidth / 2, cy = window.innerHeight * 0.46;
+      S.burst(cx, cy, { count: spec.sparks || 26, energy: spec.energy || 1.5, spread: 3.0 });
+      setTimeout(() => S.burst(cx, cy, { count: (spec.sparks || 26) * 0.6, energy: 1.2, spread: 3.2 }), 110);
+      if (spec.shake !== false) S.shake(spec.shake || 4, 240);
     }
+
+    const hold = spec.hold || 2100;
     requestAnimationFrame(() => ov.classList.add("show"));
-    setTimeout(() => ov.classList.remove("show"), 2100);
-    setTimeout(() => ov.remove(), 2600);
+    setTimeout(() => ov.classList.remove("show"), hold);
+    setTimeout(() => { ov.remove(); nextCeleb(); }, hold + 480);
+  }
+
+  let toastQ = [], toastBusy = false;
+  function toast(spec) {
+    if (toastQ.length < 4) toastQ.push(spec);
+    if (!toastBusy) nextToast();
+  }
+  function nextToast() {
+    const spec = toastQ.shift();
+    if (!spec) { toastBusy = false; return; }
+    toastBusy = true;
+    if (spec.sound) spec.sound();
+    vibrate(spec.vibe || [0, 30, 40, 30]);
+    let t = document.getElementById("fxBadgeToast");
+    if (!t) {
+      t = document.createElement("div"); t.id = "fxBadgeToast";
+      t.className = "fx-badge-toast"; document.body.appendChild(t);
+    }
+    t.style.setProperty("--bc", spec.color || heatVar(4));
+    t.innerHTML = '<span class="fx-badge-k">' + spec.k + "</span>" +
+                  '<span class="fx-badge-v">' + spec.v + "</span>" +
+                  '<span class="fx-badge-r">' + (spec.r || "") + "</span>";
+    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+    const hold = spec.hold || 2600;
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => {
+      t.classList.remove("show");
+      setTimeout(nextToast, 260);
+    }, hold);
+  }
+
+  function levelUp(level, rank) {
+    celebrate({
+      kind: "level", sound: playLevelUp, vibe: [0, 40, 60, 40, 80],
+      k: "LEVEL UP", v: "Level " + level,
+      sub: rank ? rank.name + " · Tier " + rank.tier : "",
+      color: heatVar(4), sparks: 28, hold: 2100
+    });
   }
 
   // ----- Day cleared celebration -------------------------------------------
   let dayClearedFired = false;
   function dayCleared() {
-    arp([523.25, 659.25, 783.99, 1046.5, 1318.5], 85, "triangle", 0.17);
-    vibrate([0, 40, 60, 40, 90, 40, 120]);
-    const ov = document.createElement("div");
-    ov.className = "fx-overlay day-clear";
-    ov.innerHTML = `
-      <div class="fx-confetti"></div>
-      <div class="fx-card">
-        <span class="fx-card-k" style="color:#34d399">DAY CLEARED</span>
-        <span class="fx-card-lv" style="background:linear-gradient(135deg,#22c55e,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent">100%</span>
-        <span class="fx-card-rank">All quests complete</span>
-      </div>`;
-    document.body.appendChild(ov);
-    const field = ov.querySelector(".fx-confetti");
-    for (let i = 0; i < 40; i++) {
-      const p = document.createElement("span");
-      p.className = "confetti-piece";
-      p.style.left = Math.random() * 100 + "%";
-      p.style.background = CONFETTI[i % CONFETTI.length];
-      p.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
-      field.appendChild(p);
-    }
-    requestAnimationFrame(() => ov.classList.add("show"));
-    setTimeout(() => ov.classList.remove("show"), 2400);
-    setTimeout(() => ov.remove(), 2900);
+    celebrate({
+      kind: "day", cls: "day-clear",
+      sound: () => arp([523.25, 659.25, 783.99, 1046.5, 1318.5], 85, "triangle", 0.17),
+      vibe: [0, 40, 60, 40, 90, 40, 120],
+      k: "DAY CLEARED", v: "100%", sub: "All quests complete",
+      color: heatVar(4), sparks: 34, energy: 1.7, hold: 2300
+    });
   }
 
   // ----- Badge unlock toast ------------------------------------------------
   function badge(name, rarity, color) {
-    if (rarity === "mythic") { arp([523.25, 659.25, 880, 1174.66, 1567.98], 80, "triangle", 0.17); vibrate([0, 50, 50, 50, 90]); }
-    else { arp([659.25, 880, 1108.73], 70, "triangle", 0.16); vibrate([0, 30, 40, 30]); }
-    let t = document.getElementById("fxBadgeToast");
-    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
-    t.style.setProperty("--bc", color || "#a78bfa");
-    t.innerHTML = `<span class="fx-badge-k">INSIGNIA UNLOCKED</span><span class="fx-badge-v">${name}</span><span class="fx-badge-r">${rarity}</span>`;
-    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
-    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+    const mythic = rarity === "mythic";
+    toast({
+      sound: () => mythic
+        ? arp([523.25, 659.25, 880, 1174.66, 1567.98], 80, "triangle", 0.17)
+        : arp([659.25, 880, 1108.73], 70, "triangle", 0.16),
+      vibe: mythic ? [0, 50, 50, 50, 90] : [0, 30, 40, 30],
+      k: "INSIGNIA UNLOCKED", v: name, r: rarity,
+      color: color || heatVar(4), hold: 2800
+    });
   }
 
   // ----- Trophy earned -----------------------------------------------------
@@ -187,43 +301,23 @@
     platinum: { c: "#3bb6c9", label: "Platinum" },
   };
   function trophy(grade, big) {
-    const m = TROPHY_META[grade] || { c: "var(--accent-primary)", label: grade };
+    const m = TROPHY_META[grade] || { c: heatVar(4), label: grade };
     if (big) {
-      // Platinum — full celebration
-      arp([392, 523.25, 659.25, 880, 1318.5], 90, "triangle", 0.16);
-      vibrate([0, 50, 60, 50, 120]);
-      const ov = document.createElement("div");
-      ov.className = "fx-overlay";
-      ov.innerHTML = `
-        <div class="fx-confetti"></div>
-        <div class="fx-card">
-          <span class="fx-card-k" style="color:${m.c}">TROPHY EARNED</span>
-          <span class="fx-card-lv" style="font-size:34px;color:${m.c}">${m.label}</span>
-          <span class="fx-card-rank">Six gold months — flawless.</span>
-        </div>`;
-      document.body.appendChild(ov);
-      const field = ov.querySelector(".fx-confetti");
-      for (let i = 0; i < 44; i++) {
-        const pc = document.createElement("span");
-        pc.className = "confetti-piece";
-        pc.style.left = Math.random() * 100 + "%";
-        pc.style.background = CONFETTI[i % CONFETTI.length];
-        pc.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
-        field.appendChild(pc);
-      }
-      requestAnimationFrame(() => ov.classList.add("show"));
-      setTimeout(() => ov.classList.remove("show"), 2600);
-      setTimeout(() => ov.remove(), 3100);
+      celebrate({
+        kind: "trophy",
+        sound: () => arp([392, 523.25, 659.25, 880, 1318.5], 90, "triangle", 0.16),
+        vibe: [0, 50, 60, 50, 120],
+        k: "TROPHY EARNED", v: m.label, vSize: "34px",
+        sub: "Six gold months — flawless.",
+        color: m.c, sparks: 36, energy: 1.8, hold: 2500
+      });
       return;
     }
-    arp([523.25, 698.46, 880], 75, "triangle", 0.15);
-    vibrate([0, 30, 40, 30]);
-    let t = document.getElementById("fxBadgeToast");
-    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
-    t.style.setProperty("--bc", m.c);
-    t.innerHTML = `<span class="fx-badge-k">TROPHY EARNED</span><span class="fx-badge-v">${m.label}</span><span class="fx-badge-r">trophy banked</span>`;
-    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
-    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+    toast({
+      sound: () => arp([523.25, 698.46, 880], 75, "triangle", 0.15),
+      k: "TROPHY EARNED", v: m.label, r: "trophy banked",
+      color: m.c, hold: 2800
+    });
   }
 
   // ----- Check handling ----------------------------------------------------
@@ -280,147 +374,70 @@
   else document.addEventListener("DOMContentLoaded", wireToggle);
 
   function streakMilestone(days) {
-    arp([523.25, 659.25, 783.99, 1046.5], 80, "triangle", 0.17);
-    vibrate([0, 40, 60, 40, 90]);
-    const ov = document.createElement("div");
-    ov.className = "fx-overlay";
-    ov.innerHTML = `
-      <div class="fx-confetti"></div>
-      <div class="fx-card">
-        <span class="fx-card-k" style="color:#fb923c">STREAK</span>
-        <span class="fx-card-lv" style="background:linear-gradient(135deg,#fb923c,#ef4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${days} 🔥</span>
-        <span class="fx-card-rank">${days}-day streak!</span>
-      </div>`;
-    document.body.appendChild(ov);
-    const field = ov.querySelector(".fx-confetti");
-    for (let i = 0; i < 36; i++) {
-      const pc = document.createElement("span");
-      pc.className = "confetti-piece";
-      pc.style.left = Math.random() * 100 + "%";
-      pc.style.background = CONFETTI[i % CONFETTI.length];
-      pc.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
-      field.appendChild(pc);
-    }
-    requestAnimationFrame(() => ov.classList.add("show"));
-    setTimeout(() => ov.classList.remove("show"), 2400);
-    setTimeout(() => ov.remove(), 2900);
+    celebrate({
+      kind: "streak",
+      sound: () => arp([523.25, 659.25, 783.99, 1046.5], 80, "triangle", 0.17),
+      k: "STREAK", v: String(days), sub: days + " days without going cold",
+      color: heatVar(4), sparks: 30, hold: 2300
+    });
   }
 
   function focusDone(hours, label, completed) {
-    arp([523.25, 659.25, 783.99, 1046.5], 80, "sine", 0.16);
-    vibrate([0, 40, 60, 40]);
-    let t = document.getElementById("fxBadgeToast");
-    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
-    t.style.setProperty("--bc", "var(--accent-primary)");
-    t.innerHTML = `<span class="fx-badge-k">FOCUS ${completed ? "COMPLETE" : "LOGGED"}</span><span class="fx-badge-v">${label}</span><span class="fx-badge-r">+${hours}h logged</span>`;
-    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
-    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+    toast({
+      sound: () => arp([523.25, 659.25, 783.99, 1046.5], 80, "sine", 0.16),
+      vibe: [0, 40, 60, 40],
+      k: "FOCUS " + (completed ? "COMPLETE" : "LOGGED"), v: label,
+      r: "+" + hours + "h logged", color: heatVar(3), hold: 2600
+    });
   }
 
   function bossDefeated(name) {
-    arp([392, 523.25, 659.25, 880, 1046.5], 75, "sawtooth", 0.14);
-    vibrate([0, 60, 50, 60, 90]);
-    const ov = document.createElement("div");
-    ov.className = "fx-overlay";
-    ov.innerHTML = `
-      <div class="fx-confetti"></div>
-      <div class="fx-card">
-        <span class="fx-card-k" style="color:#f87171">BOSS DEFEATED</span>
-        <span class="fx-card-lv" style="font-size:34px;background:linear-gradient(135deg,#ef4444,#f97316);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${name}</span>
-        <span class="fx-card-rank">Week conquered ⚔️</span>
-      </div>`;
-    document.body.appendChild(ov);
-    const field = ov.querySelector(".fx-confetti");
-    for (let i = 0; i < 40; i++) {
-      const pc = document.createElement("span");
-      pc.className = "confetti-piece";
-      pc.style.left = Math.random() * 100 + "%";
-      pc.style.background = CONFETTI[i % CONFETTI.length];
-      pc.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
-      field.appendChild(pc);
-    }
-    requestAnimationFrame(() => ov.classList.add("show"));
-    setTimeout(() => ov.classList.remove("show"), 2500);
-    setTimeout(() => ov.remove(), 3000);
+    celebrate({
+      kind: "boss",
+      sound: () => arp([392, 523.25, 659.25, 880, 1046.5], 75, "sawtooth", 0.14),
+      vibe: [0, 60, 50, 60, 90],
+      k: "BOSS DEFEATED", v: name, vSize: "34px", sub: "Week conquered",
+      color: heatVar(3), sparks: 38, energy: 1.9, shake: 7, hold: 2500
+    });
   }
 
   // ----- Hero Class evolution ----------------------------------------------
   function classUp(name, color, blurb) {
-    arp([392, 523.25, 659.25, 880, 1046.5], 85, "sine", 0.16);
-    vibrate([0, 40, 60, 40, 90]);
-    const ov = document.createElement("div");
-    ov.className = "fx-overlay";
-    ov.innerHTML = `
-      <div class="fx-confetti"></div>
-      <div class="fx-card">
-        <span class="fx-card-k" style="color:${color || "#a78bfa"}">SOUL EVOLUTION</span>
-        <span class="fx-card-lv" style="font-size:38px;color:${color || "#a78bfa"}">${name}</span>
-        <span class="fx-card-rank">${blurb || "A new path opens"}</span>
-      </div>`;
-    document.body.appendChild(ov);
-    const field = ov.querySelector(".fx-confetti");
-    for (let i = 0; i < 34; i++) {
-      const pc = document.createElement("span");
-      pc.className = "confetti-piece";
-      pc.style.left = Math.random() * 100 + "%";
-      pc.style.background = color || CONFETTI[i % CONFETTI.length];
-      pc.style.animationDelay = (Math.random() * 0.28).toFixed(2) + "s";
-      field.appendChild(pc);
-    }
-    requestAnimationFrame(() => ov.classList.add("show"));
-    setTimeout(() => ov.classList.remove("show"), 2400);
-    setTimeout(() => ov.remove(), 2900);
+    celebrate({
+      kind: "class",
+      sound: () => arp([392, 523.25, 659.25, 880, 1046.5], 85, "sine", 0.16),
+      k: "NEW TRADE", v: name, vSize: "38px",
+      sub: blurb || "A new path opens",
+      color: color || heatVar(4), sparks: 28, hold: 2200
+    });
   }
 
   // ----- Daily missions ----------------------------------------------------
   function missionComplete(label, xp) {
-    blip(880, 0.13, "triangle", 0.15);
-    vibrate(16);
-    let t = document.getElementById("fxBadgeToast");
-    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
-    t.style.setProperty("--bc", "#34d399");
-    t.innerHTML = `<span class="fx-badge-k">MISSION CLEARED</span><span class="fx-badge-v">${label}</span><span class="fx-badge-r">+${xp} XP</span>`;
-    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
-    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2600);
+    toast({
+      sound: () => blip(880, 0.13, "triangle", 0.15), vibe: 16,
+      k: "CLEARED", v: label, r: "+" + xp + " XP",
+      color: heatVar(3), hold: 2400
+    });
   }
   function missionsAllClear(total) {
-    arp([523.25, 659.25, 783.99, 1046.5, 1318.5], 80, "triangle", 0.17);
-    vibrate([0, 40, 60, 40, 90]);
-    const ov = document.createElement("div");
-    ov.className = "fx-overlay";
-    ov.innerHTML = `
-      <div class="fx-confetti"></div>
-      <div class="fx-card">
-        <span class="fx-card-k" style="color:#34d399">MISSIONS CLEARED</span>
-        <span class="fx-card-lv" style="font-size:40px;background:linear-gradient(135deg,#22c55e,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent">+${total} XP</span>
-        <span class="fx-card-rank">All daily missions complete</span>
-      </div>`;
-    document.body.appendChild(ov);
-    const field = ov.querySelector(".fx-confetti");
-    for (let i = 0; i < 38; i++) {
-      const pc = document.createElement("span");
-      pc.className = "confetti-piece";
-      pc.style.left = Math.random() * 100 + "%";
-      pc.style.background = CONFETTI[i % CONFETTI.length];
-      pc.style.animationDelay = (Math.random() * 0.3).toFixed(2) + "s";
-      field.appendChild(pc);
-    }
-    requestAnimationFrame(() => ov.classList.add("show"));
-    setTimeout(() => ov.classList.remove("show"), 2400);
-    setTimeout(() => ov.remove(), 2900);
+    celebrate({
+      kind: "allclear",
+      sound: () => arp([523.25, 659.25, 783.99, 1046.5, 1318.5], 80, "triangle", 0.17),
+      k: "DAY'S WORK CLEARED", v: "+" + total + " XP", vSize: "40px",
+      sub: "Everything scheduled is done",
+      color: heatVar(4), sparks: 32, energy: 1.7, hold: 2300
+    });
   }
 
   // ----- Record logged (auto-milestone) ------------------------------------
   function record(title) {
-    arp([523.25, 783.99, 1046.5], 70, "triangle", 0.15);
-    vibrate([0, 30, 40, 30]);
-    let t = document.getElementById("fxBadgeToast");
-    if (!t) { t = document.createElement("div"); t.id = "fxBadgeToast"; t.className = "fx-badge-toast"; document.body.appendChild(t); }
-    t.style.setProperty("--bc", "#fbbf24");
-    t.innerHTML = `<span class="fx-badge-k">RECORD LOGGED</span><span class="fx-badge-v">${title}</span><span class="fx-badge-r">added to your cabinet</span>`;
-    t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
-    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+    toast({
+      sound: () => arp([523.25, 783.99, 1046.5], 70, "triangle", 0.15),
+      k: "RECORD LOGGED", v: title, r: "added to your cabinet",
+      color: heatVar(4), hold: 2800
+    });
   }
 
-  window.FX = { levelUp, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, classUp, missionComplete, missionsAllClear, record, xpPop, playCheck, setSfx, sfxOn };
+  window.FX = { levelUp, bossHit, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, classUp, missionComplete, missionsAllClear, record, xpPop, playCheck, setSfx, sfxOn };
 })();

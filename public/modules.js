@@ -439,7 +439,7 @@
         outputs: { idPrefix: "project", items: settings.projectChecks || clone(DEFAULT_PROJECT_CHECKS), xpPer: XP_BY_CAT.project },
         hoursField: "projectHours", xpPerHour: PROJECT_HOUR_XP, focusField: "projectFocus",
         target: { kind: "hours", value: num(settings.projectTarget, 2) } },
-      { id: "review", type: "review", name: "War Council", icon: "clipboard", source: "review",
+      { id: "review", type: "review", name: "The Bench", icon: "clipboard", source: "review",
         countScore: false, attr: "Discipline", category: "discipline", enabled: true, order: 6,
         fields: ["wins", "misses", "changes", "refuseDrop"], gradeField: "grade",
         prompts: settings.reviewPrompts || clone(DEFAULT_REVIEW), xpPer: REVIEW_XP },

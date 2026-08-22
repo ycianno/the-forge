@@ -51,9 +51,34 @@
   --e-2: 0 8px 24px -12px rgba(0, 0, 0, 0.75);
   --e-3: 0 24px 64px -24px rgba(0, 0, 0, 0.85);
 
-  /* The one hairline highlight that says "lit from above". Used on raised
-     surfaces only — it stops meaning anything when everything has it. */
-  --edge: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* Edges. A 5%-white top-only inset is the canonical glass cue — it says
+     "pane". Metal has a specular top AND a dark bottom, and it is that second
+     line that reads as thickness. Two tokens, and every raised surface stops
+     being a sheet of glass and becomes a plate. --edge keeps its old name so
+     existing consumers inherit the pair for free. */
+  --edge-top: inset 0  1px 0 rgba(255, 255, 255, 0.07);
+  --edge-bot: inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  --edge: var(--edge-top), var(--edge-bot);
+
+  /* Chip radius. Metal is cut and ground, so it has a tight edge, not a
+     capsule. 99px was on 47 things — buttons, badges, tabs, the topbar — which
+     is most of why the app read as soft. Bars keep --r-pill: a progress track
+     genuinely is a capsule, and squaring it would be costume, not material. */
+  --r-chip: 7px;
+
+  /* HEAT — the one saturated colour the app is allowed.
+     Black-body order, so it is monotonic in luminance: it reads as "more"
+     without a legend and survives greyscale. Heat is EARNED, never ambient —
+     if more than ~5% of the screen is warm, this is being used wrong.
+     Lives here, in the scale, not in a theme: material is shape, not colour,
+     so all ten themes inherit it and only the accent hue still varies. */
+  --heat-0: #3a3632;   /* ash — cold, done, spent */
+  --heat-1: #7c2d12;   /* dull red — barely working */
+  --heat-2: #c2410c;
+  --heat-3: #f97316;   /* working temperature */
+  --heat-4: #fbbf24;
+  --heat-5: #fff7ed;   /* white hot — the rarest state in the app */
+  --heat-glow: rgba(249, 115, 22, 0.30);
 }
 
 /* ===== THEME SYSTEM ===== */
