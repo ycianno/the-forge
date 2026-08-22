@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>The Forge — stage prototype</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+  <link rel="stylesheet" href="css/01-tokens.css?v=6" />
+  <link rel="stylesheet" href="css/02-base.css?v=5" />
+  <link rel="stylesheet" href="css/03-components.css?v=10" />
+  <style>
+    /* A HUD frames a stage. Nothing here scrolls — that is the entire point.
+       The old Today screen was a document; this is a place with a frame. */
+    html, body { height: 100%; overflow: hidden; }
+    body { margin: 0; display: flex; flex-direction: column; }
+
+    .hud {
+      display: flex; align-items: center; gap: 18px;
+      padding: 12px 20px;
+      background: var(--glass);
+      box-shadow: var(--edge-top), var(--edge-bot);
+      flex-shrink: 0; z-index: 2;
+    }
+    .hud .brand { font-size: 15px; }
+    .hud-spacer { flex: 1; }
+
+    .hud-stat { display: flex; flex-direction: column; line-height: 1.15; }
+    .hud-stat b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 19px; color: var(--text); }
+    .hud-stat span {
+      font-size: var(--t-2xs); letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--muted-2);
+    }
+
+    .billet {
+      width: 54px; height: 54px; border-radius: var(--r-lg);
+      display: grid; place-items: center; flex-shrink: 0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.16), transparent 42%),
+        radial-gradient(120% 95% at 50% 118%, rgba(194,65,12,0.5), transparent 64%),
+        #26262f;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.26), inset 0 -2px 0 rgba(0,0,0,0.7),
+                  0 0 22px var(--heat-glow);
+    }
+    .billet b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 22px; color: var(--text); }
+
+    .xp-track {
+      width: 190px; height: 7px; border-radius: var(--r-pill);
+      background: rgba(0,0,0,0.5); overflow: hidden;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+    }
+    .xp-track span {
+      display: block; height: 100%; width: 0%; border-radius: inherit;
+      background: linear-gradient(90deg, var(--heat-1), var(--heat-2) 55%, var(--heat-4));
+      transition: width 0.6s cubic-bezier(.2,1.4,.4,1);
+    }
+
+    .stage-wrap { flex: 1; position: relative; min-height: 0; }
+    canvas { display: block; }
+
+    .foot {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 9px 20px; flex-shrink: 0;
+      background: var(--glass);
+      box-shadow: var(--edge-top), var(--edge-bot);
+      font-size: var(--t-2xs); letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--muted-2);
+    }
+    .foot b { color: var(--heat-3); }
+    @media (max-width: 620px) {
+      .hud { gap: 12px; padding: 10px 14px; }
+      .xp-track { width: 96px; }
+      .hide-sm { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="hud">
+    <span class="billet"><b>22</b></span>
+    <div class="hud-stat hide-sm">
+      <b>yzee</b>
+      <span>Journeyman · Tier II</span>
+    </div>
+    <div class="xp-track"><span id="hudBar"></span></div>
+    <div class="hud-spacer"></div>
+    <div class="hud-stat"><b id="hudXp">0</b><span>XP today</span></div>
+    <div class="hud-stat"><b id="hudDone">0 / 6</b><span>Worked</span></div>
+  </header>
+
+  <div class="stage-wrap">
+    <canvas id="stage"></canvas>
+  </div>
+
+  <footer class="foot">
+    <span>Tap a piece → it heats → <b>tap the anvil to strike</b></span>
+    <span class="hide-sm">Prototype · not wired to data</span>
+  </footer>
+
+  <script src="stage.js?v=5"></script>
+</body>
+</html>
