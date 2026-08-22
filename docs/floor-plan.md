@@ -3,9 +3,15 @@
 Six phases to stop the app being four screens with twelve floating windows, and
 make it a workshop where every room has one job.
 
-Companion to the identity work already landed on
-`redesign/phase-6-forge-identity`. Read `CLAUDE.md` first — it holds the
-architecture and the invariants this document assumes.
+> **Status: all six phases have landed** (2026-08-22), on
+> `redesign/floor-1-frame` … `redesign/floor-6-anvil`. What follows is kept as
+> written, because the reasoning is the point; the notes marked **Landed** say
+> what actually happened where it differed from the plan. `CLAUDE.md` describes
+> the shape that exists now.
+
+Companion to the identity work landed on `redesign/phase-6-forge-identity`.
+Read `CLAUDE.md` first — it holds the architecture and the invariants this
+document assumes.
 
 ---
 
@@ -79,7 +85,7 @@ Already the one room with a coherent job. Gains the quest/ritual split.
 
 Each ships alone, on its own `redesign/phase-N-*` branch.
 
-### Phase 1 — The frame · low risk
+### Phase 1 — The frame · low risk · **Landed**
 Extend the router from four destinations to five and move existing markup into
 the new rooms — **moving nodes, not rewriting them**. Nothing redesigned,
 nothing new. The app looks almost identical and is organised correctly
@@ -89,14 +95,14 @@ underneath.
 - **Done when:** every id and selector still resolves; all five routes reachable by hash, back button, sidebar, tab bar
 - **Agents:** `verifier` after each move, `git-warden` for the commit
 
-### Phase 2 — Empty the Week · low risk
+### Phase 2 — Empty the Week · low risk · **Landed**
 Week keeps the board, the boss and The Bench. Hero → Character, activity heatmap
 → Month, quote deleted. Answers "the weekly page has too much information".
 
 - **Touches:** `buildViewShell()` move calls, `05-screens.css`
 - **Done when:** Week fits one desktop screen without scrolling past the boss
 
-### Phase 3 — Month, the record · medium risk
+### Phase 3 — Month, the record · medium risk · **Landed**
 The new room and the largest single gain. Rebuild the calendar as a month grid
 where **every day is a heat cell** on the same black-body ramp as the year map,
 so the two finally speak the same language. Tapping a day opens its detail
@@ -106,7 +112,7 @@ inline. Then fold in trends, season and year-in-review.
 - **Retires:** `calendarModal`, `insightsModal`, `reportsModal`, `seasonModal`, `yearModal` — five of twelve
 - **Watch:** `dayPctInfo()` keys off `date.getDay()` and the **quest model**, not the legacy blueprint (which is empty). Reuse it; do not reimplement day completion.
 
-### Phase 4 — Character, the stat sheet · medium risk
+### Phase 4 — Character, the stat sheet · medium risk · **Landed**
 Give the five attributes a room. The radar survives as shape-at-a-glance but
 stops being the whole story. The billet and rank ladder become the spine, with
 the six materials readable as a progression.
@@ -114,20 +120,21 @@ the six materials readable as a progression.
 - **Touches:** `game.js` render helpers (read-only — the engine does not move), `05-screens.css`
 - **Done when:** you can answer "why is Mind behind?" without opening anything else
 
-### Phase 5 — Focus becomes a mode · low risk
+### Phase 5 — Focus becomes a mode · low risk · **Landed**
 Entering focus takes over Today: the fire comes up, one piece on the anvil,
 everything else recedes. Logging is unchanged. A timer you sit with for
 twenty-five minutes should not be a box with a close button.
 
 - **Retires:** `focusModal`
 
-### Phase 6 — Today becomes the anvil · high risk
+### Phase 6 — Today becomes the anvil · high risk · **Landed**
 Wire the prototype at `public/stage.html` + `public/stage.js` to real data and
 make it the Today room. Last on purpose: the only phase that changes what an
 interaction *is* rather than where it lives.
 
 - **Open:** strike count must come from task weight (`estMinutes` already exists), or twenty tasks a day becomes a chore
 - **Keep:** a fast path — a plain tick for someone in a hurry. The anvil must be the good way, never the only way.
+- **Landed:** weight lives in `Forge.strikesFor()` — under 25 minutes is one blow (the cost of a tick), 75+ is four, capped. It is in the engine rather than the renderer precisely because it is the economy of the screen, and `test/anvil-weight.js` holds it there. The fast path is an Anvil/List toggle remembered in `settings.todayMode`; in anvil mode the board stays in the document, because driving its checkbox is how the stage completes anything.
 
 ---
 
@@ -154,11 +161,26 @@ interaction *is* rather than where it lives.
 
 - **The rank curve.** Forgemaster sits at 9,677,006 XP, 27× Master, unreachable.
   Phase 4 makes the ladder the spine of a room while its top rung is decorative.
-  Left alone by explicit decision (2026-08-22).
+  Left alone by explicit decision (2026-08-22). **Now more visible, not less:**
+  the ladder draws all six rungs at once, so the unreachable one is on screen
+  every time you open Character.
 - **Quests versus rituals.** habi separated them; the Forge merged them.
   Splitting is the better model but touches the quest data shape — the riskiest
   thing in the app. Deserves its own phase.
 - **Six rooms or five.** This plan folds Cabinet into Character. If the trophy
-  wall deserves its own door, the mobile tab bar needs a sixth slot.
-- **Strike cost.** Phase 6 lives or dies on this. Three taps for "make the bed"
-  is a tax; three taps for "ship the redesign" is a ritual.
+  wall deserves its own door, the mobile tab bar needs a sixth slot. **Landed as
+  five**, with Cabinet a second pane of Character. The tab bar is already at six
+  buttons (five rooms plus the drawer) and drops a type step under 400px; a
+  seventh would not fit.
+- **Strike cost.** Phase 6 lived or died on this. Three taps for "make the bed"
+  is a tax; three taps for "ship the redesign" is a ritual. **Answered** by
+  deriving blows from `estMinutes` and capping at four — but the answer is only
+  as good as the estimates people actually set, and most tasks carry none. A
+  task with no estimate costs one blow, which is safe but means an unestimated
+  day is a day of single taps with extra steps. Worth revisiting once there is
+  real usage.
+- **What the anvil does not yet do.** It completes tasks and nothing else: you
+  cannot add, edit, reorder or un-complete from the stage, and the day's
+  challenges (`questsHub`) are hidden in anvil mode rather than represented on
+  it. All of that is one tap away in List, which is the point, but if the anvil
+  is going to be the default it should eventually carry more of the day.

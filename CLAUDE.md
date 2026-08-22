@@ -53,7 +53,7 @@ in that style, including the byte-length cap.
 ### Client — load order is the API
 
 ```
-modules.js  →  game.js  →  fx.js  →  app.js  →  extras.js
+modules.js → game.js → fx-stage.js → forge-stage.js → fx.js → app.js → extras.js
 ```
 
 Each attaches globals for the next. Getting this wrong yields
@@ -69,6 +69,13 @@ Each attaches globals for the next. Getting this wrong yields
   attributes, radar, boss, seasons. Resolves `app.js` globals *lazily at call
   time*, because it loads first. Also owns `window.ICONS`.
 - **`fx.js` (426 lines).** Particles, combo meter, sounds, celebration.
+- **`forge-stage.js` — `window.ForgeStage`. The anvil.**
+  The canvas that Today's forge mode draws on. Knows nothing about tasks,
+  storage or XP: the host hands it a list and a `complete(id)` callback, and it
+  hands back nothing. Finishing a piece drives the *board's own checkbox* via
+  `anvilComplete()` in `app.js`, so XP, sound, undo and persistence stay one
+  code path. How many blows a task costs is **not** here — it is
+  `Forge.strikesFor()` in `modules.js`, guarded by `test/anvil-weight.js`.
 - **`app.js` (4952 lines).** State + all rendering. Navigable by its `// =====`
   section banners — grep those before reading linearly.
 - **`extras.js` (404 lines).** Late additions bolted onto the above.
@@ -138,8 +145,9 @@ To see it in a browser, use the preview tools with the configs already in
 `.claude/launch.json`:
 
 - **`forge-dev`** — port 3099, dev DB at `/tmp/forge-dev.sqlite`.
-- **`forge-review`** — port 3098, throwaway DB, reminders disabled, sandbox
-  password. Use this one for UI review; it will not touch real data.
+- **`forge-review`** — port 3098, throwaway DB at `/tmp/forge-review.sqlite`,
+  reminders disabled, sandbox password. Use this one for UI review; it will not
+  touch real data.
 
 Do not start servers with Bash.
 
@@ -168,17 +176,38 @@ existing markup rather than rewriting `index.html`, so every id and selector in
 
 ---
 
-## Where the redesign is going
+## The five rooms
 
-`docs/floor-plan.md` is the sequenced plan for the next six phases — the
-information architecture rework: five rooms (Today, Week, Month, Character,
-Pursuits), one time horizon each, and the twelve modals cut down to the ones
-that are genuinely dialogs. Read it before starting any phase work, and read
-its invariants section before touching the engine.
+`docs/floor-plan.md` is the plan this shape came from; read its invariants
+section before touching the engine. The app is five destinations, ordered by how
+far you are looking — day → week → month → self → plan — and nothing appears in
+two of them:
+
+| room | horizon | holds |
+|---|---|---|
+| **Today** | right now | the anvil (or the plain list), the day's challenges |
+| **Week** | seven days | the week bar, the boss, the Quest Log, the board, The Bench |
+| **Month** | months and years | four panes: Calendar (+ the year heat map and the inline day detail), Trends, Season, Year |
+| **Character** | who you are becoming | two panes: the Sheet (identity, rank ladder, the five attributes) and the Cabinet |
+| **Pursuits** | the structure | every pursuit section |
+
+Rooms are assembled in `buildViewShell()` by **moving** existing nodes — and by
+`unwrapModalInto()`, which lifts a modal's body out of its backdrop with every
+id intact. That is why five modals became panes without their renderers
+changing a line. Retired hashes are aliased in `VIEW_ALIASES`, so an old
+`#cabinet` bookmark lands on Character.
+
+> **If you unwrap another modal, check what was delegated from its backdrop.**
+> Season's goal add/delete were bound to `#seasonModal` itself and went silently
+> dead when it stopped existing — a listener on a null element is simply never
+> attached, and nothing warns you.
 
 ## Current state
 
-Branch work is sequenced as `redesign/phase-N-*`. Phases 1–5 landed the bug
-fixes, reminders, plan budget, visual system, and the four-screen shell. There
-is an optional Discord companion in `agent/` (local Ollama, off by default) and
-a reminder sync path in `sync-reminders.js` / `send-reminders.js`.
+Branch work is sequenced as `redesign/floor-N-*` (the earlier `redesign/phase-N-*`
+series landed the bug fixes, reminders, plan budget, visual system and the
+four-screen shell). All six floor-plan phases have landed: the frame, emptying
+Week, the Month record, the Character sheet, focus-as-a-mode, and the anvil.
+
+There is an optional Discord companion in `agent/` (local Ollama, off by
+default) and a reminder sync path in `sync-reminders.js` / `send-reminders.js`.
