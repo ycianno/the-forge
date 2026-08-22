@@ -168,6 +168,14 @@ existing markup rather than rewriting `index.html`, so every id and selector in
 
 ---
 
+## Where the redesign is going
+
+`docs/floor-plan.md` is the sequenced plan for the next six phases — the
+information architecture rework: five rooms (Today, Week, Month, Character,
+Pursuits), one time horizon each, and the twelve modals cut down to the ones
+that are genuinely dialogs. Read it before starting any phase work, and read
+its invariants section before touching the engine.
+
 ## Current state
 
 Branch work is sequenced as `redesign/phase-N-*`. Phases 1–5 landed the bug
