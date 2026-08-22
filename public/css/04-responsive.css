@@ -172,9 +172,10 @@
     font-size: var(--t-2xs); font-weight: 700; letter-spacing: 0.02em;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  /* On the narrowest phones six labels do not fit at the normal size. Drop a
-     step rather than clipping "Character" to "Chara…". */
-  @media (max-width: 400px) {
+  /* Six labels do not fit at the normal size on a phone. Drop a step rather
+     than clipping "Character" to "Charac…" — the breakpoint is set by the
+     longest label, not by a round number. */
+  @media (max-width: 460px) {
     .tab-btn { padding: 8px 2px; }
     .tab-label { font-size: 9px; letter-spacing: 0; }
     .tab-icon .ic { width: 21px; height: 21px; }

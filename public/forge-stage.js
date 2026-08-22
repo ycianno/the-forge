@@ -544,14 +544,26 @@
     // Sit the hint just above the anvil face. Anchoring it a fixed 96px up put
     // it into the shelf's label once the stage became a strip rather than a
     // screen, and two captions on top of each other say nothing.
+    //
+    // On a short stage there may be no gap at all between the shelf and the
+    // anvil. A cleared day still gets its line — the rack is empty then, so it
+    // can be said down there — and the merely-idle hint is dropped, because the
+    // rack's own caption already says what to do with a piece.
     var hintY = stage.ANVIL.y - 26 * stage.SCALE - 16;
+    var shelved = stage.pieces.filter(function (p) {
+      return p.state === "shelf" || p.state === "toShelf";
+    }).length;
+    var shelfBottom = shelved ? Math.max.apply(null, stage.pieces
+      .filter(function (p) { return p.state === "shelf" || p.state === "toShelf"; })
+      .map(function (p) { return p.ty; })) : stage.SHELF.y - 26;
+    var roomForHint = hintY > shelfBottom + 20;
     if (!stage.pieces.length) {
-      label("NOTHING ON THE RACK", stage.ANVIL.x, hintY, "rgba(255,255,255,0.22)");
+      label("NOTHING ON THE RACK", stage.ANVIL.x, roomForHint ? hintY : stage.RACK_Y, "rgba(255,255,255,0.22)");
     } else if (!onAnvil() && !inFire()) {
       if (stage.pieces.some(function (p) { return p.state === "rack"; })) {
-        label("THE ANVIL IS EMPTY", stage.ANVIL.x, hintY, "rgba(255,255,255,0.22)");
+        if (roomForHint) label("THE ANVIL IS EMPTY", stage.ANVIL.x, hintY, "rgba(255,255,255,0.22)");
       } else {
-        label("THE DAY IS CLEARED", stage.ANVIL.x, hintY, HEAT[4], 14);
+        label("THE DAY IS CLEARED", stage.ANVIL.x, roomForHint ? hintY : stage.RACK_Y, HEAT[4], 14);
       }
     }
   }

@@ -185,10 +185,10 @@ two of them:
 
 | room | horizon | holds |
 |---|---|---|
-| **Today** | right now | the anvil (or the plain list), the day's challenges |
-| **Week** | seven days | the week bar, the boss, the Quest Log, the board, The Bench |
-| **Month** | months and years | four panes: Calendar (+ the year heat map and the inline day detail), Trends, Season, Year |
-| **Character** | who you are becoming | two panes: the Sheet (identity, rank ladder, the five attributes) and the Cabinet |
+| **Today** | right now | the forge strip, then the day's rows split into **quests** (one-off) and **rituals** (weekly), then the challenges |
+| **Week** | seven days | the week bar, the week pulse, the boss fight card, the Quest Log, the board, The Bench |
+| **Month** | months and years | one shared header + four panes: Calendar (+ year heat map, inline day detail), Trends, Goals, Year |
+| **Character** | who you are becoming | two panes: the Sheet (identity, shape, rank ladder, the five attributes) and the Cabinet |
 | **Pursuits** | the structure | every pursuit section |
 
 Rooms are assembled in `buildViewShell()` by **moving** existing nodes — and by
@@ -202,12 +202,43 @@ changing a line. Retired hashes are aliased in `VIEW_ALIASES`, so an old
 > dead when it stopped existing — a listener on a null element is simply never
 > attached, and nothing warns you.
 
+### Things that bite in here
+
+- **One time cursor per room.** The record's four panes share `calViewDate`;
+  Season and Year derive from it. Three independent cursors is what made one
+  room read as four pages.
+- **`.settings-tab` is a *look*, not the settings dialog.** The record, the
+  character sheet and the cabinet all reuse it. Any handler for it must be
+  scoped to its own container — an unscoped query hid every settings panel.
+- **Form inputs are full-width by default.** A bare `<input type="checkbox">`
+  inherits ~50px and eats the label next to it. Pin its size.
+- **A fixed-size button must reset its padding.** `<button>` inherits 10px/16px;
+  a 32px square with `box-sizing: border-box` therefore has a content box of
+  zero and any icon inside is drawn 0px wide.
+- **Canvas hosts need a `ResizeObserver`, not a window resize listener.** The
+  anvil measured its host once at mount and laid out for a box 250px wider than
+  the one it drew in.
+
+### The chrome
+
+The sidebar is for **places**, the top bar is for **actions**. Both are
+configurable from settings → Layout; the model is one ordered list of ids per
+surface in `settings.chrome` (membership = visible, position = order) plus
+`live` for what the sidebar footer tracks. `applyChrome()` shows/hides and
+reorders the buttons *already in the document* rather than rebuilding the bar,
+because every one of them has a handler bound by id in `bindEvents()`.
+
 ## Current state
 
 Branch work is sequenced as `redesign/floor-N-*` (the earlier `redesign/phase-N-*`
 series landed the bug fixes, reminders, plan budget, visual system and the
 four-screen shell). All six floor-plan phases have landed: the frame, emptying
 Week, the Month record, the Character sheet, focus-as-a-mode, and the anvil.
+
+A second pass then went back over each room: Today became one screen instead of
+an Anvil/List toggle, Week gained the pulse and a real fight card, the record
+got one cursor and one header, Character became a single sheet with an
+interactive shape, and the chrome became configurable.
 
 There is an optional Discord companion in `agent/` (local Ollama, off by
 default) and a reminder sync path in `sync-reminders.js` / `send-reminders.js`.
