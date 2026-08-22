@@ -206,7 +206,26 @@ hand back nothing. Both `stop()` the moment their room is not on screen.
 - **`effigy.js` — the effigy (Character).** The five attributes as five pieces of
   a forged figure, tiered against `Game.RANKS` so the ladder and the figure
   measure in one unit. Read-only. Hold to raise the fire and preview the next
-  tier.
+  tier. **It also records time** — plinth courses from active weeks, blade
+  notches per boss, a cuirass engraving from insignias, a cloak from the streak.
+  Only the cloak can be lost; that asymmetry is the point of a monument.
+
+### The boss fight (Week)
+
+Health stays derived from completed quests. What is new is that damage earned
+**while you were not looking at Week** queues up and you land it by hand. Three
+rules, each with a guard in `test/boss-hit-guard.js`:
+
+1. It only replays damage already earned — `armBossFight()` needs both the
+   completed count *and* the damage to have risen, so the bar can lag the truth
+   but never lead it.
+2. Work done while you are in the room applies immediately, as before. A live
+   queue extends when the truth moves under it.
+3. Leaving the room settles the queue, so the marker never persists as a lie.
+
+The view marker lives in `bossSeenMem` with a copy in settings. It was in
+settings alone first and a settings reload wiped it mid-flight — **a marker
+describing what this session has shown you must not depend on a round-trip.**
 
 Effigy, radar and attribute cards are three views of one set of numbers and are
 cross-linked through `highlightAttr()` — touching any one lights the other two.
@@ -266,10 +285,13 @@ Week, the Month record, the Character sheet, focus-as-a-mode, and the anvil.
 A second pass then went back over each room: Today became one screen instead of
 an Anvil/List toggle, Week gained the pulse and a real fight card, the record
 got one cursor and one header, Character became a single sheet with an
-interactive shape, and the chrome became configurable. A third pass gave the two
-rooms you open most a thing you can play with — the anvil grew a hammer, a
-quench and a clock that heats the metal; Character grew the effigy — and gave
-Pursuits the plan head it never had.
+interactive shape, and the chrome became configurable. A third pass gave the rooms
+something to play with — the anvil grew a hammer, a quench and a clock that
+heats the metal; Character grew the effigy; Week's boss became something you
+land blows on — and gave Pursuits the plan head it never had.
+
+**The standing direction: every room should have a playable thing in it.**
+Today, Week and Character have one. Month and Pursuits do not yet.
 
 There is an optional Discord companion in `agent/` (local Ollama, off by
 default) and a reminder sync path in `sync-reminders.js` / `send-reminders.js`.
