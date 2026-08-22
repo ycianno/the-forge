@@ -46,6 +46,9 @@
     cv: null, ctx: null, host: null, api: null, ro: null,
     W: 0, H: 0, dpr: 1, running: false, raf: 0, lastT: 0,
     attrs: [], hist: null, boxes: {}, hovering: null,
+    tiers: null,        // last seen tiers, so a band crossing can be noticed
+    flash: {},          // per part: 1 → 0 after a tier-up
+    breath: 0,
     bellows: 0,          // 0 cold → 1 fully at the fire; driven by press-and-hold
     holding: false,
     embers: [], t: 0,
@@ -73,12 +76,13 @@
 
   // Tier 0 is cold iron and reads as unfinished on purpose. Above that the
   // piece carries its own heat, and the bellows lifts everything a step.
-  function partHeat(tier) {
+  function partHeat(tier, part) {
     var base = tier / 5;
-    return Math.min(1, base + st.bellows * 0.55);
+    var f = part ? (st.flash[part] || 0) : 0;
+    return Math.min(1, base + st.bellows * 0.55 + f);
   }
-  function partColor(tier) {
-    var h = partHeat(tier);
+  function partColor(tier, part) {
+    var h = partHeat(tier, part);
     if (h <= 0.04) return COLD;
     var i = Math.max(0, Math.min(4.999, h * 5));
     return HEAT[Math.floor(i) + 1] || HEAT[5];
@@ -220,27 +224,55 @@
 
   function shade(part, tier, lit) {
     var ctx = st.ctx;
-    var c = partColor(tier);
+    var c = partColor(tier, part);
     ctx.fillStyle = c;
-    if (tier > 0 || st.bellows > 0.02) {
+    var f = st.flash[part] || 0;
+    if (tier > 0 || st.bellows > 0.02 || f > 0) {
       ctx.shadowColor = c;
-      ctx.shadowBlur = (4 + tier * 5) * (lit ? 2.2 : 1) * (0.5 + st.bellows);
+      ctx.shadowBlur = (4 + tier * 5) * (lit ? 2.2 : 1) * (0.5 + st.bellows) + f * 40;
     }
-    if (lit) ctx.fillStyle = HEAT[Math.min(5, Math.floor(partHeat(tier) * 5) + 1)];
+    if (lit) ctx.fillStyle = HEAT[Math.min(5, Math.floor(partHeat(tier, part) * 5) + 1)];
+  }
+
+  // A single flat fill reads as a coloured shape. Metal reads as metal because
+  // of what the light does to its edges: a hot rim along the side facing the
+  // forge and a dark one where it turns away. This is the cheapest line in the
+  // file and it does more than everything above it.
+  //
+  // Called immediately after a fill, with the same path still current.
+  function sheen(box) {
+    var ctx = st.ctx;
+    ctx.save();
+    ctx.clip();
+    var g1 = ctx.createLinearGradient(box.x, box.y, box.x + box.w * 0.9, box.y + box.h);
+    g1.addColorStop(0, "rgba(255,255,255,0.26)");
+    g1.addColorStop(0.42, "rgba(255,255,255,0.04)");
+    g1.addColorStop(1, "rgba(0,0,0,0.30)");
+    ctx.fillStyle = g1;
+    ctx.fillRect(box.x - 2, box.y - 2, box.w + 4, box.h + 4);
+    ctx.restore();
+  }
+  // Fill the current path, then light it. One call so no part can forget.
+  function forged(part, tier, lit, box) {
+    var ctx = st.ctx;
+    shade(part, tier, lit);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    sheen(box);
   }
 
   function drawHelm(g, lit) {
     var ctx = st.ctx, u = g.u, cx = g.cx, by = g.by;
     var a = attrFor("helm"), tier = a ? tierOf(a.level) : 0;
-    ctx.save(); shade("helm", tier, lit);
-    // skull
+    ctx.save();
+    // skull — tapered to the jaw so it reads as a helm rather than a box
     ctx.beginPath();
-    ctx.moveTo(cx - 11 * u, by - 68 * u);
-    ctx.lineTo(cx - 11 * u, by - 80 * u);
-    ctx.quadraticCurveTo(cx, by - 92 * u, cx + 11 * u, by - 80 * u);
-    ctx.lineTo(cx + 11 * u, by - 68 * u);
-    ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.moveTo(cx - 9 * u, by - 68 * u);
+    ctx.lineTo(cx - 11 * u, by - 79 * u);
+    ctx.quadraticCurveTo(cx, by - 93 * u, cx + 11 * u, by - 79 * u);
+    ctx.lineTo(cx + 9 * u, by - 68 * u);
+    ctx.closePath();
+    forged("helm", tier, lit, { x: cx - 11 * u, y: by - 93 * u, w: 22 * u, h: 25 * u });
     // visor slit — the one dark line on the piece, so it reads as a face
     ctx.fillStyle = "rgba(0,0,0,0.62)";
     ctx.fillRect(cx - 8 * u, by - 78 * u, 16 * u, 3.2 * u);
@@ -258,14 +290,17 @@
   function drawCuirass(g, lit) {
     var ctx = st.ctx, u = g.u, cx = g.cx, by = g.by;
     var a = attrFor("cuirass"), tier = a ? tierOf(a.level) : 0;
-    ctx.save(); shade("cuirass", tier, lit);
+    ctx.save();
+    // A breastplate tapers to the waist and comes to a point. The old straight
+    // trapezoid was the single thing making the figure read as a toy.
     ctx.beginPath();
     ctx.moveTo(cx - 17 * u, by - 68 * u);
-    ctx.lineTo(cx + 17 * u, by - 68 * u);
-    ctx.lineTo(cx + 13 * u, by - 40 * u);
-    ctx.quadraticCurveTo(cx, by - 33 * u, cx - 13 * u, by - 40 * u);
-    ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.quadraticCurveTo(cx, by - 71 * u, cx + 17 * u, by - 68 * u);
+    ctx.lineTo(cx + 12 * u, by - 44 * u);
+    ctx.quadraticCurveTo(cx + 8 * u, by - 36 * u, cx, by - 33 * u);
+    ctx.quadraticCurveTo(cx - 8 * u, by - 36 * u, cx - 12 * u, by - 44 * u);
+    ctx.closePath();
+    forged("cuirass", tier, lit, { x: cx - 17 * u, y: by - 71 * u, w: 34 * u, h: 38 * u });
     // ribs — one per tier, so the chest literally shows how far it has come
     ctx.fillStyle = "rgba(0,0,0,0.30)";
     for (var i = 0; i < tier; i++) {
@@ -297,18 +332,24 @@
   function drawGauntlets(g, lit) {
     var ctx = st.ctx, u = g.u, cx = g.cx, by = g.by;
     var a = attrFor("gauntlets"), tier = a ? tierOf(a.level) : 0;
-    ctx.save(); shade("gauntlets", tier, lit);
-    [-1, 1].forEach(function (s) {
-      // pauldron
+    ctx.save();
+    [-1, 1].forEach(function (sg) {
+      // pauldron — a rounded plate that overlaps the shoulder line
       ctx.beginPath();
-      ctx.ellipse(cx + s * 20 * u, by - 64 * u, 8 * u, 5.5 * u, 0, 0, 6.2832);
-      ctx.fill();
-      // arm
-      roundRect(ctx, cx + s * 24 * u - 3.5 * u, by - 62 * u, 7 * u, 20 * u, 2.5 * u); ctx.fill();
+      ctx.ellipse(cx + sg * 19 * u, by - 65 * u, 9 * u, 6.5 * u, sg * 0.22, 0, 6.2832);
+      forged("gauntlets", tier, lit, { x: cx + sg * 19 * u - 9 * u, y: by - 72 * u, w: 18 * u, h: 14 * u });
+      // upper arm, narrowing to the wrist
+      ctx.beginPath();
+      ctx.moveTo(cx + sg * 24 * u - 4 * u, by - 62 * u);
+      ctx.lineTo(cx + sg * 24 * u + 4 * u, by - 62 * u);
+      ctx.lineTo(cx + sg * 25 * u + 3 * u, by - 44 * u);
+      ctx.lineTo(cx + sg * 25 * u - 3 * u, by - 44 * u);
+      ctx.closePath();
+      forged("gauntlets", tier, lit, { x: cx + sg * 24 * u - 5 * u, y: by - 62 * u, w: 10 * u, h: 18 * u });
       // fist
       ctx.beginPath();
-      ctx.arc(cx + s * 24 * u, by - 40 * u, 4.6 * u, 0, 6.2832);
-      ctx.fill();
+      ctx.arc(cx + sg * 25 * u, by - 40 * u, 4.8 * u, 0, 6.2832);
+      forged("gauntlets", tier, lit, { x: cx + sg * 25 * u - 5 * u, y: by - 45 * u, w: 10 * u, h: 10 * u });
     });
     ctx.restore();
   }
@@ -316,10 +357,23 @@
   function drawGreaves(g, lit) {
     var ctx = st.ctx, u = g.u, cx = g.cx, by = g.by;
     var a = attrFor("greaves"), tier = a ? tierOf(a.level) : 0;
-    ctx.save(); shade("greaves", tier, lit);
-    [-1, 1].forEach(function (s) {
-      roundRect(ctx, cx + s * 7 * u - 4.5 * u, by - 36 * u, 9 * u, 30 * u, 2.5 * u); ctx.fill();
-      roundRect(ctx, cx + s * 7 * u - 6.5 * u, by - 7 * u, 13 * u, 6 * u, 2 * u); ctx.fill();
+    ctx.save();
+    [-1, 1].forEach(function (sg) {
+      // thigh into shin, with a knee cop between them
+      ctx.beginPath();
+      ctx.moveTo(cx + sg * 7 * u - 5 * u, by - 36 * u);
+      ctx.lineTo(cx + sg * 7 * u + 5 * u, by - 36 * u);
+      ctx.lineTo(cx + sg * 8 * u + 3.6 * u, by - 8 * u);
+      ctx.lineTo(cx + sg * 8 * u - 3.6 * u, by - 8 * u);
+      ctx.closePath();
+      forged("greaves", tier, lit, { x: cx + sg * 7 * u - 5 * u, y: by - 36 * u, w: 10 * u, h: 28 * u });
+      ctx.beginPath();
+      ctx.ellipse(cx + sg * 7.5 * u, by - 22 * u, 5.2 * u, 3.4 * u, 0, 0, 6.2832);
+      forged("greaves", tier, lit, { x: cx + sg * 7.5 * u - 5 * u, y: by - 26 * u, w: 10 * u, h: 8 * u });
+      // sabaton
+      ctx.beginPath();
+      roundRect(ctx, cx + sg * 8 * u - 6.5 * u, by - 8 * u, 13 * u, 6.5 * u, 2 * u);
+      forged("greaves", tier, lit, { x: cx + sg * 8 * u - 6.5 * u, y: by - 8 * u, w: 13 * u, h: 6.5 * u });
     });
     ctx.restore();
   }
@@ -328,7 +382,7 @@
     var ctx = st.ctx, u = g.u, cx = g.cx, by = g.by;
     var a = attrFor("blade"), tier = a ? tierOf(a.level) : 0;
     var x = cx + 39 * u;
-    ctx.save(); shade("blade", tier, lit);
+    ctx.save();
     // The blade grows with the tier: at Initiate it is barely a bar, at
     // Forgemaster it reaches over the figure's head.
     var len = (34 + tier * 11) * u;
@@ -338,8 +392,11 @@
     ctx.lineTo(x + 3.4 * u, by - 22 * u - len);
     ctx.lineTo(x, by - 28 * u - len);
     ctx.lineTo(x - 3.4 * u, by - 22 * u - len);
-    ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.closePath();
+    forged("blade", tier, lit, { x: x - 3.4 * u, y: by - 28 * u - len, w: 6.8 * u, h: len + 6 * u });
+    // the fuller down the centre — one line, and the blade stops being a bar
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fillRect(x - 0.7 * u, by - 26 * u - len + 6 * u, 1.4 * u, len - 4 * u);
     // A notch per boss put down, filed into the edge from the guard upward.
     // Capped at what the blade can hold — past that the count is the caption's
     // job, not the metal's.
@@ -389,14 +446,21 @@
     ctx.fillRect(0, 0, st.W, st.H);
 
     drawPlinth(g);
+    // Everything above the plinth breathes. A statue that never moves reads as
+    // an illustration; a barely-perceptible rise and fall reads as something
+    // standing there. It is under a pixel of travel and it does all the work.
+    ctx.save();
+    ctx.translate(0, st.breath * g.u * 0.9);
     drawCloak(g);
     // Recompute the boxes as we draw, so hit-testing can never disagree with
-    // what is on screen.
+    // what is on screen. The breath is deliberately NOT in the boxes — a
+    // hit target that drifts under the cursor is worse than a still figure.
     st.boxes = {};
     PARTS.forEach(function (part) {
       st.boxes[part] = boxFor(part, g);
       DRAW[part](g, st.hovering === part);
     });
+    ctx.restore();
 
     // Embers, more of them the harder you are working the bellows.
     ctx.globalCompositeOperation = "lighter";
@@ -411,13 +475,21 @@
 
   function step(dt) {
     st.t += dt;
+    st.breath = Math.sin(st.t * 0.85);
+    // A tier-up cools off over about a second and a half.
+    for (var k in st.flash) {
+      st.flash[k] = Math.max(0, st.flash[k] - dt * 0.7);
+      if (st.flash[k] === 0) delete st.flash[k];
+    }
     var want = st.holding ? 1 : 0;
     st.bellows += (want - st.bellows) * Math.min(1, dt * (st.holding ? 2.4 : 3.2));
     if (st.bellows < 0.002) st.bellows = 0;
 
     if (!reduceMotion) {
       var g = geom();
-      var rate = 2 + st.bellows * 26;
+      var flaring = 0;
+      for (var fk in st.flash) flaring = Math.max(flaring, st.flash[fk]);
+      var rate = 2 + st.bellows * 26 + flaring * 40;
       if (Math.random() < dt * rate) {
         st.embers.push({
           x: g.cx + (Math.random() - 0.5) * g.fh * 0.6,
@@ -550,6 +622,30 @@
   function sync(attrs, hist) {
     st.attrs = Array.isArray(attrs) ? attrs : [];
     st.hist = hist || null;
+
+    // Crossing a rank band is the moment the whole tier system exists for, and
+    // until now it happened in silence: you levelled Mind past 16 and the helm
+    // was simply a different colour the next time you looked. Notice it, and
+    // let the piece come off the fire white-hot before it settles.
+    var now = {};
+    PARTS.forEach(function (part) {
+      var a = attrFor(part);
+      now[part] = a ? tierOf(a.level) : 0;
+    });
+    if (st.tiers) {
+      PARTS.forEach(function (part) {
+        if (now[part] > st.tiers[part]) {
+          st.flash[part] = 1;
+          if (st.api && st.api.onTierUp) {
+            var a = attrFor(part);
+            st.api.onTierUp({ part: part, label: PART_LABEL[part], attr: ATTR_OF_PART[part],
+                              tier: now[part], tierName: tierName(now[part]),
+                              color: a ? a.color : null });
+          }
+        }
+      });
+    }
+    st.tiers = now;
   }
   // Lighting a part from the outside — the attribute cards below point back.
   function highlight(attrKey) {

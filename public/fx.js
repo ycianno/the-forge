@@ -293,6 +293,18 @@
     });
   }
 
+  // A piece of the effigy crossing a rank band. It borrows the insignia toast's
+  // shape but not its words — "INSIGNIA UNLOCKED" over a reforged gauntlet is
+  // the kind of small lie that makes a whole layer feel automated.
+  function reforged(part, tierName, color) {
+    toast({
+      sound: () => arp([392, 523.25, 659.25, 783.99], 78, "triangle", 0.15),
+      vibe: [0, 24, 36, 24],
+      k: "REFORGED", v: part, r: tierName,
+      color: color || heatVar(4), hold: 2600
+    });
+  }
+
   // ----- Trophy earned -----------------------------------------------------
   const TROPHY_META = {
     bronze:   { c: "#c17d3c", label: "Bronze" },
@@ -439,5 +451,5 @@
     });
   }
 
-  window.FX = { levelUp, bossHit, badge, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, classUp, missionComplete, missionsAllClear, record, xpPop, playCheck, setSfx, sfxOn };
+  window.FX = { levelUp, bossHit, badge, reforged, trophy, dayCleared, streakMilestone, focusDone, bossDefeated, classUp, missionComplete, missionsAllClear, record, xpPop, playCheck, setSfx, sfxOn };
 })();

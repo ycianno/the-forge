@@ -2068,7 +2068,7 @@ function syncEffigy(prof) {
   const host = document.getElementById("effigyStage");
   const on = currentView === "character" && charTab === "sheet" && host;
   if (!on) { Effigy.stop(); return; }
-  Effigy.mount(host, { onPart: renderEffigyRead });
+  Effigy.mount(host, { onPart: renderEffigyRead, onTierUp: onEffigyTierUp });
   Effigy.sync(prof.attrs || [], effigyHistory(prof));
   if (!Effigy.isRunning()) Effigy.start();
   renderEffigyAge(prof);
@@ -2103,6 +2103,20 @@ function renderEffigyAge(prof) {
   const tro = ["bronze", "silver", "gold", "platinum"].reduce((n, g) => n + (h.trophies[g] || 0), 0);
   if (tro) bits.push(`<span><b>${tro}</b> troph${tro === 1 ? "y" : "ies"}</span>`);
   el.innerHTML = bits.join("");
+}
+
+// A piece crossing a rank band. The effigy handles the flare; this says what
+// happened in words and hands it to the celebration layer that already exists
+// for levels and trophies, rather than inventing a second one.
+function onEffigyTierUp(info) {
+  const el = document.getElementById("effigyRead");
+  if (el) {
+    el.innerHTML =
+      `<span class="ef-part" style="--ac:${info.color || "var(--heat-4)"}">${escapeHtml(info.label)} reforged</span>` +
+      `<span class="ef-of">${escapeHtml(info.attr)} reached</span>` +
+      `<span class="ef-tier">${escapeHtml(info.tierName)}</span>`;
+  }
+  if (window.FX && FX.reforged) FX.reforged(info.label, info.tierName, info.color);
 }
 
 // What the piece under your finger is, and what the next tier of it costs.
