@@ -17,8 +17,8 @@
   <link rel="stylesheet" href="css/02-base.css?v=6" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=5" />
-  <link rel="stylesheet" href="css/05-screens.css?v=57" />
-  <link rel="stylesheet" href="css/06-mobile.css?v=9" />
+  <link rel="stylesheet" href="css/05-screens.css?v=60" />
+  <link rel="stylesheet" href="css/06-mobile.css?v=10" />
 </head>
 <body>
   <main class="shell">
@@ -206,26 +206,43 @@
          kept; what is new is the clock, the finisher line and the arena that
          gives the portrait somewhere to stand. -->
     <section class="section boss-card glass" id="boss">
-      <div class="boss-arena">
-        <span class="boss-aura" aria-hidden="true"></span>
-        <div class="boss-emoji" id="bossEmoji">🪨</div>
-        <span class="boss-hp-ring" id="bossHpRing" aria-hidden="true"></span>
+      <!-- Three bands, in the order you need them: who it is, how it is doing,
+           and what you can do about it. This was eight equal-weight rows in a
+           column, which is what a card looks like when features were added one
+           at a time — the strike button, the only actionable thing on it, was
+           sixth of eight. Every id renderBoss() writes to is unchanged. -->
+      <div class="boss-head">
+        <span class="boss-kicker">⚔️ Weekly Boss<span class="boss-hunt" id="bossHunt" hidden></span></span>
+        <span class="boss-status" id="bossStatus">—</span>
       </div>
-      <div class="boss-body">
-        <div class="boss-top"><span class="boss-kicker">⚔️ Weekly Boss<span class="boss-hunt" id="bossHunt" hidden></span></span><span class="boss-status" id="bossStatus">—</span></div>
-        <div class="boss-name" id="bossName">—</div>
-        <div class="boss-hp"><div class="boss-hp-fill" id="bossHpFill"></div></div>
-        <div class="boss-dmg">
-          <span class="boss-dmg-bar" aria-hidden="true">
-            <span class="boss-dmg-seg boss-dmg-weak" id="bossDmgWeak"></span>
-            <span class="boss-dmg-seg boss-dmg-other" id="bossDmgOther"></span>
-          </span>
-          <span class="boss-dmg-split" id="bossDmgSplit"></span>
+      <div class="boss-stage">
+        <div class="boss-arena">
+          <span class="boss-aura" aria-hidden="true"></span>
+          <div class="boss-emoji" id="bossEmoji">🪨</div>
+          <span class="boss-hp-ring" id="bossHpRing" aria-hidden="true"></span>
         </div>
-        <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-clock" id="bossClock"></span></div>
-        <div class="boss-fight" id="bossFight" hidden></div>
-        <div class="boss-finisher" id="bossFinisher" hidden></div>
-        <div class="boss-taunt" id="bossTaunt"></div>
+        <div class="boss-vitals">
+          <div class="boss-name" id="bossName">—</div>
+          <div class="boss-hp"><div class="boss-hp-fill" id="bossHpFill"></div></div>
+          <div class="boss-dmg">
+            <span class="boss-dmg-bar" aria-hidden="true">
+              <span class="boss-dmg-seg boss-dmg-weak" id="bossDmgWeak"></span>
+              <span class="boss-dmg-seg boss-dmg-other" id="bossDmgOther"></span>
+            </span>
+            <span class="boss-dmg-split" id="bossDmgSplit"></span>
+          </div>
+        </div>
+        <div class="boss-aside">
+          <span class="boss-clock" id="bossClock"></span>
+          <div class="boss-taunt" id="bossTaunt"></div>
+        </div>
+      </div>
+      <div class="boss-act">
+        <span class="boss-weak" id="bossWeak"></span>
+        <div class="boss-act-row">
+          <div class="boss-fight" id="bossFight" hidden></div>
+          <div class="boss-finisher" id="bossFinisher" hidden></div>
+        </div>
       </div>
     </section>
 

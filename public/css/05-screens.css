@@ -1854,7 +1854,19 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .focus-target-label { text-align: center; color: var(--muted); font-size: var(--t-sm); font-weight: 700; margin-bottom: 14px; }
 
 /* ===== WEEKLY BOSS ===== */
-.boss-card { display: flex; align-items: center; gap: 18px; padding: 20px 24px; }
+/* Three bands: who it is, how it is doing, what you can do about it. */
+.boss-card { display: flex; flex-direction: column; gap: 14px; padding: 18px 24px 20px; }
+.boss-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.boss-stage { display: flex; align-items: center; gap: 18px; }
+.boss-vitals { flex: 1 1 auto; min-width: 0; }
+/* The clock and the taunt are context, not readings — they sit off to the side
+   rather than taking a full row each in the middle of the vitals. */
+.boss-aside { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 1 auto; min-width: 0; max-width: 34%; text-align: right; }
+/* The act band is the only part of the card you can DO something with, so it
+   gets a rule above it and the strike sits at the head of it. */
+.boss-act { display: flex; flex-direction: column; gap: 9px; padding-top: 13px; border-top: 1px solid var(--line); }
+.boss-act-row { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; }
+.boss-act-row:empty { display: none; }
 /* The portrait gets somewhere to stand. The aura is the boss's remaining
    health, so one that has barely been touched glowers and a beaten one is ash —
    the health bar's number, said again in a way you read without reading. */
@@ -1888,7 +1900,6 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   .boss-arena.is-struck { animation: none; }
 }
 .boss-emoji { position: relative; z-index: 1; font-size: 44px; line-height: 1; flex-shrink: 0; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
-.boss-body { flex: 1; min-width: 0; }
 .boss-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .boss-kicker { font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); min-width: 0; }
 /* Why this boss, and not another one. */
@@ -1908,14 +1919,14 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .boss-dmg-other { background: var(--muted-2); opacity: 0.7; }
 .boss-dmg-split { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); white-space: nowrap; }
 .boss-meta { display: flex; gap: 10px; justify-content: space-between; margin-top: 8px; font-size: var(--t-xs); }
-.boss-weak { color: var(--accent-primary); font-weight: 700; min-width: 0; }
+.boss-weak { color: var(--accent-primary); font-weight: 700; min-width: 0; font-size: var(--t-xs); }
 /* A fight has a clock. On a Friday this is the most useful line on the card. */
-.boss-clock { font-weight: 800; color: var(--muted-2); white-space: nowrap; letter-spacing: .04em; }
+.boss-clock { font-size: var(--t-xs); font-weight: 800; color: var(--muted-2); white-space: nowrap; letter-spacing: .04em; }
 .boss-clock.is-urgent { color: var(--heat-4); text-shadow: 0 0 10px var(--heat-glow); }
 /* Work you did while you were not looking at Week. The bar sits where you left
    it until you land these by hand — the outcome was decided by the work, the
    swing is yours. Only ever shown for damage already earned. */
-.boss-fight { margin-top: 10px; }
+.boss-fight { flex: 0 0 auto; }
 .boss-fight[hidden] { display: none; }
 .bf-strike {
   display: inline-flex; align-items: center; gap: 8px;
@@ -1952,7 +1963,7 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 
 /* Name the quests that would end it. "Three left" and "these three" are
    different sentences, and only one of them tells you what to go and do. */
-.boss-finisher { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.boss-finisher { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .boss-finisher[hidden] { display: none; }
 .bf-k { font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
 .bf-q {
@@ -1962,13 +1973,17 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent);
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.boss-taunt { margin-top: 8px; color: var(--muted); font-style: italic; font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* `min-width: 0` is what lets it ellipsise instead of forcing the row wider:
+   a nowrap flex item defaults to a content-sized minimum and will not shrink. */
+.boss-taunt { flex: 1 1 0; min-width: 0; color: var(--muted); font-style: italic; font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .boss-card.defeated { opacity: 0.9; }
 .boss-card.defeated .boss-status { color: var(--gradient-success-text); }
 .boss-card.defeated .boss-hp-fill { background: linear-gradient(90deg, #22c55e, #4ade80); box-shadow: 0 0 12px var(--glow-green); }
 .boss-card.defeated .boss-emoji { filter: grayscale(0.5) drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
 @media (max-width: 768px) {
-  .boss-taunt { display: none; }
+  /* The taunt used to be hidden here because the old card was eight rows deep
+     and a phone had no room for flavour. It has a band of its own now, sharing
+     a row with the clock that only wants 58 of 309 pixels. */
   .boss-emoji { font-size: 36px; }
   .boss-dmg-split { display: none; }   /* the hint line below already says it */
 }

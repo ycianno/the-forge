@@ -179,11 +179,19 @@ html { scroll-padding-top: 84px; }
   /* The fight card is a portrait beside a body, which at 375px leaves the body
      about 200px wide. Shrink the arena and let the meta lines stack rather than
      squeezing five of them into a column. */
-  .boss-card { gap: 12px; padding: 16px; align-items: flex-start; }
+  .boss-card { gap: 11px; padding: 16px; }
   .boss-arena { width: 58px; height: 58px; }
   .boss-emoji { font-size: 30px; }
   .boss-name { font-size: 19px; line-height: 1.15; }
   .boss-top { flex-wrap: wrap; }
+  /* At this width the aside has nowhere to be. The clock rejoins the act band,
+     where it belongs anyway — it is the reason to act — and the taunt drops to
+     its own line under the vitals. */
+  .boss-stage { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .boss-aside { max-width: none; flex: 1 1 100%; align-items: flex-start; text-align: left; flex-direction: row; justify-content: space-between; gap: 10px; }
+  .boss-act-row { gap: 8px 12px; }
+  .boss-fight { flex: 1 1 100%; }
+  .bf-strike { width: 100%; justify-content: center; }
   .boss-dmg { flex-wrap: wrap; gap: 6px; }
   .boss-dmg-bar { flex-basis: 100%; }
   .boss-dmg-split { white-space: normal; }
