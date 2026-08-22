@@ -51,6 +51,8 @@ const MODULE_ICONS = {
   pencil:    "M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z",
   target:    "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   clock:     "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2",
+  calendar:  "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18",
+  helm:      "M12 2a8 8 0 0 0-8 8v6a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-6a8 8 0 0 0-8-8zM4 12h16M9 19v-7M15 19v-7",
   flame:     "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z",
   heart:     "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z",
 };
@@ -3002,10 +3004,12 @@ function updateProgress() {
 let calViewDate = null;
 function openCalendar() {
   calViewDate = new Date();
+  if (document.getElementById("view-month")) { routeTo("month"); renderCalendarMonth(); return; }
   renderCalendarMonth();
   openModal("calendarModal");
 }
 function closeCalendar() {
+  if (document.getElementById("view-month")) { routeTo("today"); return; }
   closeModal("calendarModal");
 }
 function calShiftMonth(delta) {
@@ -3024,7 +3028,7 @@ function renderCalendarMonth() {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const titleEl = document.getElementById("calTitle");
   if (titleEl) titleEl.textContent = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  const dow = document.querySelector("#calendarModal .cal-dow");
+  const dow = document.getElementById("calDow");
   if (dow) dow.innerHTML = weekOrder().map((i) => `<span>${escapeHtml(dayNames()[i].slice(0, 3))}</span>`).join("");
   let cells = "";
   let activeDays = 0, sumPct = 0, ratedDays = 0, questsDone = 0;
@@ -3210,11 +3214,17 @@ function initSyncPanel() {
 // rather than by rewriting index.html. Every id and every selector in the rest
 // of this file keeps working, which is what makes a change this structural
 // safe to make in one step.
+//
+// Five rooms, ordered by how far you are looking: day → week → month → self →
+// plan. Month and Character are new doors onto things that were trapped behind
+// modals — a calendar you went to *look* at was never a dialog, and the trophy
+// cabinet is part of who you are, not a separate building.
 const VIEWS = [
-  { id: "today",    label: "Today",    icon: "check",     title: "Today" },
-  { id: "week",     label: "Week",     icon: "clipboard", title: "This week" },
-  { id: "pursuits", label: "Pursuits", icon: "target",    title: "Pursuits" },
-  { id: "cabinet",  label: "Cabinet",  icon: "star",      title: "Cabinet" },
+  { id: "today",     label: "Today",     icon: "check",     title: "Today" },
+  { id: "week",      label: "Week",      icon: "clipboard", title: "This week" },
+  { id: "month",     label: "Month",     icon: "calendar",  title: "The record" },
+  { id: "character", label: "Character", icon: "helm",      title: "Character" },
+  { id: "pursuits",  label: "Pursuits",  icon: "target",    title: "Pursuits" },
 ];
 const VIEW_IDS = VIEWS.map((v) => v.id);
 let currentView = "today";
@@ -3275,25 +3285,43 @@ function buildViewShell() {
     if (sec.closest(".view")) return;
     move("pursuits", sec);
   });
-  // Cabinet stops being a sheet you dismiss and becomes somewhere you go.
-  const cabBody = document.querySelector("#cabinetModal .modal");
-  if (cabBody) {
-    const head = cabBody.querySelector(".modal-head");
-    if (head) head.remove();
-    // The footer, not the first .modal-actions in the tree — the Records form
-    // inside the cabinet has one of its own, and removing that would take the
-    // Save button with it.
-    const closeBtn = cabBody.querySelector("#closeCabinetBtn");
-    const foot = closeBtn && closeBtn.closest(".modal-actions");
-    if (foot) foot.remove();
-    cabBody.classList.remove("modal", "glass");
-    cabBody.classList.add("cabinet-body");
-    move("cabinet", cabBody);
-    const backdrop = document.getElementById("cabinetModal");
-    if (backdrop) backdrop.remove();
-  }
+  // Month: the calendar was a modal you opened to *look* at something, which is
+  // the definition of a place. Unwrap it in situ — the grid, the nav and the
+  // summary keep their ids, so renderCalendarMonth() does not know it moved.
+  unwrapModalInto("month", "calendarModal", { drop: ["#calClose"] });
+  // Character: the cabinet is who you have become, not a separate building.
+  unwrapModalInto("character", "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
   initQuickAdd();
+}
+
+// Take a modal's body out of its backdrop and hang it in a room, keeping every
+// id inside intact. `drop` names the buttons whose whole `.modal-actions` row
+// should go with the chrome — named by button rather than by taking the first
+// `.modal-actions` in the tree, because the Records form inside the cabinet has
+// one of its own and removing that would take its Save button with it.
+function unwrapModalInto(view, modalId, opts) {
+  const backdrop = document.getElementById(modalId);
+  const body = backdrop && backdrop.querySelector(".modal");
+  const room = viewEl(view);
+  if (!body || !room) return null;
+  const head = body.querySelector(".modal-head");
+  if (head) head.remove();
+  ((opts && opts.drop) || []).forEach((sel) => {
+    const btn = body.querySelector(sel);
+    const row = btn && btn.closest(".modal-actions");
+    if (row) row.remove();
+    else if (btn) btn.remove();
+  });
+  body.classList.remove("modal", "glass");
+  body.removeAttribute("role");
+  body.removeAttribute("aria-modal");
+  body.removeAttribute("style");
+  body.classList.add("room-body");
+  if (opts && opts.className) body.classList.add(opts.className);
+  room.appendChild(body);
+  backdrop.remove();
+  return body;
 }
 
 // Nav is built from the module list, so a pursuit you add appears in it and one
@@ -3362,8 +3390,13 @@ function renderSidebarLive() {
 // One writer of which view is on screen. Also re-homes Daily, which is the same
 // board in both places — one card in Today, seven in Week — so there is never a
 // second copy of a day's ids in the document.
+// Hashes that used to name a room and no longer do. A bookmark or a back-button
+// entry from the four-screen shell should land where the thing actually went,
+// not silently on Today.
+const VIEW_ALIASES = { cabinet: "character", calendar: "month", reports: "month" };
 function routeTo(view, opts) {
-  const next = VIEW_IDS.includes(view) ? view : "today";
+  const asked = VIEW_ALIASES[view] || view;
+  const next = VIEW_IDS.includes(asked) ? asked : "today";
   const changed = next !== currentView;
   currentView = next;
   const daily = document.getElementById("daily");
@@ -3395,7 +3428,8 @@ function routeTo(view, opts) {
   if (changed) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
     // button or bottom tab has to fill it just the same.
-    if (next === "cabinet") paintCabinet();
+    if (next === "character") paintCabinet();
+    if (next === "month") { if (!calViewDate) calViewDate = new Date(); renderCalendarMonth(); }
     renderDays();
     loadWeekFields();
     updateProgress();
@@ -3785,12 +3819,12 @@ function paintCabinet() {
   showCabinetTab(cabinetTab);
 }
 function openCabinet() {
-  if (document.getElementById("view-cabinet")) { routeTo("cabinet"); paintCabinet(); return; }
+  if (document.getElementById("view-character")) { routeTo("character"); paintCabinet(); return; }
   initCabinetTabs();
   paintCabinet();
   openModal("cabinetModal");
 }
-function closeCabinet() { if (document.getElementById("view-cabinet")) routeTo("today"); else closeModal("cabinetModal"); }
+function closeCabinet() { if (document.getElementById("view-character")) routeTo("today"); else closeModal("cabinetModal"); }
 
 // ===== MODALS =====
 // One controller for every dialog. Before this, each modal hand-toggled .active

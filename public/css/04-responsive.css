@@ -123,7 +123,9 @@
     left: 0; 
     right: 0; 
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    /* Six slots now — five rooms and the drawer of actions. Labels shrink to
+       fit rather than the bar scrolling: a tab you have to find is not a tab. */
+    grid-template-columns: repeat(6, 1fr);
     background: rgba(4, 4, 6, 0.98); 
     backdrop-filter: blur(20px); 
     -webkit-backdrop-filter: blur(20px); 
@@ -166,7 +168,17 @@
     color: var(--accent-primary);
   }
   .tab-icon { font-size: 22px; line-height: 1; }
-  .tab-label { font-size: var(--t-2xs); font-weight: 700; letter-spacing: 0.02em; }
+  .tab-label {
+    font-size: var(--t-2xs); font-weight: 700; letter-spacing: 0.02em;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* On the narrowest phones six labels do not fit at the normal size. Drop a
+     step rather than clipping "Character" to "Chara…". */
+  @media (max-width: 400px) {
+    .tab-btn { padding: 8px 2px; }
+    .tab-label { font-size: 9px; letter-spacing: 0; }
+    .tab-icon .ic { width: 21px; height: 21px; }
+  }
   
   .shell { padding-bottom: 100px; padding-left: 12px; padding-right: 12px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); }
   

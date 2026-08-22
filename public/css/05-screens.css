@@ -929,11 +929,14 @@
 .attr-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ac, #94a3b8); margin-right: 6px; flex: 0 0 auto; }
 @media (max-width: 768px) { details.section-card > summary .attr-badge { display: none; } }
 
-/* Calendar modal (month view) */
+/* The month view. A 32px square button that never reset the 10px/16px padding
+   every <button> inherits has a content box of zero, so both chevrons were
+   drawn 0px wide — two blank tiles either side of the month name. Sized icons
+   inside fixed-size buttons need the padding off and the shrink disabled. */
 .cal-nav { display: flex; align-items: center; gap: 10px; margin: 6px 0 14px; }
-.cal-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--text); cursor: pointer; }
+.cal-nav-btn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 32px; height: 32px; padding: 0; border-radius: 9px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--text); cursor: pointer; }
 .cal-nav-btn:hover { background: rgba(255,255,255,0.12); }
-.cal-nav-btn .ic { width: 16px; height: 16px; }
+.cal-nav-btn .ic { width: 16px; height: 16px; flex: 0 0 auto; }
 .cal-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 18px; min-width: 150px; }
 .cal-today-btn { margin-left: auto; padding: 7px 14px; border-radius: var(--r-chip); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: var(--text); font-weight: 700; cursor: pointer; }
 .cal-today-btn:hover { border-color: var(--accent-primary); }
@@ -1703,7 +1706,8 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .tr-spark-lvl { flex: 0 0 auto; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-xs); color: var(--muted); min-width: 40px; text-align: right; }
 /* ----- Season modal ----- */
 .season-nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 4px 0 18px; }
-.season-nav button { padding: 6px; width: 34px; height: 34px; }
+.season-nav button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; padding: 0; width: 34px; height: 34px; }
+.season-nav button .ic { flex: 0 0 auto; }
 .season-nav button:disabled { opacity: 0.35; cursor: default; transform: none; box-shadow: none; }
 .season-label { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; min-width: 190px; text-align: center; }
 .season-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; }
@@ -1913,16 +1917,18 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* The cabinet stopped being a sheet, so it needs the surface the sheet used to
-   give it. Its panes were written for a modal 500–900px wide; the pane is
-   wider, so the wall of insignias gets more per row rather than more scroll. */
-.cabinet-body {
+/* A modal body that became a room needs the surface the sheet used to give it.
+   Their panes were written for a dialog 500–900px wide; a room is wider, so
+   the wall of insignias and the month grid get more per row rather than more
+   scroll. `max-width` came off with the chrome — rooms fill the pane. */
+.room-body {
   padding: var(--s-5);
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--glass); box-shadow: var(--e-2), var(--edge);
-  max-height: none; overflow: visible;
+  max-width: none; max-height: none; overflow: visible;
 }
 .cabinet-body .cab-tabs { margin-top: 0; }
+.room-body > .cal-nav:first-child { margin-top: 0; }
 
 /* ===========================================================================
  * QUICK CAPTURE · UNDO · KEYBOARD

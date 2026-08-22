@@ -4,8 +4,20 @@
     {
       "name": "forge-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3099
+    },
+    {
+      "name": "forge-review",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "review"
+      ],
+      "port": 3098
     }
   ]
 }
