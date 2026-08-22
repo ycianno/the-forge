@@ -335,6 +335,10 @@
             <div class="set-row-text"><span class="set-row-label">Streak rest days</span><span class="set-row-hint">Missed days your day-streak forgives 🛡️</span></div>
             <input type="number" id="cfgStreakFreeze" value="1" min="0" max="3">
           </div>
+          <div class="set-row">
+            <div class="set-row-text"><span class="set-row-label">Week starts on</span><span class="set-row-hint">Changes how the week is drawn, not how it is scored</span></div>
+            <select id="cfgWeekStart" style="width:150px;"><option value="0">Sunday</option><option value="1">Monday</option></select>
+          </div>
         </div>
 
         <!-- Profile Tab -->
@@ -701,7 +705,7 @@
   <script src="modules.js?v=20"></script>
   <script src="game.js?v=33"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=93"></script>
+  <script src="app.js?v=95"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

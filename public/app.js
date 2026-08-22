@@ -392,7 +392,8 @@ function planHealthHtml() {
       <span>${escapeHtml(costLine)}</span>
     </div>
     <div class="ph-bars" role="img" aria-label="Tasks per day this week">
-      ${load.perDay.map((d, i) => {
+      ${weekOrder().map((i) => {
+        const d = load.perDay[i];
         const h = Math.max(4, Math.round(d.count / Math.max(1, heaviest.count) * 100));
         return `<span class="ph-bar" title="${escapeHtml(dayNames()[i])}: ${d.count} task${d.count === 1 ? "" : "s"}"><i style="height:${h}%"></i><em>${DOW_INITIAL[i]}</em></span>`;
       }).join("")}
@@ -1703,6 +1704,9 @@ function renderHeatmap() {
   const grid = document.getElementById("heatmapGrid");
   if (!grid) return;
   grid.innerHTML = "";
+  // Row labels are every other weekday, in whatever order the grid is drawn.
+  const days = document.querySelector(".hm-days");
+  if (days) days.innerHTML = weekOrder().map((d, i) => `<span>${i % 2 === 1 ? escapeHtml(dayNames()[d].slice(0, 3)) : ""}</span>`).join("");
   const months = document.getElementById("hmMonths");
   if (months) months.innerHTML = "";
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1717,7 +1721,7 @@ function renderHeatmap() {
       if (m !== lastMonth) { lbl.textContent = colDate.toLocaleDateString(undefined, { month: "short" }); lastMonth = m; }
       months.appendChild(lbl);
     }
-    for (let row = 0; row < 7; row++) {
+    for (const row of weekOrder()) {
       const date = addDays(startWeek, col * 7 + row);
       const cell = document.createElement("div");
       if (date > today) { cell.className = "hm-cell future"; grid.appendChild(cell); continue; }
@@ -2118,6 +2122,23 @@ function pursuitTaskPanelHtml(m) {
 }
 // Per-day completion state for a pursuit's scheduled tasks this week.
 const DOW_INITIAL = ["S", "M", "T", "W", "T", "F", "S"];
+// Which weekday a week is drawn from. DISPLAY ONLY — every week key in SQLite
+// is the Sunday of its week, and so is every occurrence id derived from it, so
+// moving the storage boundary would rewrite the primary key of the whole
+// database. This reorders what you see; it never reorders what is stored.
+// Most of the Spanish-speaking world, and ISO-8601, start on Monday.
+function weekStartsOn() { return Number(settings && settings.weekStartsOn) === 1 ? 1 : 0; }
+// The seven day indexes in display order — [0..6] from Sunday, [1..6,0] from Monday.
+function weekOrder() {
+  const first = weekStartsOn();
+  return Array.from({ length: 7 }, (_, i) => (i + first) % 7);
+}
+// Sort a list of things carrying a dayIndex into display order.
+function byWeekOrder(items, get) {
+  const rank = {};
+  weekOrder().forEach((d, i) => { rank[d] = i; });
+  return items.slice().sort((a, b) => rank[get(a)] - rank[get(b)]);
+}
 function sectionDayStates(areaId) {
   const tasks = getUnifiedQuests().filter((q) => !q.archived && q.areaId === areaId);
   const wk = getWeekData();
@@ -2204,13 +2225,13 @@ function sectionHeroHtml(m) {
   if (kind === "track") {
     const st = sectionDayStates(m.id);
     const done = st.reduce((n, d) => n + (d.done > 0 ? 1 : 0), 0);
-    const track = `<div class="hero-track">` + st.map((d) => `<span class="ht-node ${d.done ? "done" : d.planned ? "planned" : "rest"}" title="${escapeHtml(dayNames()[d.dayIndex])}"><b>${DOW_INITIAL[d.dayIndex]}</b></span>`).join("") + `</div>`;
+    const track = `<div class="hero-track">` + byWeekOrder(st, (d) => d.dayIndex).map((d) => `<span class="ht-node ${d.done ? "done" : d.planned ? "planned" : "rest"}" title="${escapeHtml(dayNames()[d.dayIndex])}"><b>${DOW_INITIAL[d.dayIndex]}</b></span>`).join("") + `</div>`;
     return heroFrame("training", crest, m.name, "This week's regimen", heroCount(done, `/ ${tgt}`),
       heroGauge(tgt ? done / tgt * 100 : 0, `${done} cleared · target ${tgt}`) + track);
   }
   if (kind === "vials") {
     const stats = nutritionWeekStats(wk, selectedWeekStart);
-    const vials = `<div class="hero-vials">` + (stats.days || []).map((d) => {
+    const vials = `<div class="hero-vials">` + byWeekOrder(stats.days || [], (d) => d.dayIndex).map((d) => {
       const pct = d.total ? Math.round(d.done / d.total * 100) : 0;
       return `<span class="hv ${d.met ? "met" : ""}" style="--fill:${pct}%" title="${escapeHtml(dayNames()[d.dayIndex])}: ${d.done}/${d.total}"><i></i><b>${DOW_INITIAL[d.dayIndex]}</b></span>`;
     }).join("") + `</div>`;
@@ -2392,7 +2413,7 @@ function syncQuestScheduleFields() {
 }
 function renderQuestWeekdays(selected) {
   const picked = new Set(selected || []);
-  document.getElementById("questWeekdays").innerHTML = dayNames().map((day, i) => `<label class="weekday-option"><input type="checkbox" value="${i}" ${picked.has(i) ? "checked" : ""}><span>${day.slice(0,3)}</span></label>`).join("");
+  document.getElementById("questWeekdays").innerHTML = weekOrder().map((i) => `<label class="weekday-option"><input type="checkbox" value="${i}" ${picked.has(i) ? "checked" : ""}><span>${dayNames()[i].slice(0,3)}</span></label>`).join("");
 }
 function openQuestEditor(opts) {
   opts = opts || {};
@@ -2647,7 +2668,9 @@ function renderDays() {
   // Today's view is today, on every screen size. The Week view is the board:
   // today first on a phone, in calendar order on a desktop.
   const onToday = viewOfSection("daily") === "today";
-  const orderedEntries = isMobile() ? [entries[todayIndex]].concat(entries.filter((x) => x.dayIndex !== todayIndex)) : entries;
+  const orderedEntries = isMobile()
+    ? [entries[todayIndex]].concat(byWeekOrder(entries.filter((x) => x.dayIndex !== todayIndex), (e) => e.dayIndex))
+    : byWeekOrder(entries, (e) => e.dayIndex);
   const visibleEntries = onToday ? [entries[todayIndex]]
     : (isMobile() && mobileFullWeekKey !== weekKey() ? [entries[todayIndex]] : orderedEntries);
   visibleEntries.forEach(({ day, dayIndex, isToday }) => {
@@ -2991,11 +3014,14 @@ function renderCalendarMonth() {
   if (!grid || !calViewDate) return;
   const year = calViewDate.getFullYear(), month = calViewDate.getMonth();
   const first = new Date(year, month, 1);
-  const startDay = first.getDay();
+  // Leading blanks are measured from whichever weekday the grid starts on.
+  const startDay = (first.getDay() - weekStartsOn() + 7) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const titleEl = document.getElementById("calTitle");
   if (titleEl) titleEl.textContent = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const dow = document.querySelector("#calendarModal .cal-dow");
+  if (dow) dow.innerHTML = weekOrder().map((i) => `<span>${escapeHtml(dayNames()[i].slice(0, 3))}</span>`).join("");
   let cells = "";
   let activeDays = 0, sumPct = 0, ratedDays = 0, questsDone = 0;
   for (let i = 0; i < startDay; i++) cells += `<div class="cal-cell empty" aria-hidden="true"></div>`;
@@ -3301,15 +3327,19 @@ function renderSidebar() {
 function renderSidebarLive() {
   const id = document.getElementById("sidebarIdentity");
   if (id) {
+    // computeProfile() already carries the streak the hero shows. Asking for
+    // Game.computeDayStreak() instead read undefined — it is not exported — so
+    // the sidebar quietly said "No streak yet" beside a 17-day streak.
     const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
-    const streak = (window.Game && Game.computeDayStreak) ? Game.computeDayStreak() : 0;
+    const streak = prof ? (prof.dayStreak || 0) : 0;
+    const shield = prof && prof.streakUsed > 0 ? " 🛡️" : "";
     const pct = prof && prof.next ? Math.min(100, Math.round(prof.into / prof.next * 100)) : 0;
     id.innerHTML = `
       <div class="sv-lvl"><b>${prof ? prof.level : 1}</b><span>LVL</span></div>
       <div class="sv-idmeta">
         <div class="sv-name">${escapeHtml((settings && settings.callsign) || "Player One")}</div>
         <div class="sv-xpbar"><i style="width:${pct}%"></i></div>
-        <div class="sv-streak">${streak ? `🔥 ${streak} day${streak === 1 ? "" : "s"}` : "No streak yet"}</div>
+        <div class="sv-streak">${streak ? `🔥 ${streak} day${streak === 1 ? "" : "s"}${shield}` : "No streak yet"}</div>
       </div>`;
   }
   const bossFoot = document.getElementById("sidebarBoss");
@@ -3727,6 +3757,7 @@ function openSettings() {
   const dif = document.getElementById("cfgDifficulty"); if (dif) dif.value = String(settings.gameBase || 100);
   const sg = document.getElementById("cfgStreakGrade"); if (sg) sg.value = settings.streakGrade || 75;
   const sf = document.getElementById("cfgStreakFreeze"); if (sf) sf.value = (settings.streakFreeze != null ? settings.streakFreeze : 1);
+  const ws = document.getElementById("cfgWeekStart"); if (ws) ws.value = String(weekStartsOn());
   const cs = document.getElementById("cfgCallsign"); if (cs) cs.value = settings.callsign || "";
   renderModulesEditor();
   renderStatsEditor();
@@ -4569,6 +4600,7 @@ function bindEvents() {
     cfgDifficulty:    { gameBase: settings.gameBase },
     cfgStreakGrade:   { streakGrade: settings.streakGrade },
     cfgStreakFreeze:  { streakFreeze: settings.streakFreeze },
+    cfgWeekStart:     { weekStartsOn: settings.weekStartsOn },
     cfgCallsign:      { callsign: settings.callsign },
     cfgRemindMorning: { reminders: settings.reminders },
     cfgRemindEvening: { reminders: settings.reminders },
@@ -4577,6 +4609,7 @@ function bindEvents() {
     cfgDifficulty:    (v) => { settings.gameBase = Number(v) || 100; },
     cfgStreakGrade:   (v) => { settings.streakGrade = Math.min(100, Math.max(1, Number(v) || 75)); },
     cfgStreakFreeze:  (v) => { settings.streakFreeze = Math.min(3, Math.max(0, Number(v) || 0)); },
+    cfgWeekStart:     (v) => { settings.weekStartsOn = Number(v) === 1 ? 1 : 0; },
     cfgCallsign:      (v) => { settings.callsign = String(v).trim(); },
     cfgRemindMorning: (v) => { settings.reminders = Object.assign(getReminders(), { morning: v || "08:00" }); },
     cfgRemindEvening: (v) => { settings.reminders = Object.assign(getReminders(), { evening: v || "19:00" }); },
@@ -4588,6 +4621,9 @@ function bindEvents() {
       if (!fn) return;
       fn(el.value);
       patchSettingsSoon(liveSettingsPaths(el.id));
+      // Week start changes the order the board is drawn in, which is structure,
+      // not a value — the cards have to be rebuilt, not just refreshed.
+      if (el.id === "cfgWeekStart") { renderStructure(); applyWeekToUI(); renderModulesEditor(); return; }
       updateProgress();
       updateStreakAndHeatmap();
       if (window.Game) Game.render();
