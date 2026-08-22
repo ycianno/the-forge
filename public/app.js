@@ -1932,7 +1932,7 @@ function renderAttrSheet(prof) {
         ? feeders.map((f) => `<span class="as-feed" style="--ac:${f.color}">${escapeHtml(f.name)}</span>`).join("")
         : `<span class="as-feed as-feed-none">no pursuit routes here</span>`;
       const behind = spread && a.level === lo ? `<span class="as-flag">behind</span>` : "";
-      return `<div class="as-row${behind ? " is-behind" : ""}" style="--ac:${a.color}">
+      return `<div class="as-row${behind ? " is-behind" : ""}" data-attr="${escapeHtml(a.key)}" style="--ac:${a.color}">
         <div class="as-row-head">
           <span class="attr-dot" style="background:${a.color}"></span>
           <span class="as-name">${escapeHtml(a.label || a.key)}</span>
@@ -1954,6 +1954,51 @@ function renderCharacter() {
   if (!prof) return;
   renderRankLadder(prof);
   renderAttrSheet(prof);
+  initShapeLink();
+}
+
+// The shape and the sheet are two views of one set of numbers, so pointing at
+// either should light the other. Without this the radar is a picture next to a
+// table and you are left doing the join in your head — which was most of what
+// made Character feel like several things stacked rather than one sheet.
+function highlightAttr(key) {
+  document.querySelectorAll("#attrRadar [data-attr]").forEach((n) => {
+    n.classList.toggle("is-lit", !!key && n.dataset.attr === key);
+    n.classList.toggle("is-dim", !!key && n.dataset.attr !== key);
+  });
+  document.querySelectorAll(".as-row[data-attr]").forEach((n) => {
+    n.classList.toggle("is-lit", !!key && n.dataset.attr === key);
+  });
+}
+function initShapeLink() {
+  const radar = document.getElementById("attrRadar");
+  if (radar && !radar._wired) {
+    radar._wired = true;
+    radar.addEventListener("pointerover", (e) => {
+      const n = e.target.closest("[data-attr]");
+      if (n) highlightAttr(n.dataset.attr);
+    });
+    radar.addEventListener("pointerleave", () => highlightAttr(null));
+    // On a touch screen there is no hover, so a tap scrolls to the card the
+    // wedge stands for rather than lighting something you cannot see.
+    radar.addEventListener("click", (e) => {
+      const n = e.target.closest("[data-attr]");
+      if (!n) return;
+      const row = document.querySelector(`.as-row[data-attr="${CSS.escape(n.dataset.attr)}"]`);
+      if (!row) return;
+      highlightAttr(n.dataset.attr);
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+  const sheet = document.getElementById("attrSheet");
+  if (sheet && !sheet._wired) {
+    sheet._wired = true;
+    sheet.addEventListener("pointerover", (e) => {
+      const row = e.target.closest(".as-row[data-attr]");
+      if (row) highlightAttr(row.dataset.attr);
+    });
+    sheet.addEventListener("pointerleave", () => highlightAttr(null));
+  }
 }
 
 function showCharTab(name) {

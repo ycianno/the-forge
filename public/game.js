@@ -382,40 +382,70 @@
 
   function setText(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
 
+  // ----- the shape --------------------------------------------------------
+  // The radar was one accent-coloured blob: it told you the shape of your
+  // training and nothing about which axis was which. Now every attribute owns
+  // its own wedge, in its own colour, so a short Mind is a visible dent with a
+  // name on it — and the wedge is the thing you hover to light up that
+  // attribute's card in the sheet below.
   function attrRadarSvg(attrs) {
     const W = 272, H = 232, cx = 136, cy = 118, R = 82, gap = 20;
     const n = attrs.length;
     const maxLevel = Math.max(1, ...attrs.map(a => a.level));
     const ang = i => (-90 + (360 / n) * i) * Math.PI / 180;
     const pt = (i, r) => [cx + Math.cos(ang(i)) * r, cy + Math.sin(ang(i)) * r];
+    const f1 = v => v.toFixed(1);
 
     let grid = "";
     [0.34, 0.67, 1].forEach(f => {
-      const pts = attrs.map((_, i) => pt(i, R * f).map(v => v.toFixed(1)).join(",")).join(" ");
+      const pts = attrs.map((_, i) => pt(i, R * f).map(f1).join(",")).join(" ");
       grid += `<polygon points="${pts}" fill="none" stroke="var(--line)" stroke-width="1"/>`;
     });
-    let spokes = "", labels = "";
-    attrs.forEach((a, i) => {
+    let spokes = "";
+    attrs.forEach((_, i) => {
       const [x, y] = pt(i, R);
-      spokes += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
+      spokes += `<line x1="${cx}" y1="${cy}" x2="${f1(x)}" y2="${f1(y)}" stroke="var(--line)" stroke-width="1"/>`;
+    });
+
+    // Level 0 still has to be visible or the shape collapses to a dot and the
+    // wedges stop being clickable — 0.2 is the floor, not a score.
+    const norm = a => 0.2 + 0.8 * (a.level / maxLevel);
+    const dp = attrs.map((a, i) => pt(i, R * norm(a)));
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const topIdx = attrs.reduce((best, a, i) => (a.level > attrs[best].level ? i : best), 0);
+
+    // One wedge per attribute: centre → the midpoint of the edge behind it →
+    // its own vertex → the midpoint of the edge ahead. That is genuinely this
+    // attribute's share of the shape rather than a slice of two of them.
+    let wedges = "", dots = "", labels = "";
+    attrs.forEach((a, i) => {
+      const prev = mid(dp[(i - 1 + n) % n], dp[i]);
+      const next = mid(dp[i], dp[(i + 1) % n]);
+      const d = `M${cx},${cy} L${f1(prev[0])},${f1(prev[1])} L${f1(dp[i][0])},${f1(dp[i][1])} L${f1(next[0])},${f1(next[1])} Z`;
+      wedges += `<path class="rdr-wedge" data-attr="${escapeHtml(a.key)}" d="${d}" fill="${a.color}" style="--ac:${a.color};animation-delay:${(i * 55)}ms"/>`;
+      dots += `<circle class="rdr-dot${i === topIdx ? " is-top" : ""}" data-attr="${escapeHtml(a.key)}" cx="${f1(dp[i][0])}" cy="${f1(dp[i][1])}" r="4" fill="${a.color}" stroke="var(--bg-2)" stroke-width="1.2" style="--ac:${a.color};animation-delay:${(i * 55) + 120}ms"/>`;
       const [lx, ly] = pt(i, R + gap);
       const anchor = lx < cx - 3 ? "end" : lx > cx + 3 ? "start" : "middle";
       const dy = ly < cy - 3 ? "-1" : ly > cy + 3 ? "11" : "4";
-      labels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" dy="${dy}" text-anchor="${anchor}" class="radar-label" fill="${a.color}">${escapeHtml(a.label || a.key)}</text>`;
+      labels += `<text class="radar-label" data-attr="${escapeHtml(a.key)}" x="${f1(lx)}" y="${f1(ly)}" dy="${dy}" text-anchor="${anchor}" fill="${a.color}">${escapeHtml(a.label || a.key)}</text>`;
     });
-    const norm = a => 0.2 + 0.8 * (a.level / maxLevel);
-    const dataPts = attrs.map((a, i) => pt(i, R * norm(a)).map(v => v.toFixed(1)).join(",")).join(" ");
-    let dots = "";
-    attrs.forEach((a, i) => {
-      const [x, y] = pt(i, R * norm(a));
-      dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.8" fill="${a.color}" stroke="var(--bg-2)" stroke-width="1.2"/>`;
-    });
+    const outline = dp.map(p => p.map(f1).join(",")).join(" ");
 
-    return `<svg viewBox="0 0 ${W} ${H}" class="attr-radar-svg" aria-hidden="true">
-      ${grid}${spokes}
-      <polygon points="${dataPts}" style="fill:var(--accent-primary);fill-opacity:0.22;stroke:var(--accent-primary);stroke-width:2;stroke-linejoin:round;filter:drop-shadow(0 0 5px var(--accent-primary))"/>
+    return `<svg viewBox="0 0 ${W} ${H}" class="attr-radar-svg" role="img" aria-label="Attribute shape">
+      <g class="rdr-grid">${grid}${spokes}</g>
+      <g class="rdr-shape">
+        ${wedges}
+        <polygon class="rdr-outline" points="${outline}"/>
+      </g>
       ${dots}${labels}
     </svg>`;
+  }
+  // A signature of what the shape is drawn from. The radar is repainted by
+  // every render — a keystroke, a tick, a widget refresh — and replacing the
+  // markup restarts the draw-in animation, so a stable shape must produce
+  // stable markup and be left alone.
+  function radarSignature(attrs) {
+    return attrs.map(a => a.key + ":" + a.level + ":" + a.color).join("|");
   }
 
   function render() {
@@ -462,7 +492,13 @@
     // attribute sheet in the Character room (renderAttrSheet in app.js), which
     // says the same things and also says which pursuits feed each one.
     const radar = document.getElementById("attrRadar");
-    if (radar) radar.innerHTML = attrRadarSvg(p.attrs);
+    if (radar) {
+      const sig = radarSignature(p.attrs);
+      if (radar.dataset.sig !== sig) {
+        radar.dataset.sig = sig;
+        radar.innerHTML = attrRadarSvg(p.attrs);
+      }
+    }
 
     // Level-up celebration — prefer the rich FX layer if present
     if (lastLevel !== null && p.level > lastLevel) {

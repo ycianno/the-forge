@@ -170,10 +170,57 @@
 .weekly-chip-meta .score-label { font-size: var(--t-2xs); }
 .weekly-chip-meta .status-line { margin-top: 2px; font-size: var(--t-2xs); max-width: 120px; line-height: 1.3; }
 .attr-radar { display: grid; place-items: center; padding: 4px 0; }
-.attr-radar-svg { width: 100%; max-width: 270px; height: auto; }
+.attr-radar-svg { width: 100%; max-width: 270px; height: auto; overflow: visible; }
 .radar-label {
   font-family: 'Outfit', sans-serif;
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.02em;
+  cursor: pointer; transition: opacity .2s ease, font-size .2s ease;
+}
+/* ----- the shape, alive -------------------------------------------------
+   Every attribute owns a wedge in its own colour, so the picture and the
+   sheet under it are obviously the same five numbers. The whole group scales
+   in from the centre when the shape actually changes — never on a repaint,
+   which is why game.js keys the markup to a signature. */
+.rdr-grid { opacity: .9; }
+.rdr-shape { transform-box: view-box; transform-origin: 136px 118px; }
+.rdr-wedge {
+  fill-opacity: .17;
+  stroke: var(--ac); stroke-width: .75; stroke-opacity: .35;
+  cursor: pointer;
+  transform-box: view-box; transform-origin: 136px 118px;
+  animation: rdr-in .72s cubic-bezier(.18,1.3,.4,1) both;
+  transition: fill-opacity .2s ease, filter .2s ease;
+}
+.rdr-outline {
+  fill: none; stroke: var(--text); stroke-opacity: .28;
+  stroke-width: 1.6; stroke-linejoin: round;
+  transform-box: view-box; transform-origin: 136px 118px;
+  animation: rdr-in .72s cubic-bezier(.18,1.3,.4,1) both;
+  pointer-events: none;
+}
+.rdr-dot {
+  cursor: pointer;
+  transform-box: view-box; transform-origin: center;
+  animation: rdr-pop .5s cubic-bezier(.2,1.6,.4,1) both;
+  transition: r .2s ease;
+}
+/* The strongest axis keeps a slow pulse — the one thing on the sheet that says
+   "this is what you are" without a number. */
+.rdr-dot.is-top { filter: drop-shadow(0 0 5px var(--ac)); }
+.rdr-dot.is-top::after { content: none; }
+@keyframes rdr-in  { from { transform: scale(.05); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes rdr-pop { from { transform: scale(0);   opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Pointing at either half lights the other. */
+.rdr-wedge.is-lit { fill-opacity: .5; filter: drop-shadow(0 0 8px var(--ac)); }
+.rdr-wedge.is-dim { fill-opacity: .07; }
+.rdr-dot.is-lit { r: 6; filter: drop-shadow(0 0 8px var(--ac)); }
+.rdr-dot.is-dim { opacity: .35; }
+.radar-label.is-lit { font-size: var(--t-xs); }
+.radar-label.is-dim { opacity: .35; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rdr-wedge, .rdr-outline, .rdr-dot { animation: none; }
 }
 /* Stat-sheet legend: richer per-attribute rows that fill the panel height. */
 .attr-legend { display: flex; flex-direction: column; gap: 10px; flex: 1; justify-content: space-between; }
@@ -2187,9 +2234,25 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 .char-room { padding: var(--s-5); }
 .char-tabs { margin-top: 0; margin-bottom: var(--s-4); }
 .char-pane { display: none; }
-.char-pane.active { display: flex; flex-direction: column; gap: var(--s-5); }
+.char-pane.active { display: flex; flex-direction: column; gap: 0; }
 .char-pane > .hero { margin: 0; }
 .char-pane > .room-body { padding: 0; border: none; background: none; box-shadow: none; }
+/* One sheet, not three cards in a stack. The hero, the ladder and the five
+   attributes are three readings of one person, and giving each of them its own
+   border and its own background is what made Character look like the old
+   screens parked next to each other. They share a surface and are separated by
+   a rule instead. */
+.char-pane .hero,
+.char-pane .rank-ladder,
+.char-pane .attr-sheet {
+  border: none; border-radius: 0; background: none; box-shadow: none;
+  padding-left: 0; padding-right: 0;
+}
+.char-pane .rank-ladder,
+.char-pane .attr-sheet { padding-top: var(--s-5); margin-top: var(--s-5); border-top: 1px solid var(--line); }
+.char-pane .hero > .char-screen,
+.char-pane .hero > .char-panel { border: none; background: none; box-shadow: none; padding: 0; }
+.char-pane .hero { gap: var(--s-5); }
 
 /* ----- the ladder ----- */
 .rank-ladder {
@@ -2248,6 +2311,15 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
   min-width: 0;
 }
 .as-row.is-behind { background: color-mix(in srgb, var(--ac) 8%, rgba(0,0,0,0.22)); }
+/* Lit from the shape above, or from its own hover — the same state either way,
+   so the join between picture and table is never something you do in your head. */
+.as-row { transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.as-row.is-lit {
+  border-color: color-mix(in srgb, var(--ac) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ac) 30%, transparent), 0 6px 20px rgba(0,0,0,.35);
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) { .as-row.is-lit { transform: none; } }
 .as-row-head { display: flex; align-items: center; gap: var(--s-2); }
 .as-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); flex: 1 1 auto; min-width: 0; }
 .as-lvl { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-sm); color: var(--ac); flex: 0 0 auto; }
