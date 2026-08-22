@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=5" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=4" />
-  <link rel="stylesheet" href="css/05-screens.css?v=40" />
+  <link rel="stylesheet" href="css/05-screens.css?v=42" />
   <link rel="stylesheet" href="css/06-mobile.css?v=8" />
 </head>
 <body>
@@ -275,10 +275,22 @@
          calendar, the trends, the season and the year keep every id they had
          and their renderers do not know they stopped being dialogs. -->
     <section class="section month-room glass" id="monthRoom">
+      <!-- One time cursor for the whole room. The calendar, the goals and the
+           year each used to carry their own, which is exactly why four views of
+           the same history read as four pages that happened to share a door. -->
+      <div class="month-head" id="monthHead">
+        <div class="mh-nav">
+          <button class="cal-nav-btn" id="recPrev" type="button" aria-label="Previous"><svg viewBox="0 0 24 24" class="ic"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <span class="mh-title" id="recTitle">—</span>
+          <button class="cal-nav-btn" id="recNext" type="button" aria-label="Next"><svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
+          <button class="cal-today-btn" id="recNow" type="button">Now</button>
+        </div>
+        <div class="mh-stats" id="recStats"></div>
+      </div>
       <div class="settings-tabs month-tabs" role="tablist" aria-label="The record">
         <button class="settings-tab active" data-month-tab="calendar" role="tab" aria-selected="true" aria-controls="monthPaneCalendar" type="button">Calendar</button>
         <button class="settings-tab" data-month-tab="trends" role="tab" aria-selected="false" aria-controls="monthPaneTrends" type="button">Trends</button>
-        <button class="settings-tab" data-month-tab="season" role="tab" aria-selected="false" aria-controls="monthPaneSeason" type="button">Season</button>
+        <button class="settings-tab" data-month-tab="season" role="tab" aria-selected="false" aria-controls="monthPaneSeason" type="button">Goals</button>
         <button class="settings-tab" data-month-tab="year" role="tab" aria-selected="false" aria-controls="monthPaneYear" type="button">Year</button>
       </div>
       <div class="month-pane active" id="monthPaneCalendar" role="tabpanel" aria-labelledby="monthTabCalendar"></div>
@@ -779,7 +791,7 @@
   <script src="fx-stage.js?v=2"></script>
   <script src="forge-stage.js?v=10"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=112"></script>
+  <script src="app.js?v=115"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

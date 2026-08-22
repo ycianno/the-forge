@@ -2289,7 +2289,65 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
  * same app would be one too many.
  * ======================================================================== */
 .month-room { padding: var(--s-5); }
+/* The room's header: one month, one set of arrows, and the numbers that
+   describe it — on screen whichever pane you are reading. Four panes each
+   carrying their own heading and their own nav is exactly what made the record
+   feel like four pages that happened to share a door. */
+.month-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-4) var(--s-5); flex-wrap: wrap;
+  padding-bottom: var(--s-4); margin-bottom: var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.mh-nav { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.mh-title {
+  font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-xl, 22px);
+  letter-spacing: -.02em; min-width: 190px;
+}
+.mh-stats { display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-5); flex: 1 1 auto; justify-content: flex-end; }
+.mh-stat { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.mh-v { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); }
+.mh-k { font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); white-space: nowrap; }
+.cal-today-btn:disabled, .cal-nav-btn:disabled { opacity: .3; cursor: default; }
+
+@media (max-width: 768px) {
+  .month-head { gap: var(--s-3); padding-bottom: var(--s-3); margin-bottom: var(--s-3); }
+  .mh-nav { flex: 1 1 100%; }
+  .mh-title { flex: 1 1 auto; min-width: 0; font-size: var(--t-lg); }
+  .mh-stats { justify-content: flex-start; gap: var(--s-2) var(--s-4); }
+  .mh-v { font-size: var(--t-md); }
+}
+
 .month-tabs { margin-top: 0; margin-bottom: var(--s-4); }
+
+/* Twelve months on the same ramp as the month grid, the week pulse and the year
+   map. Year used to be a dead end — six numbers and two bar charts you could
+   only look at. Each cell is now a door back into the calendar for that month,
+   which is the difference between a report and a room. */
+.year-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+.ym-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: var(--s-3) 2px; min-width: 0;
+  border-radius: var(--r-sm); border: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.03); color: var(--text); cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.ym-cell:hover:not(.future) { transform: translateY(-2px); border-color: var(--accent-primary); box-shadow: none; }
+.ym-cell.future { opacity: .35; cursor: default; }
+.ym-cell.d0 { background: var(--heat-0); }
+.ym-cell.d1 { background: var(--heat-1); }
+.ym-cell.d2 { background: var(--heat-2); }
+.ym-cell.d3 { background: var(--heat-3); }
+.ym-cell.d4 { background: var(--heat-4); box-shadow: 0 0 14px var(--heat-glow); }
+.ym-cell.none { background: rgba(255,255,255,.03); }
+.ym-m { font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-2); }
+.ym-v { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-sm); line-height: 1.1; }
+.ym-cell.d3 .ym-m, .ym-cell.d4 .ym-m { color: rgba(26,16,5,.72); }
+.ym-cell.d3 .ym-v, .ym-cell.d4 .ym-v { color: #1a1005; }
+
+@media (max-width: 768px) {
+  .year-months { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
 .month-pane { display: none; }
 .month-pane.active { display: flex; flex-direction: column; gap: var(--s-5); }
 /* The pane bodies arrived as modal bodies; the pane is already the surface. */

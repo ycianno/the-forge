@@ -1986,11 +1986,102 @@ function initCharTabs() {
 // same as opening a report you did not ask for.
 let monthTab = "calendar";
 const MONTH_PANE_PAINT = {
-  calendar: () => { if (!calViewDate) calViewDate = new Date(); renderCalendarMonth(); renderHeatmap(); },
+  calendar: () => { renderCalendarMonth(); renderHeatmap(); },
   trends:   () => renderTrends(),
   season:   () => renderSeason(),
   year:     () => renderYear(),
 };
+
+// What a month actually contained, from the same per-day source the grid and
+// the year map read. Kept separate from the grid renderer so the header can say
+// it while you are reading a different pane.
+function monthDayStats(monthStart) {
+  const year = monthStart.getFullYear(), month = monthStart.getMonth();
+  const days = new Date(year, month + 1, 0).getDate();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let active = 0, sumPct = 0, rated = 0, done = 0, run = 0, bestRun = 0, best = null;
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(year, month, d);
+    if (date > today) break;
+    const info = dayPctInfo(date);
+    if (!info) { run = 0; continue; }
+    if (info.done > 0) { active++; done += info.done; run++; if (run > bestRun) bestRun = run; }
+    else run = 0;
+    if (info.total > 0) {
+      sumPct += info.pct; rated++;
+      if (!best || info.pct > best.pct) best = { pct: info.pct, day: d };
+    }
+  }
+  return { active, avg: rated ? Math.round(sumPct / rated) : 0, done, bestRun, best, rated };
+}
+
+// The room's header. The month, the numbers that describe it, and one set of
+// arrows that move every pane at once — that last part is most of what makes
+// four panes read as one room rather than four pages sharing a door.
+function renderMonthHead() {
+  const m = recordMonth();
+  const onYear = monthTab === "year";
+  const title = document.getElementById("recTitle");
+  const now = new Date();
+  const isNow = onYear
+    ? m.getFullYear() === now.getFullYear()
+    : (m.getFullYear() === now.getFullYear() && m.getMonth() === now.getMonth());
+  if (title) {
+    title.textContent = onYear
+      ? `${m.getFullYear()}${isNow ? " · in progress" : ""}`
+      : m.toLocaleDateString(undefined, { month: "long", year: "numeric" }) + (isNow ? " · live" : "");
+  }
+  const next = document.getElementById("recNext");
+  if (next) next.disabled = isNow || m > now;
+  const nowBtn = document.getElementById("recNow");
+  if (nowBtn) { nowBtn.disabled = isNow; nowBtn.textContent = onYear ? "This year" : "This month"; }
+  const prev = document.getElementById("recPrev");
+  if (prev) prev.setAttribute("aria-label", onYear ? "Previous year" : "Previous month");
+
+  const wrap = document.getElementById("recStats");
+  if (!wrap) return;
+  const stat = (v, k, color) => `<div class="mh-stat"><span class="mh-v"${color ? ` style="color:${color}"` : ""}>${v}</span><span class="mh-k">${escapeHtml(k)}</span></div>`;
+  if (onYear) {
+    const y = (window.Game && Game.yearSummary) ? Game.yearSummary(m.getFullYear()) : null;
+    if (!y) { wrap.innerHTML = ""; return; }
+    const topName = y.topAttr ? attrName(y.topAttr) : "—";
+    wrap.innerHTML =
+      stat(y.xp.toLocaleString(), "XP earned") +
+      stat(escapeHtml(topName), "Top attribute", y.topAttr ? attrColor(y.topAttr) : null) +
+      stat(y.bestMonthIndex >= 0 ? MONTHS_SHORT[y.bestMonthIndex] : "—", "Best month") +
+      stat(y.monthsActive, "Active months") +
+      stat(y.trophies, "Trophies") +
+      stat(y.insignias, "Insignias");
+    return;
+  }
+  const s = (window.Game && Game.seasonSummary) ? Game.seasonSummary(m) : null;
+  const d = monthDayStats(m);
+  const topName = s && s.topAttr ? attrName(s.topAttr) : "—";
+  wrap.innerHTML =
+    stat(s ? s.xp.toLocaleString() : "0", "XP earned") +
+    stat(escapeHtml(topName), "Top attribute", s && s.topAttr ? attrColor(s.topAttr) : null) +
+    stat(d.active, "Active days") +
+    stat(d.avg + "%", "Avg completion") +
+    stat(d.bestRun, d.bestRun === 1 ? "Day run" : "Best run") +
+    stat(d.done, "Quests done");
+}
+
+// Arrows move the whole room. On the Year pane a step is a year, because that
+// is the unit the pane is measured in.
+function shiftRecord(delta) {
+  const m = recordMonth();
+  calViewDate = monthTab === "year"
+    ? new Date(m.getFullYear() + delta, m.getMonth(), 1)
+    : new Date(m.getFullYear(), m.getMonth() + delta, 1);
+  const now = new Date();
+  if (calViewDate > now) calViewDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  paintRecord();
+}
+function paintRecord() {
+  renderMonthHead();
+  MONTH_PANE_PAINT[monthTab]();
+}
+
 function showMonthTab(name) {
   if (!MONTH_PANE_PAINT[name]) name = "calendar";
   monthTab = name;
@@ -2003,7 +2094,7 @@ function showMonthTab(name) {
     const pane = document.getElementById("monthPane" + k[0].toUpperCase() + k.slice(1));
     if (pane) pane.classList.toggle("active", k === name);
   });
-  MONTH_PANE_PAINT[name]();
+  paintRecord();
 }
 function initMonthTabs() {
   const bar = document.querySelector(".month-tabs");
@@ -2013,6 +2104,12 @@ function initMonthTabs() {
     const t = e.target.closest("[data-month-tab]");
     if (t) showMonthTab(t.dataset.monthTab);
   });
+  const prev = document.getElementById("recPrev");
+  if (prev) prev.onclick = () => shiftRecord(-1);
+  const next = document.getElementById("recNext");
+  if (next) next.onclick = () => shiftRecord(1);
+  const nowBtn = document.getElementById("recNow");
+  if (nowBtn) nowBtn.onclick = () => { calViewDate = new Date(); paintRecord(); };
 }
 function renderHeatmap() {
   const grid = document.getElementById("heatmapGrid");
@@ -2061,7 +2158,8 @@ function updateStreakAndHeatmap() {
   // The month grid reads the same data as the map above it. Painting only the
   // map left the calendar showing whatever the task model looked like on the
   // first route — a cell reading 0/3 beside a day detail reading 0 of 5.
-  if (calViewDate && document.getElementById("calGrid")) renderCalendarMonth();
+  if (currentView === "month") paintRecord();
+  else if (calViewDate && document.getElementById("calGrid")) renderCalendarMonth();
 
   let streak = 0;
   let currentWeekStart = getStartOfWeek(new Date());
@@ -3377,6 +3475,7 @@ function closeCalendar() {
   closeModal("calendarModal");
 }
 function calShiftMonth(delta) {
+  if (document.getElementById("recTitle")) return shiftRecord(delta);
   if (!calViewDate) calViewDate = new Date();
   calViewDate = new Date(calViewDate.getFullYear(), calViewDate.getMonth() + delta, 1);
   renderCalendarMonth();
@@ -3410,13 +3509,18 @@ function renderCalendarMonth() {
     cells += `<button class="cal-cell d${lvl}${none}${isToday ? " today" : ""}${isFuture ? " future" : ""}" data-date="${iso(date)}"${isFuture ? ' tabindex="-1"' : ""}><span class="cal-num">${d}</span>${meta}</button>`;
   }
   grid.innerHTML = cells;
-  const avg = ratedDays ? Math.round(sumPct / ratedDays) : 0;
   markSelectedDay();
+  // The month's totals belong to the room header, which says them whichever
+  // pane you are reading. This still fills the old summary line when the
+  // calendar is a modal rather than a room (the pre-shell fallback path).
   const sum = document.getElementById("calSummary");
-  if (sum) sum.innerHTML =
-    `<span class="cs-item"><strong>${activeDays}</strong> active days</span>` +
-    `<span class="cs-item"><strong>${avg}%</strong> avg completion</span>` +
-    `<span class="cs-item"><strong>${questsDone}</strong> quests done</span>`;
+  if (sum) {
+    const avg = ratedDays ? Math.round(sumPct / ratedDays) : 0;
+    sum.innerHTML =
+      `<span class="cs-item"><strong>${activeDays}</strong> active days</span>` +
+      `<span class="cs-item"><strong>${avg}%</strong> avg completion</span>` +
+      `<span class="cs-item"><strong>${questsDone}</strong> quests done</span>`;
+  }
 }
 
 // Per-section "+N XP this week" chips, so XP is visibly earned from every tab.
@@ -3694,7 +3798,9 @@ function buildViewShell() {
   // renderTrends(), renderSeason() and renderYear() do not know they moved.
   move("month", document.getElementById("monthRoom"));
   const calPane = document.getElementById("monthPaneCalendar");
-  unwrapModalInto(calPane, "calendarModal", { first: true });
+  // Each pane arrives carrying its own month/year nav and its own summary line.
+  // The room header says both, for all four panes at once, so the copies go.
+  unwrapModalInto(calPane, "calendarModal", { first: true, remove: [".cal-nav", "#calSummary"] });
   // The heat map goes under the month grid: the same question at a different
   // resolution, which is why they never belonged in different rooms.
   if (calPane) calPane.appendChild(document.getElementById("activity"));
@@ -3712,8 +3818,8 @@ function buildViewShell() {
   unwrapModalInto(document.getElementById("monthPaneTrends"), "reportsModal", { remove: ["#closeReportBtn", "h3"] });
   // Season keeps Share recap and loses Close; "Year in Review" was a button
   // that opened another modal and is now simply the next tab along.
-  unwrapModalInto(document.getElementById("monthPaneSeason"), "seasonModal", { remove: ["#seasonCloseBtn", "#openYearBtn"] });
-  unwrapModalInto(document.getElementById("monthPaneYear"), "yearModal", { remove: ["#yearCloseBtn"] });
+  unwrapModalInto(document.getElementById("monthPaneSeason"), "seasonModal", { remove: ["#seasonCloseBtn", "#openYearBtn", ".season-nav"] });
+  unwrapModalInto(document.getElementById("monthPaneYear"), "yearModal", { remove: ["#yearCloseBtn", ".season-nav"] });
 
   // Focus stops being a window over Today and becomes a mode of it. The setup
   // and the running timer move into a panel that lives inside the room, so
@@ -4824,14 +4930,21 @@ function renderBestiary() {
 // A season = a calendar month. Goals are recurring definitions in
 // settings.seasonGoals, evaluated live against the viewed month's summary
 // (Game.seasonSummary). The recap canvas lives in extras.js (shareSeasonCard).
-let seasonOffset = 0; // months back from the current month (0 = this month)
+// The record has one cursor, and it is `calViewDate`. Season used to count
+// months back from now and Year years back from now, so moving one moved
+// nothing else and the room's three headings could disagree about which
+// August you were looking at.
 const SEASON_GOAL_TYPES = {
   xp:     { label: "Earn XP",            needsAttr: false, def: 2000 },
   weeks:  { label: "Active weeks",       needsAttr: false, def: 4 },
   attr:   { label: "Reach attribute Lv", needsAttr: true,  def: 5 },
   streak: { label: "Day streak",         needsAttr: false, def: 14 },
 };
-function seasonMonthStart() { const n = new Date(); return new Date(n.getFullYear(), n.getMonth() - seasonOffset, 1); }
+function recordMonth() {
+  if (!calViewDate) calViewDate = new Date();
+  return new Date(calViewDate.getFullYear(), calViewDate.getMonth(), 1);
+}
+function seasonMonthStart() { return recordMonth(); }
 function curSeasonSummary() { return (window.Game && Game.seasonSummary) ? Game.seasonSummary(seasonMonthStart()) : null; }
 function seasonGoalProgress(g, s, prof) {
   if (g.type === "weeks")  return { cur: s.weeksActive, target: g.target, label: `Stay active ${g.target} weeks` };
@@ -4842,8 +4955,6 @@ function seasonGoalProgress(g, s, prof) {
 function renderSeason() {
   const s = curSeasonSummary(); if (!s) return;
   const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
-  const lbl = document.getElementById("seasonLabel"); if (lbl) lbl.textContent = s.label + (s.isCurrent ? " · live" : "");
-  const next = document.getElementById("seasonNext"); if (next) next.disabled = seasonOffset <= 0;
   const body = document.getElementById("seasonBody"); if (!body) return;
   const topName = s.topAttr ? attrName(s.topAttr) : "—";
   const topColor = s.topAttr ? attrColor(s.topAttr) : "var(--muted)";
@@ -4855,7 +4966,9 @@ function renderSeason() {
     { v: s.trophies, k: "Trophies" },
     { v: s.insignias, k: "Insignias" },
   ];
-  const statsHtml = `<div class="season-stats">${stats.map(x => `<div class="season-stat"><span class="ss-v">${x.v}</span><span class="ss-k">${x.k}</span></div>`).join("")}</div>`;
+  // The month's headline numbers moved into the room header, where they are on
+  // screen whichever pane you are reading. Repeating them here made the Goals
+  // pane look like a second, slightly different summary of the same month.
   const goals = settings.seasonGoals || [];
   const goalsHtml = goals.map(g => {
     const p = seasonGoalProgress(g, s, prof);
@@ -4874,7 +4987,7 @@ function renderSeason() {
     <input id="sgTarget" type="number" min="1" value="2000" aria-label="Target">
     <button id="sgAdd" type="button" class="primary">Add</button>
   </div>`;
-  body.innerHTML = statsHtml + `<div class="season-goals-head">Season Goals</div><div class="season-goals">${goalsHtml}</div>` + addHtml;
+  body.innerHTML = `<div class="season-goals-head">Goals for ${escapeHtml(s.label)}</div><div class="season-goals">${goalsHtml}</div>` + addHtml;
   const typeSel = document.getElementById("sgType"), attrSel = document.getElementById("sgAttr"), tgtInp = document.getElementById("sgTarget");
   if (typeSel) {
     const sync = () => { if (attrSel) attrSel.style.display = SEASON_GOAL_TYPES[typeSel.value].needsAttr ? "" : "none"; };
@@ -4882,7 +4995,7 @@ function renderSeason() {
     sync();
   }
 }
-function openSeason() { seasonOffset = 0; if (openRecord("season")) return; renderSeason(); openModal("seasonModal"); }
+function openSeason() { calViewDate = new Date(); if (openRecord("season")) return; renderSeason(); openModal("seasonModal"); }
 function closeSeason() { if (document.getElementById("view-month")) { routeTo("today"); return; } closeModal("seasonModal"); }
 function addSeasonGoalFromForm() {
   const type = (document.getElementById("sgType") || {}).value || "xp";
@@ -4901,14 +5014,11 @@ function removeSeasonGoal(id) {
 
 // ===== YEAR IN REVIEW =====
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-let yearOffset = 0; // years back from current (0 = this year)
-function curYear() { return new Date().getFullYear() - yearOffset; }
+function curYear() { return recordMonth().getFullYear(); }
 function curYearSummary() { return (window.Game && Game.yearSummary) ? Game.yearSummary(curYear()) : null; }
 function renderYear() {
   const s = curYearSummary(); if (!s) return;
   const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
-  const lbl = document.getElementById("yearLabel"); if (lbl) lbl.textContent = s.year + (s.isCurrent ? " · in progress" : "");
-  const next = document.getElementById("yearNext"); if (next) next.disabled = yearOffset <= 0;
   const body = document.getElementById("yearBody"); if (!body) return;
   const topName = s.topAttr ? attrName(s.topAttr) : "—";
   const topColor = s.topAttr ? attrColor(s.topAttr) : "var(--muted)";
@@ -4921,7 +5031,23 @@ function renderYear() {
     { v: s.trophies, k: "Trophies" },
     { v: s.insignias, k: "Insignias" },
   ];
-  const statsHtml = `<div class="season-stats">${stats.map(x => `<div class="season-stat"><span class="ss-v">${x.v}</span><span class="ss-k">${x.k}</span></div>`).join("")}</div>`;
+  // The six numbers this block used to draw are the room header's now, said
+  // once instead of twice. What the year can show that the header cannot is
+  // twelve months side by side — and each of those is a door back into the
+  // calendar, which is what stops Year being a dead end.
+  const now = new Date();
+  const thisYear = s.year === now.getFullYear();
+  const strip = s.monthly.map((_, i) => {
+    const future = thisYear && i > now.getMonth();
+    const d = future ? null : monthDayStats(new Date(s.year, i, 1));
+    const lvl = d && d.rated ? hmLevel(d.avg) : 0;
+    const none = d && !d.rated;
+    return `<button class="ym-cell d${lvl}${none ? " none" : ""}${future ? " future" : ""}" type="button" data-month-jump="${i}" title="${MONTHS_SHORT[i]} ${s.year} — ${d && d.rated ? `${d.avg}% over ${d.active} active days` : "no record"}"${future ? ' tabindex="-1"' : ""}>
+      <span class="ym-m">${MONTHS_SHORT[i]}</span>
+      <span class="ym-v">${d && d.rated ? d.avg + "%" : future ? "·" : "—"}</span>
+    </button>`;
+  }).join("");
+  const statsHtml = `<div class="tr-block"><div class="tr-title">The year at a glance · click a month</div><div class="year-months" id="yearMonths">${strip}</div></div>`;
   const monthly = trBarBlock("XP by month", s.monthly.map((v, i) => ({ label: MONTHS_SHORT[i], value: v, raw: String(v) })), Math.max(1, ...s.monthly));
   const attrs = prof ? prof.attrs : [];
   const maxAttr = Math.max(1, ...attrs.map(a => s.byAttr[a.key] || 0));
@@ -4932,7 +5058,7 @@ function renderYear() {
   const attrBlock = attrs.length ? `<div class="tr-block"><div class="tr-title">XP by attribute</div><div class="ya-bars">${attrBars}</div></div>` : "";
   body.innerHTML = statsHtml + monthly + attrBlock;
 }
-function openYear() { yearOffset = 0; if (openRecord("year")) return; renderYear(); openModal("yearModal"); }
+function openYear() { calViewDate = new Date(); if (openRecord("year")) return; renderYear(); openModal("yearModal"); }
 function closeYear() { if (document.getElementById("view-month")) { routeTo("today"); return; } closeModal("yearModal"); }
 
 // ===== FOCUS TIMER =====
@@ -5347,7 +5473,7 @@ function bindEvents() {
   const calNext = document.getElementById("calNext");
   if (calNext) calNext.onclick = () => calShiftMonth(1);
   const calTodayBtn = document.getElementById("calToday");
-  if (calTodayBtn) calTodayBtn.onclick = () => { calViewDate = new Date(); renderCalendarMonth(); };
+  if (calTodayBtn) calTodayBtn.onclick = () => { calViewDate = new Date(); if (document.getElementById("recTitle")) paintRecord(); else renderCalendarMonth(); };
   // A day in the month grid opens its detail below the grid. Jumping to the
   // week is now the explicit second step it always should have been: clicking
   // a cell to *read* a day used to teleport you out of the room.
@@ -5469,9 +5595,9 @@ function bindEvents() {
   const seasonCloseBtn = document.getElementById("seasonCloseBtn");
   if (seasonCloseBtn) seasonCloseBtn.onclick = closeSeason;
   const seasonPrev = document.getElementById("seasonPrev");
-  if (seasonPrev) seasonPrev.onclick = () => { if (seasonOffset < 120) seasonOffset++; renderSeason(); };
+  if (seasonPrev) seasonPrev.onclick = () => shiftRecord(-1);
   const seasonNext = document.getElementById("seasonNext");
-  if (seasonNext) seasonNext.onclick = () => { if (seasonOffset > 0) seasonOffset--; renderSeason(); };
+  if (seasonNext) seasonNext.onclick = () => shiftRecord(1);
   const seasonShareBtn = document.getElementById("seasonShareBtn");
   if (seasonShareBtn) seasonShareBtn.onclick = () => { if (window.shareSeasonCard) window.shareSeasonCard(curSeasonSummary()); };
   // Adding and removing a season goal was delegated from the modal backdrop.
@@ -5496,13 +5622,19 @@ function bindEvents() {
   const yearCloseBtn = document.getElementById("yearCloseBtn");
   if (yearCloseBtn) yearCloseBtn.onclick = closeYear;
   const yearPrev = document.getElementById("yearPrev");
-  if (yearPrev) yearPrev.onclick = () => { if (yearOffset < 30) yearOffset++; renderYear(); };
+  if (yearPrev) yearPrev.onclick = () => shiftRecord(-1);
   const yearNext = document.getElementById("yearNext");
-  if (yearNext) yearNext.onclick = () => { if (yearOffset > 0) yearOffset--; renderYear(); };
+  if (yearNext) yearNext.onclick = () => shiftRecord(1);
   const yearShareBtn = document.getElementById("yearShareBtn");
   if (yearShareBtn) yearShareBtn.onclick = () => { if (window.shareYearCard) window.shareYearCard(curYearSummary()); };
-  const yearModal = document.getElementById("yearModal");
-  if (yearModal) yearModal.addEventListener("click", (e) => { if (e.target === yearModal) closeYear(); });
+  const yearHost = document.getElementById("monthPaneYear") || document.getElementById("yearModal");
+  if (yearHost) yearHost.addEventListener("click", (e) => {
+    if (e.target === yearHost && yearHost.id === "yearModal") return closeYear();
+    const cell = e.target.closest("[data-month-jump]");
+    if (!cell || cell.classList.contains("future")) return;
+    calViewDate = new Date(curYear(), Number(cell.dataset.monthJump), 1);
+    showMonthTab("calendar");
+  });
 
   const genReport = (weeksBack) => {
     let currentWeekStart = getStartOfWeek(new Date());
