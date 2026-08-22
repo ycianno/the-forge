@@ -14,10 +14,10 @@
        re-grouping: 01 tokens/themes, 02 base+topbar+hero, 03 components,
        04 the early responsive blocks, 05 the screens, 06 the mobile passes. -->
   <link rel="stylesheet" href="css/01-tokens.css?v=6" />
-  <link rel="stylesheet" href="css/02-base.css?v=5" />
+  <link rel="stylesheet" href="css/02-base.css?v=6" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=5" />
-  <link rel="stylesheet" href="css/05-screens.css?v=47" />
+  <link rel="stylesheet" href="css/05-screens.css?v=50" />
   <link rel="stylesheet" href="css/06-mobile.css?v=8" />
 </head>
 <body>
@@ -239,9 +239,11 @@
           <strong id="anvilDayName">Today</strong>
           <span id="anvilDayMeta">—</span>
         </div>
+        <span class="anvil-heat" id="anvilHeat" hidden></span>
         <div class="anvil-hud">
           <div class="ah-stat"><b id="anvilDone">0 / 0</b><span>Worked</span></div>
           <div class="ah-stat"><b id="anvilXp">+0</b><span>XP today</span></div>
+          <span class="anvil-clean" id="anvilClean" hidden></span>
           <div class="ah-track"><span id="anvilBar"></span></div>
         </div>
         <button class="anvil-collapse" id="anvilCollapse" type="button" aria-expanded="true" aria-controls="anvilStage" title="Hide the forge">
@@ -811,12 +813,12 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="modules.js?v=22"></script>
+  <script src="modules.js?v=23"></script>
   <script src="game.js?v=38"></script>
   <script src="fx-stage.js?v=2"></script>
-  <script src="forge-stage.js?v=11"></script>
+  <script src="forge-stage.js?v=18"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=119"></script>
+  <script src="app.js?v=121"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

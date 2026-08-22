@@ -72,4 +72,43 @@ const blows = day.reduce((n, q) => n + strikesForQuest(q), 0);
 assert.ok(blows <= day.length * 2,
   `a six-task day costs ${blows} blows; more than two per task is a tax`);
 
-console.log(`Anvil weight: OK — a six-task day costs ${blows} blows across ${day.length} tasks`);
+// ----- urgency: the clock spends the ceremony down, never up ---------------
+// A task fifteen minutes from its hour is not something you plan, it is
+// something you do. Asking for four deliberate strikes at that point is the
+// app arguing with the user, so urgency reduces the cost — and being early
+// must never cost *more*, or the mechanic becomes a penalty for planning.
+const { urgencyOf, strikesWithUrgency } = Forge;
+const NOON = 12 * 60;
+
+assert.equal(urgencyOf(null, NOON), "cold", "no due time is never urgent");
+assert.equal(urgencyOf(undefined, NOON), "cold");
+assert.equal(urgencyOf("nonsense", NOON), "cold");
+assert.equal(urgencyOf(NOON + 240, NOON), "cold", "four hours out is cold");
+assert.equal(urgencyOf(NOON + 60, NOON), "warm", "the hour boundary is warm");
+assert.equal(urgencyOf(NOON + 16, NOON), "warm");
+assert.equal(urgencyOf(NOON + 15, NOON), "hot", "fifteen minutes is hot");
+assert.equal(urgencyOf(NOON, NOON), "hot", "due right now is hot");
+assert.equal(urgencyOf(NOON - 1, NOON), "late");
+
+assert.equal(strikesWithUrgency(4, "cold"), 4, "cold leaves the cost alone");
+assert.equal(strikesWithUrgency(4, "warm"), 3, "warm spends one");
+assert.equal(strikesWithUrgency(4, "hot"), 1, "hot is a single blow");
+assert.equal(strikesWithUrgency(4, "late"), 1, "late is a single blow");
+assert.equal(strikesWithUrgency(1, "warm"), 1, "never below one");
+assert.equal(strikesWithUrgency(1, "cold"), 1);
+
+// The floor and the ceiling hold under every urgency, and urgency never
+// increases the cost of anything.
+["cold", "warm", "hot", "late", "nonsense", undefined].forEach((u) => {
+  for (let base = 1; base <= 4; base++) {
+    const n = strikesWithUrgency(base, u);
+    assert.ok(n >= 1 && n <= 4, `strikesWithUrgency(${base}, ${u}) = ${n} out of range`);
+    assert.ok(n <= base, `urgency "${u}" made a ${base}-blow task cost ${n} — it must never cost more`);
+  }
+});
+// Garbage in the base is clamped rather than trusted.
+assert.equal(strikesWithUrgency(99, "cold"), 4);
+assert.equal(strikesWithUrgency(0, "cold"), 1);
+assert.equal(strikesWithUrgency(NaN, "cold"), 1);
+
+console.log(`Anvil weight: OK — a six-task day costs ${blows} blows across ${day.length} tasks, and urgency only ever spends that down`);

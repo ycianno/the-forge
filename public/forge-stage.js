@@ -41,6 +41,20 @@
     if (m <= 0) return 1;
     return Math.max(1, Math.min(4, 1 + Math.floor(m / 25)));
   }
+  // How urgent a piece is right now. `stage.now` is null for any day that is
+  // not today, so browsing back through history never lights the rack red.
+  function urgencyOf(due) {
+    if (stage.now == null || !window.Forge || !window.Forge.urgencyOf) return "cold";
+    return window.Forge.urgencyOf(due, stage.now);
+  }
+  // What it costs, once the clock is taken into account. Metal already at
+  // temperature takes fewer blows — a task fifteen minutes from its hour is
+  // something you do, not something you plan.
+  function costOf(t) {
+    var base = strikesFor(t.minutes);
+    if (!window.Forge || !window.Forge.strikesWithUrgency) return base;
+    return window.Forge.strikesWithUrgency(base, urgencyOf(t.due));
+  }
   // Heavier pieces take longer to come up to temperature — the wait is part of
   // the weight, not a fixed toll on every task.
   function heatRateFor(need) { return 2.2 - (need - 1) * 0.32; }
@@ -50,7 +64,12 @@
     W: 0, H: 0, dpr: 1, running: false, raf: 0,
     pieces: [], sparks: [], nums: [],
     shake: 0, freeze: 0, fireGlow: 0.55, lastT: 0,
-    streak: 0,
+    streak: 0, now: null,
+    embers: [], steam: [], rings: [],
+    hammer: 0,          // 0 rest → 1 mid-swing; drives the whole strike anim
+    hovering: null, waiting: 0, shelfExtra: 0,
+    cleanRun: 0, lastStrikeAt: 0, combo: 0,
+    QUENCH: { x: 0, y: 0 },
     FIRE: { x: 0, y: 0, r: 74 },
     ANVIL: { x: 0, y: 0 },
     SHELF: { x: 0, y: 0 },
@@ -74,12 +93,18 @@
     // percentage offsets put the rack's caption below the frame the moment the
     // stage got shorter — a caption you cannot read is a caption that is not
     // there. The rack reserves exactly what its line and label need.
-    stage.RACK_Y = H - 66;
+    // A rack piece now carries a label and a cost caption under it, and the
+    // rack line and its own caption go under those. Reserve all four.
+    stage.RACK_Y = H - 80;
     var floorY = stage.RACK_Y - 34;             // everything else lives above it
     stage.ANVIL.x = narrow ? W * 0.66 : W * 0.48;
     stage.ANVIL.y = Math.max(70 * stage.SCALE, floorY * 0.70);
     stage.FIRE.x = narrow ? W * 0.21 : W * 0.17;
     stage.FIRE.y = stage.ANVIL.y - 4;
+    // The trough sits between the anvil and the shelf, because that is the
+    // order the work happens in: heat, strike, quench, rack it.
+    stage.QUENCH.x = narrow ? W * 0.88 : W * 0.75;
+    stage.QUENCH.y = stage.ANVIL.y + 26 * stage.SCALE;
     stage.SHELF.x = narrow ? W * 0.72 : W * 0.82;
     // The shelf's own label is drawn 38px above it, so it cannot start higher
     // than that or "FINISHED" is cropped by the top of the frame.
@@ -107,15 +132,25 @@
     var pw = Math.max(50, Math.min(112, step - 26));
     stage.pieces.forEach(function (p) { p.w = pw; });
 
-    var rows = Math.ceil(rack.length / perRow) || 1;
-    rack.forEach(function (p, i) {
-      var row = Math.floor(i / perRow), col = i % perRow;
-      var inRow = Math.min(perRow, rack.length - row * perRow);
-      var span = (inRow - 1) * step;
-      p.tx = stage.W / 2 - span / 2 + col * step;
-      // Rows stack upward from the rack line, so a second row never covers the
-      // line that names what the rack is.
-      p.ty = stage.RACK_Y - (rows - 1 - row) * 46;
+    // The rack holds what fits in one row and no more. Wrapping a long day into
+    // three rows grew the rack up through the anvil, the trough and the fire —
+    // and a shop you cannot see is not a place. The rest of the day queues off
+    // the right edge and slides in as pieces leave, which is both honest about
+    // the order of the work and a better thing to watch than a wall of billets.
+    // The whole day is still right there in the list underneath.
+    var shown = rack.slice(0, perRow);
+    var queued = rack.slice(perRow);
+    stage.waiting = queued.length;
+    var span = (shown.length - 1) * step;
+    shown.forEach(function (p, i) {
+      p.offRack = false;
+      p.tx = stage.W / 2 - span / 2 + i * step;
+      p.ty = stage.RACK_Y;
+      if (snap || (p.x === 0 && p.y === 0)) { p.x = p.tx; p.y = p.ty; }
+    });
+    queued.forEach(function (p) {
+      p.offRack = true;
+      p.tx = stage.W + step; p.ty = stage.RACK_Y;
       if (snap || (p.x === 0 && p.y === 0)) { p.x = p.tx; p.y = p.ty; }
     });
     // A cleared day is a full shelf, and on a short stage a fixed 30px step
@@ -124,13 +159,26 @@
     var shelved = stage.pieces.filter(function (p) {
       return p.state === "shelf" || p.state === "toShelf";
     });
+    // The shelf shows the most recent few and counts the rest. Stacking a whole
+    // cleared day down the right-hand side walked the finished pieces into the
+    // anvil and their labels across the fire.
     var room = Math.max(30, stage.ANVIL.y - 52 - stage.SHELF.y);
-    var shelfStep = shelved.length > 1
-      ? Math.max(13, Math.min(30, room / (shelved.length - 1)))
+    var shelfMax = Math.max(2, Math.min(5, Math.floor(room / 22)));
+    stage.shelfExtra = Math.max(0, shelved.length - shelfMax);
+    var head = shelved.slice(-shelfMax);            // newest at the bottom
+    var shelfStep = head.length > 1
+      ? Math.max(15, Math.min(30, room / (head.length - 1)))
       : 30;
-    shelved.forEach(function (p, i) {
+    shelved.forEach(function (p) { p.onShelf = false; });
+    head.forEach(function (p, i) {
+      p.onShelf = true;
       p.shelfSlot = i;
       p.tx = stage.SHELF.x; p.ty = stage.SHELF.y + i * shelfStep;
+      if (snap) { p.x = p.tx; p.y = p.ty; }
+    });
+    // The ones that scrolled off the top of the shelf are parked above it.
+    shelved.slice(0, Math.max(0, shelved.length - shelfMax)).forEach(function (p) {
+      p.tx = stage.SHELF.x; p.ty = stage.SHELF.y - 40;
       if (snap) { p.x = p.tx; p.y = p.ty; }
     });
   }
@@ -151,17 +199,22 @@
 
     tasks.forEach(function (t) {
       var p = have[t.id];
-      var need = strikesFor(t.minutes);
+      var need = costOf(t);
       if (!p) {
         p = {
-          id: t.id, label: t.title, xp: t.xp, need: need, hit: t.done ? need : 0,
+          id: t.id, label: t.title, xp: t.xp, due: t.due, need: need, hit: t.done ? need : 0,
           state: t.done ? "shelf" : "rack", heat: 0,
           x: 0, y: 0, tx: 0, ty: 0, w: 96, h: 15, wob: 0, shelfSlot: -1,
+          urg: urgencyOf(t.due), bob: Math.random() * 6.28, clean: 0, quench: 0,
         };
         stage.pieces.push(p);
         return;
       }
-      p.label = t.title; p.xp = t.xp; p.need = need;
+      p.label = t.title; p.xp = t.xp; p.due = t.due;
+      p.urg = urgencyOf(t.due);
+      // The clock keeps moving while the page is open, so a piece's cost is
+      // re-read every pass — but never below what you have already put into it.
+      p.need = Math.max(need, p.hit ? p.hit : 0, 1);
       // Ticked from the list while a piece was mid-loop, or un-ticked after it
       // reached the shelf: both have to be honoured without an animation that
       // pretends you did it here.
@@ -190,7 +243,8 @@
   }
   function pieceAt(m) {
     for (var i = stage.pieces.length - 1; i >= 0; i--) {
-      if (stage.pieces[i].state === "rack" && hitPiece(stage.pieces[i], m)) return stage.pieces[i];
+      var p = stage.pieces[i];
+      if (p.state === "rack" && !p.offRack && hitPiece(p, m)) return p;
     }
     return null;
   }
@@ -210,7 +264,10 @@
   function onMove(e) {
     var m = pt(e);
     var a = onAnvil();
-    stage.cv.style.cursor = pieceAt(m) ? "grab" : (a && nearAnvil(m)) ? "pointer" : "default";
+    // Held on the stage so drawPiece can say what a piece will cost while the
+    // cursor is over it, rather than making you commit to find out.
+    stage.hovering = pieceAt(m);
+    stage.cv.style.cursor = stage.hovering ? "grab" : (a && nearAnvil(m)) ? "pointer" : "default";
   }
   function onPress(e) {
     // A touchstart that arrives mid-scroll is not cancelable, and calling
@@ -239,7 +296,7 @@
     var a = onAnvil();
     if (a) { e.preventDefault(); strike(a); return; }
     if (inFire()) return;
-    var next = stage.pieces.find(function (p) { return p.state === "rack"; });
+    var next = stage.pieces.find(function (p) { return p.state === "rack" && !p.offRack; });
     if (!next) return;
     e.preventDefault();
     next.state = "toFire";
@@ -259,9 +316,10 @@
     if (actx.state === "suspended") actx.resume();
     return actx;
   }
-  function strikeSound(power) {
+  function strikeSound(power, clean) {
     var c = ac(); if (!c) return;
     var t = c.currentTime;
+    var gain = clean ? 1 : 0.6;
     // Noise transient through a bandpass — this is what makes it read as metal.
     var len = Math.floor(c.sampleRate * 0.05);
     var buf = c.createBuffer(1, len, c.sampleRate);
@@ -270,7 +328,7 @@
     var src = c.createBufferSource(); src.buffer = buf;
     var bp = c.createBiquadFilter(); bp.type = "bandpass";
     bp.frequency.value = 2600 + power * 900; bp.Q.value = 1.1;
-    var ng = c.createGain(); ng.gain.setValueAtTime(0.16, t);
+    var ng = c.createGain(); ng.gain.setValueAtTime(0.16 * gain, t);
     ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
     src.connect(bp).connect(ng).connect(c.destination); src.start(t);
     // Inharmonic partials — a struck bar, not a tuned string.
@@ -278,10 +336,29 @@
       var o = c.createOscillator(), g = c.createGain();
       o.type = "sine"; o.frequency.value = (170 + power * 40) * r;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.07 / (k + 1), t + 0.004);
+      g.gain.linearRampToValueAtTime(0.07 * gain / (k + 1), t + 0.004);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28 / (k + 1));
       o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.4);
     });
+  }
+  // Water on hot steel: filtered noise with a falling edge.
+  function hiss() {
+    var c = ac(); if (!c) return;
+    var t = c.currentTime;
+    var len = Math.floor(c.sampleRate * 0.55);
+    var buf = c.createBuffer(1, len, c.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.6);
+    var src = c.createBufferSource(); src.buffer = buf;
+    var bp = c.createBiquadFilter(); bp.type = "bandpass";
+    bp.frequency.setValueAtTime(5200, t);
+    bp.frequency.exponentialRampToValueAtTime(1400, t + 0.5);
+    bp.Q.value = 0.7;
+    var g = c.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.1, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    src.connect(bp).connect(g).connect(c.destination); src.start(t);
   }
   function thunk() {
     var c = ac(); if (!c) return;
@@ -294,28 +371,60 @@
   }
 
   // ----- the strike --------------------------------------------------------
+  // A strike you can see. The hammer is the whole difference between "a counter
+  // went down" and "that hurt": it swings, it lands, the anvil rings, and the
+  // metal it lands on is either at temperature or it is not.
   function strike(p) {
     if (p.state !== "anvil") return;
+    var now = performance.now();
+    // Hot metal moves. Striking while the piece is still bright is a clean
+    // blow; letting it go dull still works — this is a flourish, never a
+    // failure, because a mechanic that can waste your tap is a mechanic that
+    // makes you afraid of the screen.
+    var clean = p.heat > 0.55;
     p.hit++;
+    if (clean) { p.clean++; stage.cleanRun++; } else { stage.cleanRun = 0; }
+    // Struck again inside a second and a half: the rhythm of actual smithing.
+    stage.combo = (now - stage.lastStrikeAt < 1500) ? stage.combo + 1 : 1;
+    stage.lastStrikeAt = now;
+
     var last = p.hit >= p.need;
-    strikeSound(p.hit / p.need);
-    if (navigator.vibrate) { try { navigator.vibrate(last ? [0, 30, 40, 20] : 14); } catch (e) {} }
+    strikeSound(p.hit / p.need, clean);
+    if (navigator.vibrate) { try { navigator.vibrate(last ? [0, 30, 40, 20] : (clean ? 18 : 10)); } catch (e) {} }
+    stage.hammer = 1;
     if (!reduceMotion) {
-      stage.freeze = performance.now() + (last ? 90 : 55);
-      stage.shake = last ? 11 : 6;
+      stage.freeze = now + (last ? 90 : 55);
+      stage.shake = (last ? 11 : 6) * (clean ? 1.25 : 0.75);
       p.wob = 1;
-      burst(stage.ANVIL.x, stage.ANVIL.y - 44 * stage.SCALE, last ? 30 : 18, last ? 1.7 : 1.2);
+      var hx = stage.ANVIL.x, hy = stage.ANVIL.y - 44 * stage.SCALE;
+      burst(hx, hy, (last ? 30 : 18) * (clean ? 1.6 : 0.7), last ? 1.7 : 1.2);
+      stage.rings.push({ x: hx, y: hy, r: 8, life: 0.42, life0: 0.42, w: clean ? 3 : 1.6 });
+      if (clean && stage.combo >= 3) {
+        nums(hx, hy - 26, stage.combo + "× RHYTHM", HEAT[5], 13);
+      }
     }
-    p.heat = Math.max(0.25, p.heat - 0.16);   // each blow costs heat
+    p.heat = Math.max(0.25, p.heat - (clean ? 0.14 : 0.2));   // each blow costs heat
+    // Tell the host about every blow, not just the last one. A run of clean
+    // strikes is the only skill in this room and it was invisible.
+    if (stage.api && stage.api.onStrike) {
+      stage.api.onStrike({ clean: clean, combo: stage.combo, cleanRun: stage.cleanRun, last: last });
+    }
     if (!last) return;
 
-    p.state = "toShelf";
-    p.tx = stage.SHELF.x; p.ty = stage.SHELF.y;
+    // Finished metal is quenched before it is racked. It is one second of
+    // hiss and steam, and it is the beat that makes finishing feel like an
+    // event rather than a row disappearing.
+    p.state = "toQuench";
+    p.quench = 0;
+    p.tx = stage.QUENCH.x; p.ty = stage.QUENCH.y;
     layoutRack();
     // The host owns what "done" means. It drives the same checkbox the list
     // drives, so the XP pop, the combo, the undo and the save are the ones that
     // already existed rather than a second implementation of all four.
     if (stage.api && stage.api.complete) stage.api.complete(p.id);
+  }
+  function nums(x, y, text, color, size) {
+    stage.nums.push({ x: x, y: y, vy: -150, life: 1, life0: 1, text: text, size: size || 22, color: color });
   }
 
   function burst(x, y, n, energy) {
@@ -350,9 +459,65 @@
       }
       if (p.state === "toAnvil" && Math.abs(p.x - p.tx) < 4) { p.state = "anvil"; thunk(); }
       if (p.state === "anvil") p.heat = Math.max(0.18, p.heat - dt * 0.055);
+      // The quench: a second in the trough, hissing, then onto the shelf.
+      if (p.state === "toQuench" && Math.abs(p.x - p.tx) < 5 && Math.abs(p.y - p.ty) < 5) {
+        p.state = "quench";
+        hiss();
+      }
+      if (p.state === "quench") {
+        p.quench += dt;
+        p.heat = Math.max(0, p.heat - dt * 1.6);
+        if (Math.random() < dt * 26 && !reduceMotion) {
+          stage.steam.push({
+            x: p.x + (Math.random() - 0.5) * 46, y: p.y - 4,
+            vx: (Math.random() - 0.5) * 14, vy: -18 - Math.random() * 22,
+            life: 0.7 + Math.random() * 0.6, life0: 1.3, r: 5 + Math.random() * 9,
+          });
+        }
+        if (p.quench > 0.85) {
+          p.state = "toShelf";
+          layoutRack();
+        }
+      }
       if (p.state === "toShelf" && Math.abs(p.y - p.ty) < 3) p.state = "shelf";
       if (p.state === "shelf") p.heat = Math.max(0, p.heat - dt * 0.22);
+      // A piece whose hour is on it does not sit still on the rack.
+      if (p.state === "rack") {
+        p.bob += dt * (p.urg === "late" ? 4.2 : p.urg === "hot" ? 3 : 1.5);
+        // Urgency is visible as warmth even before it reaches the fire — the
+        // rack tells you what the day is about to ask for.
+        var want = p.urg === "late" ? 0.42 : p.urg === "hot" ? 0.3 : p.urg === "warm" ? 0.16 : 0;
+        p.heat += (want - p.heat) * Math.min(1, dt * 2);
+      }
     });
+
+    // Ambient embers off the fire. The shop is never completely still.
+    if (!reduceMotion && Math.random() < dt * (4 + stage.streak * 0.15)) {
+      stage.embers.push({
+        x: stage.FIRE.x + (Math.random() - 0.5) * stage.FIRE.r * 1.5,
+        y: stage.FIRE.y + 6,
+        vx: (Math.random() - 0.5) * 18, vy: -26 - Math.random() * 34,
+        life: 1.1 + Math.random() * 1.4, life0: 2.5, size: 1 + Math.random() * 1.8,
+      });
+    }
+    for (var e = stage.embers.length - 1; e >= 0; e--) {
+      var em = stage.embers[e];
+      em.vx += Math.sin(now / 500 + em.y * 0.05) * 8 * dt;
+      em.x += em.vx * dt; em.y += em.vy * dt; em.life -= dt;
+      if (em.life <= 0 || em.y < -10) stage.embers.splice(e, 1);
+    }
+    for (var st = stage.steam.length - 1; st >= 0; st--) {
+      var sm = stage.steam[st];
+      sm.x += sm.vx * dt; sm.y += sm.vy * dt; sm.r += dt * 26; sm.life -= dt;
+      if (sm.life <= 0) stage.steam.splice(st, 1);
+    }
+    for (var rg = stage.rings.length - 1; rg >= 0; rg--) {
+      var rr = stage.rings[rg];
+      rr.r += dt * 260; rr.life -= dt;
+      if (rr.life <= 0) stage.rings.splice(rg, 1);
+    }
+    // The hammer falls fast and returns slowly, which is what a hammer does.
+    stage.hammer = Math.max(0, stage.hammer - dt * 3.4);
 
     for (var i = stage.sparks.length - 1; i >= 0; i--) {
       var s = stage.sparks[i];
@@ -446,6 +611,10 @@
   }
 
   function drawPiece(p) {
+    // Scrolled off the top of the shelf. Not drawn at all — parking it above
+    // the shelf drew it straight through the shelf's own label, and the count
+    // in that label is already saying it is there.
+    if ((p.state === "shelf" || p.state === "toShelf") && p.onShelf === false) return;
     var ctx = stage.ctx;
     var hot = p.heat > 0.05;
     ctx.save();
@@ -461,41 +630,110 @@
     ctx.fillRect(-w / 2, -h / 2, w, 1.5);
     ctx.restore();
 
-    var ty = p.y + 26;
+    var ty = p.y + (p.state === "rack" ? 22 : 26);
     if (p.state === "shelf" || p.state === "toShelf") {
+      // On a strip there is no room to the left of the shelf that is not the
+      // anvil or the fire, so finished pieces are counted rather than listed.
+      // Their names are in the list directly underneath the stage.
+      if (stage.narrow) return;
       ctx.textAlign = "right";
       ctx.font = "600 12px Inter, system-ui, sans-serif";
       ctx.fillStyle = "rgba(255,255,255,0.42)";
-      ctx.fillText(fit(p.label, Math.max(90, stage.SHELF.x - 90), 12), p.x - 42, p.y + 4);
+      ctx.fillText(fit(p.label, Math.max(80, stage.SHELF.x - stage.ANVIL.x - 140), 12), p.x - 42, p.y + 4);
       return;
     }
+    if (p.state === "quench" || p.state === "toQuench") return;
     var onAnv = p.state === "anvil";
+    var lit = onAnv || p.urg === "late" || p.urg === "hot" || stage.hovering === p;
     label(fit(p.label, onAnv ? 260 : stage.RACK_STEP - 22, onAnv ? 13 : 10.5),
-          p.x, ty, onAnv ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.46)",
+          p.x, ty, onAnv ? "rgba(255,255,255,0.88)" : lit ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.46)",
           onAnv ? 13 : 10.5);
     if (onAnv) {
       var left = p.need - p.hit;
       label(left + (left === 1 ? " STRIKE LEFT" : " STRIKES LEFT"), p.x, ty + 18, HEAT[4], 10);
+    } else if (p.state === "rack") {
+      // Say the cost on the rack, so "this one is one blow" is something you
+      // can see before you commit to it — and say *why* when the clock is the
+      // reason, because a number that changes on its own is a bug until it is
+      // explained.
+      // A rack slot is about eighty pixels wide, so the caption has to be as
+      // short as the thing it says. The *reason* the cost dropped is in the
+      // HUD chip above the stage — down here it only has to say the cost.
+      var cap = p.urg === "late" ? "! 1 BLOW"
+              : p.urg === "hot" ? "NOW · 1 BLOW"
+              : stage.hovering === p ? p.need + (p.need === 1 ? " BLOW" : " BLOWS") + " · +" + p.xp
+              : null;
+      if (cap) {
+        label(fit(cap, stage.RACK_STEP - 16, 9), p.x, ty + 14,
+              p.urg === "late" ? HEAT[4] : p.urg === "hot" ? HEAT[3] : "rgba(255,255,255,0.5)", 9);
+      }
     }
     if (p.state === "fire") label("HEATING…", p.x, ty + 18, HEAT[3], 10);
+  }
+
+  // The trough. A dark slab of water that catches the light off the fire.
+  function drawQuench() {
+    var ctx = stage.ctx, Q = stage.QUENCH, k = stage.SCALE;
+    var w = 96 * k, h = 26 * k;
+    ctx.fillStyle = "#121218";
+    roundRect(ctx, Q.x - w / 2, Q.y - h / 2, w, h, 5 * k); ctx.fill();
+    var g = ctx.createLinearGradient(Q.x - w / 2, Q.y, Q.x + w / 2, Q.y);
+    g.addColorStop(0, "rgba(56,189,248,0.10)");
+    g.addColorStop(0.5, "rgba(125,211,252,0.20)");
+    g.addColorStop(1, "rgba(56,189,248,0.10)");
+    ctx.fillStyle = g;
+    roundRect(ctx, Q.x - w / 2 + 3, Q.y - h / 2 + 3, w - 6, h - 6, 3 * k); ctx.fill();
+    label("QUENCH", Q.x, Q.y + h / 2 + 14, "rgba(255,255,255,0.22)", 9);
+  }
+
+  // The hammer. It rests over the anvil and falls when you strike — the single
+  // biggest difference between a number going down and a blow landing.
+  function drawHammer() {
+    var a = onAnvil();
+    if (!a) return;
+    var ctx = stage.ctx, k = stage.SCALE;
+    // 0 at rest (raised), 1 just struck (down). Fall fast, return slow.
+    var t = stage.hammer;
+    var drop = t > 0.55 ? (1 - t) / 0.45 : t / 0.55;   // 0..1..0 through the swing
+    var lift = 1 - Math.min(1, drop);
+    var pivotX = stage.ANVIL.x + 62 * k;
+    var pivotY = stage.ANVIL.y - 96 * k;
+    var angle = (-0.95 + 1.25 * (1 - lift)) ;          // radians, up → down
+    ctx.save();
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(angle);
+    ctx.scale(k, k);
+    // haft
+    ctx.strokeStyle = "#6b4f34"; ctx.lineWidth = 6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-6, 62); ctx.stroke();
+    // head
+    ctx.fillStyle = "#3a3a46";
+    roundRect(ctx, -22, 58, 34, 16, 3); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.fillRect(-22, 58, 34, 2);
+    ctx.restore();
   }
 
   function drawShelf() {
     var ctx = stage.ctx, S = stage.SHELF;
     ctx.fillStyle = "rgba(255,255,255,0.05)";
     ctx.fillRect(S.x - 60, S.y - 26, 118, 1.5);
-    label("FINISHED", S.x, S.y - 38, "rgba(255,255,255,0.30)");
+    var done = stage.pieces.filter(function (p) {
+      return p.state === "shelf" || p.state === "toShelf";
+    }).length;
+    label(done ? "FINISHED · " + done : "FINISHED", S.x, S.y - 38, done ? HEAT[4] : "rgba(255,255,255,0.30)");
   }
 
   function drawRackLine() {
     var ctx = stage.ctx;
     var inset = Math.max(6, stage.RACK_PAD - 20);
     ctx.fillStyle = "rgba(255,255,255,0.05)";
-    ctx.fillRect(inset, stage.RACK_Y + 32, stage.W - inset * 2, 1.5);
+    ctx.fillRect(inset, stage.RACK_Y + 48, stage.W - inset * 2, 1.5);
     // The long caption does not fit a phone, and a caption that runs off both
     // edges teaches nothing. Say the shorter half of it instead.
-    label(stage.narrow ? "THE DAY'S WORK" : "THE DAY'S WORK — TAP A PIECE TO PUT IT IN THE FIRE",
-          stage.W / 2, stage.RACK_Y + 52, "rgba(255,255,255,0.26)", 10);
+    var cap = stage.narrow ? "THE DAY'S WORK" : "THE DAY'S WORK — TAP A PIECE TO PUT IT IN THE FIRE";
+    if (stage.waiting > 0) cap += " · +" + stage.waiting + " WAITING";
+    label(cap, stage.W / 2, stage.RACK_Y + 66, "rgba(255,255,255,0.26)", 10);
   }
 
   function render() {
@@ -516,11 +754,39 @@
 
     drawFire();
     drawShelf();
+    drawQuench();
     drawRackLine();
     drawAnvil();
 
     stage.pieces.forEach(function (p) { if (p.state !== "anvil") drawPiece(p); });
     var a = onAnvil(); if (a) drawPiece(a);
+    drawHammer();
+
+    // Embers off the fire, drawn under the sparks so a strike still dominates.
+    ctx.globalCompositeOperation = "lighter";
+    stage.embers.forEach(function (em) {
+      ctx.globalAlpha = Math.max(0, em.life / em.life0) * 0.8;
+      ctx.fillStyle = HEAT[3 + ((em.size * 2) | 0) % 2];
+      ctx.fillRect(em.x, em.y, em.size, em.size);
+    });
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+
+    // Steam off the trough.
+    stage.steam.forEach(function (sm) {
+      ctx.globalAlpha = Math.max(0, sm.life / sm.life0) * 0.4;
+      ctx.fillStyle = "#dbeafe";
+      ctx.beginPath(); ctx.arc(sm.x, sm.y, sm.r, 0, 6.2832); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // The shockwave off a landed blow.
+    stage.rings.forEach(function (rr) {
+      ctx.globalAlpha = Math.max(0, rr.life / rr.life0) * 0.5;
+      ctx.strokeStyle = HEAT[5]; ctx.lineWidth = rr.w;
+      ctx.beginPath(); ctx.arc(rr.x, rr.y, rr.r, 0, 6.2832); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
 
     ctx.globalCompositeOperation = "lighter";
     stage.sparks.forEach(function (s) {
@@ -638,16 +904,14 @@
     stage.raf = 0;
   }
   function setStreak(n) { stage.streak = Number(n) || 0; }
-  function popXp(text) {
-    stage.nums.push({
-      x: stage.ANVIL.x, y: stage.ANVIL.y - 70, vy: -150, life: 1, life0: 1,
-      text: text, size: 22, color: HEAT[4],
-    });
-  }
+  // Minutes past midnight, or null for any day that is not today. Null is what
+  // stops a week you are browsing from lighting up as overdue.
+  function setNow(m) { stage.now = (m == null ? null : Number(m)); }
+  function popXp(text) { nums(stage.ANVIL.x, stage.ANVIL.y - 70, text, HEAT[4], 22); }
 
   window.ForgeStage = {
     mount: mount, start: start, stop: stop, sync: sync,
-    resize: resize, setStreak: setStreak, popXp: popXp,
+    resize: resize, setStreak: setStreak, setNow: setNow, popXp: popXp,
     strikesFor: strikesFor,
     isRunning: function () { return stage.running; },
   };

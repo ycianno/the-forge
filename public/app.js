@@ -1782,6 +1782,10 @@ function anvilTasks() {
       title: q.title,
       xp: (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10,
       minutes: Forge.questMinutesOf(q),
+      // The clock is part of the piece. `questMinutes` is the due hour in
+      // minutes past midnight, or null for a task with no hour — and a task
+      // with no hour can never be late.
+      due: questMinutes(q),
       done: box ? box.checked : !!(getWeekData().checks || {})[id],
     };
   });
@@ -1807,6 +1811,18 @@ function renderAnvilHud(tasks) {
   setT("anvilXp", "+" + xp);
   const bar = document.getElementById("anvilBar");
   if (bar) bar.style.width = (tasks.length ? Math.round(done / tasks.length * 100) : 0) + "%";
+  renderAnvilStrike(null);
+  // What the day is about to ask of you. A piece whose hour has passed is the
+  // one thing on this screen worth interrupting for.
+  const now = isCurrentWeek() ? nowMinutes() : null;
+  const late = now == null ? 0 : tasks.filter((t) => !t.done && Forge.urgencyOf(t.due, now) === "late").length;
+  const hot = now == null ? 0 : tasks.filter((t) => !t.done && Forge.urgencyOf(t.due, now) === "hot").length;
+  const chip = document.getElementById("anvilHeat");
+  if (chip) {
+    if (late) { chip.textContent = `${late} past its hour`; chip.dataset.heat = "late"; chip.hidden = false; }
+    else if (hot) { chip.textContent = `${hot} due within the hour`; chip.dataset.heat = "hot"; chip.hidden = false; }
+    else { chip.hidden = true; }
+  }
 }
 
 // Called on every render of Today. Cheap when the mode is `list` — the stage is
@@ -1824,14 +1840,34 @@ function syncAnvil(opts) {
   if (!inToday || folded) { ForgeStage.stop(); return; }
   ForgeStage.mount(document.getElementById("anvilStage"), {
     complete: anvilComplete,
+    onStrike: renderAnvilStrike,
     // One mute switch for the whole app — the anvil respects the same toggle
     // in the topbar that silences every other sound.
     muted: () => !!(window.FX && FX.sfxOn && !FX.sfxOn()),
   });
+  // Only today's board carries a live clock. Browsing back to a past week must
+  // not light every piece on it as overdue.
+  ForgeStage.setNow(isCurrentWeek() ? nowMinutes() : null);
   ForgeStage.sync(tasksNow, opts);
   const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
   ForgeStage.setStreak(prof ? prof.dayStreak : 0);
   if (!ForgeStage.isRunning()) ForgeStage.start();
+}
+
+// Hot metal moves; dull metal argues. Striking while a piece is still bright is
+// a clean blow, and a run of them is the only skill this room has — worth
+// saying out loud, or it may as well not exist. It is a flourish and never a
+// penalty: a dull strike still lands, so no tap is ever wasted.
+function renderAnvilStrike(info) {
+  const el = document.getElementById("anvilClean");
+  if (!el) return;
+  const run = info ? info.cleanRun : 0;
+  if (!info || run < 2) { el.hidden = true; return; }
+  el.textContent = `${run} clean`;
+  el.hidden = false;
+  el.classList.remove("is-hit");
+  void el.offsetWidth;
+  el.classList.add("is-hit");
 }
 
 // The day, named, with what is left of it — the line the forge used to make you

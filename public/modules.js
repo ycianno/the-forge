@@ -169,6 +169,35 @@
     return Math.max(1, Math.min(4, 1 + Math.floor(m / 25)));
   }
   function strikesForQuest(q) { return strikesFor(questMinutesOf(q)); }
+
+  // How urgent a piece is, from its due time and the clock. `null` due time
+  // means anytime, which is never urgent — a task with no hour cannot be late.
+  //   "cold"  — hours away, or no hour at all
+  //   "warm"  — within the hour
+  //   "hot"   — within fifteen minutes
+  //   "late"  — the hour has passed
+  const URGENCY_WARM = 60, URGENCY_HOT = 15;
+  function urgencyOf(dueMinutes, nowMinutes) {
+    if (dueMinutes == null || !Number.isFinite(Number(dueMinutes))) return "cold";
+    const left = Number(dueMinutes) - Number(nowMinutes);
+    if (left < 0) return "late";
+    if (left <= URGENCY_HOT) return "hot";
+    if (left <= URGENCY_WARM) return "warm";
+    return "cold";
+  }
+  // What a piece costs once the clock is against you.
+  //
+  // The idea is the forge's own: metal that is already at temperature takes
+  // fewer blows. A task fifteen minutes from its hour is not a thing you plan,
+  // it is a thing you do, and asking for four deliberate strikes at that point
+  // is the app arguing with you. So urgency spends the ceremony down — never
+  // below one, and never *up*: being early is not a punishment.
+  function strikesWithUrgency(base, urgency) {
+    const n = Math.max(1, Math.min(4, Number(base) || 1));
+    if (urgency === "late" || urgency === "hot") return 1;
+    if (urgency === "warm") return Math.max(1, n - 1);
+    return n;
+  }
   // What a week's plan actually asks of you, per day. Drives the plan-health
   // readout, which exists because a plan can quietly grow past the point where
   // any day is winnable and nothing in the app used to say so.
@@ -826,7 +855,7 @@
     PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     BOSSES, BOSS_ATTR, bossKeyHash, bossForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
-    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, strikesFor, strikesForQuest, planLoad, parseQuickTask, DAY_WORDS,
+    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, strikesFor, strikesForQuest, urgencyOf, strikesWithUrgency, planLoad, parseQuickTask, DAY_WORDS,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });

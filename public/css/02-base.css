@@ -119,6 +119,12 @@ h1, h2, h3, .brand {
 }
 
 .nav { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* Every button and nav link below sets `display`, which beats the user-agent
+   rule for [hidden] and makes `el.hidden = true` a no-op you cannot see — the
+   DOM says the element is hidden and the screen disagrees. One line, app-wide,
+   so hiding anything is a fact rather than a hope. */
+[hidden] { display: none !important; }
+
 .nav a, button, .file-label {
   cursor: pointer;
   color: var(--text);

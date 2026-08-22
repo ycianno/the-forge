@@ -2180,6 +2180,44 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .anvil-day { display: flex; flex-direction: column; line-height: 1.2; flex: 0 0 auto; }
 .anvil-day strong { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); }
 .anvil-day span { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); }
+/* What the day is about to ask for. The only thing on this screen worth
+   interrupting the room's calm for, so it is the only thing that pulses. */
+.anvil-heat {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  padding: 4px 11px; border-radius: var(--r-pill);
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .04em;
+}
+.anvil-heat[data-heat="hot"] {
+  color: var(--heat-4);
+  background: color-mix(in srgb, var(--heat-3) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--heat-3) 34%, transparent);
+}
+.anvil-heat[data-heat="late"] {
+  color: #1a1005; background: var(--heat-4); border: 1px solid var(--heat-4);
+  animation: heat-pulse 2s ease-in-out infinite;
+}
+@keyframes heat-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--heat-glow); }
+  50%      { box-shadow: 0 0 14px 2px var(--heat-glow); }
+}
+@media (prefers-reduced-motion: reduce) { .anvil-heat[data-heat="late"] { animation: none; } }
+/* A run of clean strikes. Appears at two, so it reads as something you did
+   rather than something the app hands out for showing up. */
+.anvil-clean {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  padding: 3px 10px; border-radius: var(--r-pill);
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--heat-5, #fff7ed);
+  background: color-mix(in srgb, var(--heat-4) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--heat-4) 42%, transparent);
+}
+.anvil-clean.is-hit { animation: clean-hit .42s cubic-bezier(.2,1.6,.4,1); }
+@keyframes clean-hit {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 0 var(--heat-glow); }
+  40%  { transform: scale(1.18); box-shadow: 0 0 16px 3px var(--heat-glow); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .anvil-clean.is-hit { animation: none; } }
 .anvil-collapse {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   width: 30px; height: 30px; padding: 0; border-radius: var(--r-sm);
@@ -2190,10 +2228,10 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .anvil-room.is-folded .anvil-stage,
 .anvil-room.is-folded .anvil-foot { display: none; }
 .anvil-room.is-folded { padding-bottom: var(--s-3); }
-.anvil-hud { display: flex; align-items: center; gap: var(--s-4); flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+.anvil-hud { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-4); flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
 .ah-stat { display: flex; flex-direction: column; line-height: 1.15; }
 .ah-stat b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); }
-.ah-stat span { font-size: var(--t-2xs); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted-2); }
+.ah-stat span { font-size: var(--t-2xs); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted-2); white-space: nowrap; }
 .ah-track {
   flex: 1 1 120px; max-width: 260px; height: 7px;
   border-radius: var(--r-pill); background: rgba(0,0,0,.5); overflow: hidden;
