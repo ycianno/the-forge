@@ -1757,11 +1757,15 @@ function markSelectedDay() {
 // the day, never the only way. Three taps for "ship the redesign" is a ritual;
 // three taps for "make the bed" is a tax. So blows come from the estimate the
 // task already carries, and the plain list is always one tap away.
-const TODAY_MODES = ["anvil", "list"];
-function todayMode() {
-  const m = settings && settings.todayMode;
-  return TODAY_MODES.includes(m) ? m : "anvil";
-}
+// The anvil and the list are not two ways to see Today; they are the same
+// screen. The forge is a hero strip you work in, the day's tasks are rows under
+// it, and ticking a row moves its piece to the shelf just as striking it does.
+// A toggle between them made you choose a mode before you could do anything,
+// which is one decision more than opening the app should cost.
+//
+// It can still be folded away — a day you only want to tick through should not
+// pay for a canvas — and that choice is remembered.
+function anvilCollapsed() { return !!(settings && settings.anvilCollapsed); }
 
 // The day's work in the shape the stage wants. Every field is derived from the
 // same helpers the board uses, so the two can never disagree about what today
@@ -1810,44 +1814,57 @@ function renderAnvilHud(tasks) {
 function syncAnvil(opts) {
   const room = document.getElementById("anvilRoom");
   if (!room || !window.ForgeStage) return;
-  const on = currentView === "today" && todayMode() === "anvil" && !document.body.classList.contains("in-focus");
-  room.hidden = !on;
-  document.body.classList.toggle("anvil-on", on);
-  if (!on) { ForgeStage.stop(); return; }
+  const inToday = currentView === "today" && !document.body.classList.contains("in-focus");
+  room.hidden = !inToday;
+  const folded = anvilCollapsed();
+  room.classList.toggle("is-folded", folded);
+  // The HUD is the day's headline and stays even when the forge is folded away.
+  const tasksNow = inToday ? anvilTasks() : [];
+  if (inToday) { renderAnvilHud(tasksNow); renderAnvilDay(tasksNow); }
+  if (!inToday || folded) { ForgeStage.stop(); return; }
   ForgeStage.mount(document.getElementById("anvilStage"), {
     complete: anvilComplete,
     // One mute switch for the whole app — the anvil respects the same toggle
     // in the topbar that silences every other sound.
     muted: () => !!(window.FX && FX.sfxOn && !FX.sfxOn()),
   });
-  const tasks = anvilTasks();
-  ForgeStage.sync(tasks, opts);
-  renderAnvilHud(tasks);
+  ForgeStage.sync(tasksNow, opts);
   const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
   ForgeStage.setStreak(prof ? prof.dayStreak : 0);
   if (!ForgeStage.isRunning()) ForgeStage.start();
 }
 
-function setTodayMode(mode) {
-  const next = TODAY_MODES.includes(mode) ? mode : "anvil";
-  settings.todayMode = next;
+// The day, named, with what is left of it — the line the forge used to make you
+// infer from six unlabelled billets.
+function renderAnvilDay(tasks) {
+  const date = addDays(selectedWeekStart, getTodayDayIndex());
+  const name = document.getElementById("anvilDayName");
+  if (name) name.textContent = date.toLocaleDateString(undefined, { weekday: "long" });
+  const meta = document.getElementById("anvilDayMeta");
+  if (!meta) return;
+  const left = tasks.filter((t) => !t.done);
+  const mins = left.reduce((n, t) => n + (Number(t.minutes) || 0), 0);
+  meta.textContent = left.length
+    ? `${fmt(date)} · ${left.length} left${mins ? ` · ${fmtDuration(mins)}` : ""}`
+    : `${fmt(date)} · the day is cleared`;
+}
+
+function setAnvilCollapsed(folded) {
+  settings.anvilCollapsed = !!folded;
   persistSettings();
-  document.querySelectorAll("[data-today-mode]").forEach((b) => {
-    const on = b.dataset.todayMode === next;
-    b.classList.toggle("active", on);
-    b.setAttribute("aria-pressed", String(on));
-  });
+  const btn = document.getElementById("anvilCollapse");
+  if (btn) {
+    btn.setAttribute("aria-expanded", String(!folded));
+    btn.title = folded ? "Show the forge" : "Hide the forge";
+  }
   syncAnvil({ snap: true });
 }
 function initTodayModes() {
-  const bar = document.querySelector(".anvil-modes");
-  if (!bar || bar._wired) return;
-  bar._wired = true;
-  bar.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-today-mode]");
-    if (b) setTodayMode(b.dataset.todayMode);
-  });
-  setTodayMode(todayMode());
+  const btn = document.getElementById("anvilCollapse");
+  if (!btn || btn._wired) return;
+  btn._wired = true;
+  btn.addEventListener("click", () => setAnvilCollapsed(!anvilCollapsed()));
+  setAnvilCollapsed(anvilCollapsed());
 }
 
 // ===== THE CHARACTER SHEET =====
@@ -2940,12 +2957,15 @@ function updateAgendaNow() {
   if (!card) return;
   const now = nowMinutes();
   const rows = [...card.querySelectorAll(".linked-unified[data-min]")];
-  let marker = null;
+  // The marker goes before the genuinely next task, not the first future row in
+  // document order — Today groups quests above rituals, so those two stopped
+  // being the same row the moment the board gained a second grouping.
+  let marker = null, markerMin = Infinity;
   rows.forEach((row) => {
     const min = Number(row.dataset.min);
     const box = row.querySelector("input[type=checkbox]");
     if (min < now) { if (box && !box.checked) row.classList.add("is-overdue"); }
-    else if (!marker) marker = row;
+    else if (min < markerMin) { marker = row; markerMin = min; }
   });
   if (!rows.length) return;
   const line = document.createElement("div");
@@ -2955,11 +2975,66 @@ function updateAgendaNow() {
   else { const last = rows[rows.length - 1]; last.parentNode.insertBefore(line, last.nextSibling); }
 }
 
+// One row of the board, wherever the board is drawn. Extracted so the two
+// groupings below cannot drift into two slightly different rows.
+function questRowHtml(q, date, dayIndex) {
+  const attr = q.attr || contextAttr(q.areaId);
+  const cat = q.category || attrCat(attr);
+  const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
+  const min = questMinutes(q);
+  const context = questContextLabel(q);
+  // Two axes, no overlap: the icon says which pursuit, the pill says which
+  // attribute the XP feeds — and the pill's colour finally matches its label.
+  const est = Forge.questMinutesOf(q);
+  const isRitual = q.scheduleType === "weekly";
+  const rowTitle = `${context || "Daily task"} · trains ${attrName(attr)} · ${isRitual ? "weekly routine" : "one-time task"}${est ? ` · about ${fmtDuration(est)}` : ""}`;
+  const timeCell = min == null
+    ? `<span class="q-time is-untimed">Anytime</span>`
+    : `<span class="q-time">${escapeHtml(fmtTime12(q.dueTime))}</span>`;
+  const pursuitIcon = `<span class="q-pursuit" aria-hidden="true">${moduleIconSvg(questRowIcon(q, attr))}</span>`;
+  const attrBadge = `<span class="quest-source-badge daily-source" title="Trains ${escapeHtml(attrName(attr))}"><span class="source-dot"></span><span class="source-label">${escapeHtml(attrName(attr))}</span></span>`;
+  // The one-off glyph is only worth its width where the two kinds are mixed —
+  // under a heading that already says which kind this is, it is noise.
+  const onceBadge = !isRitual && !ONE_KIND_PER_GROUP
+    ? `<span class="task-kind-badge is-once" role="img" aria-label="One-off task" title="One-off — happens once, not part of a weekly routine"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>`
+    : "";
+  const strikes = Forge.strikesForQuest(q);
+  const taskMeta = `<span class="task-meta">${attrBadge}${onceBadge}</span>`;
+  return `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}" data-kind="${isRitual ? "ritual" : "quest"}" data-strikes="${strikes}"${min == null ? "" : ` data-min="${min}"`} title="${escapeHtml(rowTitle)}" style="--ac:${questAccent(q, attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save>${timeCell}${pursuitIcon}<span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<span class="q-xp">+${xp}</span><button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></label>`;
+}
+// Today groups by kind, so the badge that distinguishes them is redundant there.
+let ONE_KIND_PER_GROUP = false;
+
+const KIND_ICONS = {
+  quest:  `<svg viewBox="0 0 24 24" class="ic"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>`,
+  ritual: `<svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>`,
+};
+// Quests are what you decided to do today. Rituals arrive whether you decided
+// or not. Quests come first because they are the part of the day you own.
+function kindGroups(tasks) {
+  const quests = tasks.filter((q) => q.scheduleType !== "weekly");
+  const rituals = tasks.filter((q) => q.scheduleType === "weekly");
+  const out = [];
+  if (quests.length) out.push({ id: "quests", label: "Today's quests", sub: "chosen for today", icon: KIND_ICONS.quest, items: quests });
+  if (rituals.length) out.push({ id: "rituals", label: "Rituals", sub: "your weekly routine", icon: KIND_ICONS.ritual, items: rituals });
+  return out;
+}
+function partGroups(tasks) {
+  const buckets = new Map();
+  tasks.forEach((q) => {
+    const part = dayPartFor(questMinutes(q));
+    if (!buckets.has(part.id)) buckets.set(part.id, { id: part.id, label: part.label, icon: part.icon, sub: "", items: [] });
+    buckets.get(part.id).items.push(q);
+  });
+  return DAY_PARTS.map((p) => buckets.get(p.id)).filter(Boolean);
+}
+
 function renderDays() {
   keyRow = -1;   // the rows it pointed at are about to be replaced
   const wrap = document.getElementById("daysGrid");
   wrap.innerHTML = "";
-  const attrs = (window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
+  const onToday = viewOfSection("daily") === "today";
+  const attrs = (!onToday && window.Forge && Forge.ATTR_LIST) ? Forge.ATTR_LIST : [];
   if (attrs.length) {
     const legend = attrs.map((a) => `<span class="al-item"><span class="al-dot" style="background:${attrColor(a)}"></span>${escapeHtml(attrName(a))}</span>`).join("");
     wrap.insertAdjacentHTML("beforeend", `<div class="attr-legend-row">${legend}<span class="al-hint">pursuits automatically route task XP to their attribute</span></div>`);
@@ -2968,7 +3043,6 @@ function renderDays() {
   const entries = dayNames().map((day, dayIndex) => ({ day, dayIndex, isToday: dayIndex === todayIndex }));
   // Today's view is today, on every screen size. The Week view is the board:
   // today first on a phone, in calendar order on a desktop.
-  const onToday = viewOfSection("daily") === "today";
   const orderedEntries = isMobile()
     ? [entries[todayIndex]].concat(byWeekOrder(entries.filter((x) => x.dayIndex !== todayIndex), (e) => e.dayIndex))
     : byWeekOrder(entries, (e) => e.dayIndex);
@@ -2978,43 +3052,24 @@ function renderDays() {
     const date = addDays(selectedWeekStart, dayIndex);
     const tasks = questsForDate(date);
     const card = document.createElement("details");
-    card.className = "day-card" + (isToday ? " today" : "");
+    // On Today the forge strip above already names the day, counts what is left
+    // and draws the bar. A second header saying the same three things is the
+    // kind of duplication that makes one screen feel like two.
+    card.className = "day-card" + (isToday ? " today" : "") + (onToday ? " is-solo" : "");
     card.open = onToday ? true : (isMobile() ? isToday : true);
     card.innerHTML = `<summary class="day-summary"><div class="day-heading"><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="day-subline"><span class="date-tag">${fmt(date)}</span><span class="day-remaining" id="dayLeft-${dayIndex}"></span></div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Add weekly routine for ${day}" aria-label="Add weekly routine for ${day}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
     const group = card.querySelector(".task-group");
-    // Bucket by part of day first, so each header can carry its own count.
-    const buckets = new Map();
-    tasks.forEach((q) => {
-      const part = dayPartFor(questMinutes(q));
-      if (!buckets.has(part.id)) buckets.set(part.id, { part, items: [] });
-      buckets.get(part.id).items.push(q);
-    });
-    DAY_PARTS.forEach(({ id }) => {
-      const bucket = buckets.get(id);
-      if (!bucket) return;
-      const { part, items } = bucket;
-      const rows = items.map((q) => {
-        const attr = q.attr || contextAttr(q.areaId);
-        const cat = q.category || attrCat(attr);
-        const xp = (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10;
-        const min = questMinutes(q);
-        const context = questContextLabel(q);
-        // Two axes, no overlap: the icon says which pursuit, the pill says which
-        // attribute the XP feeds — and the pill's colour finally matches its label.
-        const est = Forge.questMinutesOf(q);
-        const rowTitle = `${context || "Daily task"} · trains ${attrName(attr)} · ${q.scheduleType === "weekly" ? "weekly routine" : "one-time task"}${est ? ` · about ${fmtDuration(est)}` : ""}`;
-        const timeCell = min == null
-          ? `<span class="q-time is-untimed">Anytime</span>`
-          : `<span class="q-time">${escapeHtml(fmtTime12(q.dueTime))}</span>`;
-        const pursuitIcon = `<span class="q-pursuit" aria-hidden="true">${moduleIconSvg(questRowIcon(q, attr))}</span>`;
-        const attrBadge = `<span class="quest-source-badge daily-source" title="Trains ${escapeHtml(attrName(attr))}"><span class="source-dot"></span><span class="source-label">${escapeHtml(attrName(attr))}</span></span>`;
-        // The exception, not the rule — a weekly routine gets no badge at all,
-        // and the one-off marker is a glyph so it costs almost no width.
-        const onceBadge = q.scheduleType === "once" ? `<span class="task-kind-badge is-once" role="img" aria-label="One-off task" title="One-off — happens once, not part of a weekly routine"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>` : "";
-        const taskMeta = `<span class="task-meta">${attrBadge}${onceBadge}</span>`;
-        return `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}"${min == null ? "" : ` data-min="${min}"`} title="${escapeHtml(rowTitle)}" style="--ac:${questAccent(q, attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save>${timeCell}${pursuitIcon}<span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<span class="q-xp">+${xp}</span><button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></label>`;
-      }).join("");
-      group.insertAdjacentHTML("beforeend", `<div class="agenda-part" data-part="${part.id}"><div class="agenda-part-head"><span class="apart-ico">${part.icon}</span><span class="apart-label">${part.label}</span><span class="apart-rule"></span><span class="apart-count">${items.length}</span></div>${rows}</div>`);
+    // Two skeletons for one list, and which one you get depends on what you are
+    // asking. On the seven-day board the question is *when*, so the day splits
+    // into parts of the day. On Today the question is *what kind of thing is
+    // this* — a one-off you chose to do today, or a routine that arrives every
+    // week whether you chose it or not. Mixing those in one stream is what made
+    // "the things I decided to do today" impossible to see.
+    ONE_KIND_PER_GROUP = onToday;
+    (onToday ? kindGroups(tasks) : partGroups(tasks)).forEach((g) => {
+      const rows = g.items.map((q) => questRowHtml(q, date, dayIndex)).join("");
+      group.insertAdjacentHTML("beforeend",
+        `<div class="agenda-part" data-part="${escapeHtml(g.id)}"><div class="agenda-part-head"><span class="apart-ico">${g.icon}</span><span class="apart-label">${escapeHtml(g.label)}</span>${g.sub ? `<span class="apart-sub">${escapeHtml(g.sub)}</span>` : ""}<span class="apart-rule"></span><span class="apart-count">${g.items.length}</span></div>${rows}</div>`);
     });
     if (!tasks.length) group.innerHTML = `<div class="day-empty">Nothing planned. Add a task or a weekly routine.</div>`;
     group.insertAdjacentHTML("beforeend", `<button class="day-quick-add" type="button" data-quest-date="${iso(date)}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button>`);
@@ -3581,11 +3636,13 @@ function buildViewShell() {
   shell.insertBefore(frame, hero || shell.firstElementChild);
 
   const move = (view, node) => { if (node) viewEl(view).appendChild(node); };
-  // Today: the day's work, and nothing that is about any other day. The anvil
-  // sits above the board; which of the two you see is the Today mode.
+  // Today: the day's work, and nothing that is about any other day. The forge
+  // is the head of the room, the day's rows are the body, and the challenges
+  // are a footer — they are bonuses on top of the day, not the day itself, and
+  // sitting between the fire and the list they read as the main event.
   move("today", document.getElementById("anvilRoom"));
-  move("today", document.getElementById("questsHub"));
   move("today", document.getElementById("daily"));
+  move("today", document.getElementById("questsHub"));
 
   // Week: seven days. The hero is the character sheet and goes to Character,
   // but three of its parts are week machinery that was only ever housed there —
@@ -3790,9 +3847,9 @@ function routeTo(view, opts) {
   if (daily) {
     const home = viewEl(viewOfSection("daily"));
     if (home && daily.parentNode !== home) {
-      // In Week the board sits between the quest log and The Bench; in Today
-      // it is simply the last thing in the room.
-      const after = home.querySelector(":scope > #review");
+      // In Week the board sits between the quest log and The Bench; in Today it
+      // sits between the forge and the challenges.
+      const after = home.querySelector(":scope > #review") || home.querySelector(":scope > #questsHub");
       home.insertBefore(daily, after || null);
     }
     daily.open = true;

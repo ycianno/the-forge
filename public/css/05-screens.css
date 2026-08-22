@@ -736,6 +736,25 @@
 .apart-label { font-family: 'Outfit', sans-serif; font-size: var(--t-2xs); font-weight: 850; text-transform: uppercase; letter-spacing: .1em; }
 .apart-rule { flex: 1; height: 1px; background: var(--line); }
 .apart-count { font-size: var(--t-2xs); font-weight: 800; font-variant-numeric: tabular-nums; }
+.apart-sub { font-size: var(--t-2xs); font-weight: 600; color: var(--muted-2); }
+/* The single day card on Today drops its own header and bar: the forge strip
+   directly above it already says the weekday, what is left of it and how far
+   through you are. Only the add button was worth keeping, and the group footer
+   already carries one. */
+.day-card.is-solo > .day-summary { display: none; }
+.day-card.is-solo > .day-content > .bar { display: none; }
+.day-card.is-solo { border-color: var(--line); }
+.day-card.is-solo > .day-content { padding-top: var(--s-2); }
+/* Today groups by kind rather than by hour. The two need to read as different
+   kinds of thing at a glance — quests are the part of the day you chose, and
+   they get the heat; rituals arrive whether you chose them or not. */
+.agenda-part[data-part="quests"] .apart-ico,
+.agenda-part[data-part="quests"] .apart-label { color: var(--heat-3); }
+.agenda-part[data-part="quests"] .apart-rule { background: linear-gradient(90deg, color-mix(in srgb, var(--heat-3) 40%, transparent), var(--line) 60%); }
+.agenda-part[data-part="rituals"] .apart-ico,
+.agenda-part[data-part="rituals"] .apart-label { color: var(--muted); }
+.agenda-part[data-part="rituals"] .check.quest { opacity: .93; }
+.agenda-part[data-part="rituals"] .check.quest:hover { opacity: 1; }
 
 /* the "now" marker on today's card */
 .agenda-now { display: flex; align-items: center; gap: 8px; margin: 8px 0 8px 2px; pointer-events: none; }
@@ -1936,16 +1955,28 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
  * viewport, so the fire, the anvil and the rack are all on screen at once on
  * a laptop and on a phone.
  * ======================================================================== */
+/* The forge is the head of Today, not a mode of it — a hero strip you work in,
+   with the day's rows underneath. It is deliberately shorter than the old
+   full-mode stage: the whole point of the refit is that the fire and the list
+   are on screen together. */
 .anvil-room { padding: var(--s-3) var(--s-4) var(--s-2); }
 .anvil-room[hidden] { display: none; }
-/* In anvil mode the board and the challenge list stay in the document — the
-   stage completes a task by driving the board's own checkbox — but they get
-   out of the way. `display:none` keeps every id resolvable. */
-body.anvil-on #view-today > #daily,
-body.anvil-on #view-today > #questsHub { display: none; }
 
 .anvil-head { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-2); }
-.anvil-hud { display: flex; align-items: center; gap: var(--s-4); flex: 1 1 auto; min-width: 0; }
+.anvil-day { display: flex; flex-direction: column; line-height: 1.2; flex: 0 0 auto; }
+.anvil-day strong { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); }
+.anvil-day span { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); }
+.anvil-collapse {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 30px; height: 30px; padding: 0; border-radius: var(--r-sm);
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+}
+.anvil-collapse .ic { width: 15px; height: 15px; flex: 0 0 auto; transition: transform .25s ease; }
+.anvil-collapse[aria-expanded="false"] .ic { transform: rotate(180deg); }
+.anvil-room.is-folded .anvil-stage,
+.anvil-room.is-folded .anvil-foot { display: none; }
+.anvil-room.is-folded { padding-bottom: var(--s-3); }
+.anvil-hud { display: flex; align-items: center; gap: var(--s-4); flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
 .ah-stat { display: flex; flex-direction: column; line-height: 1.15; }
 .ah-stat b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); }
 .ah-stat span { font-size: var(--t-2xs); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted-2); }
@@ -1971,7 +2002,7 @@ body.anvil-on #view-today > #questsHub { display: none; }
 
 .anvil-stage {
   position: relative;
-  height: clamp(380px, 58vh, 620px);
+  height: clamp(240px, 34vh, 380px);
   border-radius: var(--r-md); overflow: hidden;
   background: radial-gradient(120% 90% at 50% 100%, rgba(124,45,18,.10), transparent 70%), rgba(0,0,0,.28);
   border: 1px solid var(--line);
@@ -1982,10 +2013,11 @@ body.anvil-on #view-today > #questsHub { display: none; }
 
 @media (max-width: 640px) {
   .anvil-room { padding: var(--s-2) var(--s-3); }
-  .anvil-head { gap: var(--s-3); }
-  .anvil-hud { gap: var(--s-3); }
+  .anvil-head { gap: var(--s-2); }
+  .anvil-hud { gap: var(--s-3); order: 3; flex-basis: 100%; justify-content: flex-start; }
+  .anvil-day { flex: 1 1 auto; }
   .ah-track { max-width: none; }
-  .anvil-stage { height: clamp(320px, 52vh, 520px); }
+  .anvil-stage { height: clamp(220px, 30vh, 320px); }
   .anvil-foot { display: none; }
 }
 

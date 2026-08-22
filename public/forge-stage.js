@@ -69,13 +69,21 @@
     // frame instead of nudging each piece of it.
     stage.SCALE = Math.max(0.58, Math.min(1, W / 720));
     stage.FIRE.r = 74 * stage.SCALE;
-    stage.FIRE.x = narrow ? W * 0.21 : W * 0.17;
-    stage.FIRE.y = H * (narrow ? 0.44 : 0.52);
+    // Vertical placement is anchored to the bottom, not to fractions of the
+    // height. The forge became a hero strip rather than a full screen, and
+    // percentage offsets put the rack's caption below the frame the moment the
+    // stage got shorter — a caption you cannot read is a caption that is not
+    // there. The rack reserves exactly what its line and label need.
+    stage.RACK_Y = H - 66;
+    var floorY = stage.RACK_Y - 34;             // everything else lives above it
     stage.ANVIL.x = narrow ? W * 0.66 : W * 0.48;
-    stage.ANVIL.y = H * (narrow ? 0.48 : 0.56);
+    stage.ANVIL.y = Math.max(70 * stage.SCALE, floorY * 0.70);
+    stage.FIRE.x = narrow ? W * 0.21 : W * 0.17;
+    stage.FIRE.y = stage.ANVIL.y - 4;
     stage.SHELF.x = narrow ? W * 0.72 : W * 0.82;
-    stage.SHELF.y = H * (narrow ? 0.13 : 0.20);
-    stage.RACK_Y = H * (narrow ? 0.80 : 0.83);
+    // The shelf's own label is drawn 38px above it, so it cannot start higher
+    // than that or "FINISHED" is cropped by the top of the frame.
+    stage.SHELF.y = Math.max(58, H * 0.16);
     stage.RACK_PAD = narrow ? 26 : 54;
     stage.RACK_MIN = narrow ? 84 : 96;
     layoutRack(true);
@@ -110,13 +118,20 @@
       p.ty = stage.RACK_Y - (rows - 1 - row) * 46;
       if (snap || (p.x === 0 && p.y === 0)) { p.x = p.tx; p.y = p.ty; }
     });
-    var slot = 0;
-    stage.pieces.forEach(function (p) {
-      if (p.state === "shelf" || p.state === "toShelf") {
-        p.shelfSlot = slot++;
-        p.tx = stage.SHELF.x; p.ty = stage.SHELF.y + p.shelfSlot * 30;
-        if (snap) { p.x = p.tx; p.y = p.ty; }
-      }
+    // A cleared day is a full shelf, and on a short stage a fixed 30px step
+    // walks the finished pieces straight down onto the anvil. Tighten the
+    // spacing to whatever room there actually is above it.
+    var shelved = stage.pieces.filter(function (p) {
+      return p.state === "shelf" || p.state === "toShelf";
+    });
+    var room = Math.max(30, stage.ANVIL.y - 52 - stage.SHELF.y);
+    var shelfStep = shelved.length > 1
+      ? Math.max(13, Math.min(30, room / (shelved.length - 1)))
+      : 30;
+    shelved.forEach(function (p, i) {
+      p.shelfSlot = i;
+      p.tx = stage.SHELF.x; p.ty = stage.SHELF.y + i * shelfStep;
+      if (snap) { p.x = p.tx; p.y = p.ty; }
     });
   }
 
@@ -526,13 +541,17 @@
     });
     ctx.globalAlpha = 1;
 
+    // Sit the hint just above the anvil face. Anchoring it a fixed 96px up put
+    // it into the shelf's label once the stage became a strip rather than a
+    // screen, and two captions on top of each other say nothing.
+    var hintY = stage.ANVIL.y - 26 * stage.SCALE - 16;
     if (!stage.pieces.length) {
-      label("NOTHING ON THE RACK", stage.ANVIL.x, stage.ANVIL.y - 96 * stage.SCALE, "rgba(255,255,255,0.22)");
+      label("NOTHING ON THE RACK", stage.ANVIL.x, hintY, "rgba(255,255,255,0.22)");
     } else if (!onAnvil() && !inFire()) {
       if (stage.pieces.some(function (p) { return p.state === "rack"; })) {
-        label("THE ANVIL IS EMPTY", stage.ANVIL.x, stage.ANVIL.y - 96 * stage.SCALE, "rgba(255,255,255,0.22)");
+        label("THE ANVIL IS EMPTY", stage.ANVIL.x, hintY, "rgba(255,255,255,0.22)");
       } else {
-        label("THE DAY IS CLEARED", stage.ANVIL.x, stage.ANVIL.y - 96 * stage.SCALE, HEAT[4], 14);
+        label("THE DAY IS CLEARED", stage.ANVIL.x, hintY, HEAT[4], 14);
       }
     }
   }
