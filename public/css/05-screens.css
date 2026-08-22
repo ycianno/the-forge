@@ -2356,6 +2356,52 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 .char-pane .hero > .char-panel { border: none; background: none; box-shadow: none; padding: 0; }
 .char-pane .hero { gap: var(--s-5); }
 
+/* ----- the effigy -----
+   The emotional view of the same five numbers the radar shapes and the cards
+   spell out. It is a canvas, so everything readable about it lives in the
+   caption underneath rather than inside the pixels. */
+.effigy { display: flex; flex-direction: column; gap: var(--s-3); }
+.ef-head { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; }
+.ef-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md); }
+.ef-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
+.ef-stage {
+  position: relative;
+  height: clamp(260px, 38vh, 420px);
+  border-radius: var(--r-md); overflow: hidden;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 80% at 50% 100%, rgba(124,45,18,.14), transparent 68%),
+    rgba(0,0,0,.26);
+  touch-action: manipulation;   /* a hold must not be read as a page gesture */
+  -webkit-user-select: none; user-select: none;
+}
+.effigy-canvas { display: block; }
+.ef-read {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px var(--s-3);
+  min-height: 22px;
+  font-size: var(--t-xs);
+}
+.ef-hint { color: var(--muted-2); font-weight: 600; }
+.ef-part {
+  font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-md);
+  color: var(--ac, var(--text));
+}
+.ef-of { color: var(--muted); font-weight: 600; }
+.ef-tier {
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--heat-4);
+  padding: 2px 9px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--heat-4) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--heat-4) 30%, transparent);
+}
+.ef-next { color: var(--muted-2); font-weight: 700; }
+.ef-next.is-max { color: var(--heat-3); }
+
+@media (max-width: 640px) {
+  .ef-stage { height: clamp(230px, 34vh, 320px); }
+  .ef-part { font-size: var(--t-sm); }
+}
+
 /* ----- the ladder ----- */
 .rank-ladder {
   padding: var(--s-4) var(--s-5);

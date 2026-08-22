@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=6" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=5" />
-  <link rel="stylesheet" href="css/05-screens.css?v=50" />
+  <link rel="stylesheet" href="css/05-screens.css?v=51" />
   <link rel="stylesheet" href="css/06-mobile.css?v=8" />
 </head>
 <body>
@@ -265,6 +265,19 @@
         <button class="settings-tab" data-char-tab="cabinet" role="tab" aria-selected="false" aria-controls="charPaneCabinet" type="button">Cabinet</button>
       </div>
       <div class="char-pane active" id="charPaneSheet" role="tabpanel">
+        <!-- THE EFFIGY. Five attributes, five pieces of a forged figure. Hold
+             it and the fire rises; every unfinished piece shows a ghost of its
+             next tier. Painted by effigy.js. -->
+        <section class="effigy" id="effigy">
+          <div class="ef-head">
+            <span class="ef-title">The effigy</span>
+            <span class="ef-sub">The thing you are forging is you</span>
+          </div>
+          <div class="ef-stage" id="effigyStage"></div>
+          <div class="ef-read" id="effigyRead">
+            <span class="ef-hint">Hold the figure to bring the fire up · touch a piece to read it</span>
+          </div>
+        </section>
         <div class="rank-ladder" id="rankLadder"></div>
         <div class="attr-sheet" id="attrSheet"></div>
       </div>
@@ -817,8 +830,9 @@
   <script src="game.js?v=38"></script>
   <script src="fx-stage.js?v=2"></script>
   <script src="forge-stage.js?v=18"></script>
+  <script src="effigy.js?v=1"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=121"></script>
+  <script src="app.js?v=122"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

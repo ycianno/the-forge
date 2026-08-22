@@ -1990,7 +1990,43 @@ function renderCharacter() {
   if (!prof) return;
   renderRankLadder(prof);
   renderAttrSheet(prof);
+  syncEffigy(prof);
   initShapeLink();
+}
+
+// ----- the effigy ---------------------------------------------------------
+// A forged figure built from the five attributes, and the third view of the
+// same numbers: the effigy is what it feels like, the radar is what shape it
+// is, the cards are what it says. All three light together.
+function syncEffigy(prof) {
+  if (!window.Effigy) return;
+  const host = document.getElementById("effigyStage");
+  const on = currentView === "character" && charTab === "sheet" && host;
+  if (!on) { Effigy.stop(); return; }
+  Effigy.mount(host, { onPart: renderEffigyRead });
+  Effigy.sync(prof.attrs || []);
+  if (!Effigy.isRunning()) Effigy.start();
+}
+
+// What the piece under your finger is, and what the next tier of it costs.
+// Written by the canvas rather than drawn inside it, so it is selectable text
+// and a screen reader can reach it.
+function renderEffigyRead(info) {
+  const el = document.getElementById("effigyRead");
+  if (!el) return;
+  if (!info) {
+    el.innerHTML = `<span class="ef-hint">Hold the figure to bring the fire up · touch a piece to read it</span>`;
+    highlightAttr(null);
+    return;
+  }
+  const to = info.nextAt != null
+    ? `<span class="ef-next">${info.nextAt - info.level} level${info.nextAt - info.level === 1 ? "" : "s"} to ${escapeHtml(info.nextName)}</span>`
+    : `<span class="ef-next is-max">the last tier there is</span>`;
+  el.innerHTML =
+    `<span class="ef-part" style="--ac:${info.color}">${escapeHtml(info.label)}</span>` +
+    `<span class="ef-of">forged from ${escapeHtml(info.attrLabel)} · Lv ${info.level}</span>` +
+    `<span class="ef-tier">${escapeHtml(info.tierName)}</span>` + to;
+  highlightAttr(info.attr);
 }
 
 // The shape and the sheet are two views of one set of numbers, so pointing at
@@ -1998,6 +2034,7 @@ function renderCharacter() {
 // table and you are left doing the join in your head — which was most of what
 // made Character feel like several things stacked rather than one sheet.
 function highlightAttr(key) {
+  if (window.Effigy && Effigy.highlight) Effigy.highlight(key);
   document.querySelectorAll("#attrRadar [data-attr]").forEach((n) => {
     n.classList.toggle("is-lit", !!key && n.dataset.attr === key);
     n.classList.toggle("is-dim", !!key && n.dataset.attr !== key);
@@ -2048,7 +2085,7 @@ function showCharTab(name) {
     const pane = document.getElementById("charPane" + k[0].toUpperCase() + k.slice(1));
     if (pane) pane.classList.toggle("active", k === charTab);
   });
-  if (charTab === "cabinet") paintCabinet();
+  if (charTab === "cabinet") { if (window.Effigy) Effigy.stop(); paintCabinet(); }
   else renderCharacter();
 }
 function initCharTabs() {
@@ -4299,6 +4336,7 @@ function routeTo(view, opts) {
   if (next === "today") { initTodayModes(); syncAnvil({ snap: true }); }
   else if (window.ForgeStage) ForgeStage.stop();
   if (next === "week") renderWeekPulse();
+  if (next !== "character" && window.Effigy) Effigy.stop();
   if (changed) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
     // button or bottom tab has to fill it just the same.
