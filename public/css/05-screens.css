@@ -2452,6 +2452,11 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 }
 .ef-next { color: var(--muted-2); font-weight: 700; }
 .ef-next.is-max { color: var(--heat-3); }
+/* What time has left on it, in words. The figure shows the marks; this says
+   what they are, so a course of stone appearing is never a mystery. */
+.ef-age { display: flex; flex-wrap: wrap; gap: 4px var(--s-4); margin-top: var(--s-2); }
+.ef-age span { font-size: var(--t-2xs); font-weight: 600; color: var(--muted-2); }
+.ef-age b { font-family: 'Outfit', sans-serif; font-weight: 900; color: var(--muted); margin-right: 3px; }
 
 @media (max-width: 640px) {
   .ef-stage { height: clamp(230px, 34vh, 320px); }

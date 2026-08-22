@@ -45,7 +45,7 @@
   var st = {
     cv: null, ctx: null, host: null, api: null, ro: null,
     W: 0, H: 0, dpr: 1, running: false, raf: 0, lastT: 0,
-    attrs: [], boxes: {}, hovering: null,
+    attrs: [], hist: null, boxes: {}, hovering: null,
     bellows: 0,          // 0 cold → 1 fully at the fire; driven by press-and-hold
     holding: false,
     embers: [], t: 0,
@@ -96,10 +96,14 @@
   // on a phone and a 420px panel on a desktop.
   function geom() {
     var W = st.W, H = st.H;
-    var fh = H * 0.78;                 // figure height
-    var by = H * 0.90;                 // the ground the figure stands on
-    var cx = W * 0.46;                 // the figure sits left of centre; the blade takes the right
+    var fh = H * 0.74;                 // figure height
     var u = fh / 100;                  // one unit of the figure
+    // The plinth grows downward from the figure's feet, so the feet have to
+    // rise to make room for it — otherwise the courses you earned are drawn
+    // off the bottom of the frame, which is the same as not earning them.
+    var plinth = (plinthCourses() + 1) * 7 * u + 4;
+    var by = H - plinth - 6;           // the ground the figure stands on
+    var cx = W * 0.46;                 // the figure sits left of centre; the blade takes the right
     return { W: W, H: H, fh: fh, by: by, cx: cx, u: u };
   }
 
@@ -125,12 +129,80 @@
   }
 
   // ----- drawing ------------------------------------------------------------
+  // ----- what time leaves on it --------------------------------------------
+  // The attributes say who you are now. Everything below says how long you have
+  // been at it, and none of it is reachable by levelling one number this week:
+  //
+  //   the plinth   grows a course of stone per stretch of active weeks
+  //   the blade    takes a notch per boss put down
+  //   the cuirass  is engraved once you have insignias, deeper as they mount
+  //   the cloak    is the day streak, and the only mark that can be lost
+  //
+  // A statue that only ever showed current stats would reset every time you had
+  // a bad month, which is the opposite of what a monument is for.
+  var H0 = { weeks: 0, bosses: 0, insignias: 0, trophies: 0, streak: 0 };
+  function hist() { return st.hist || H0; }
+  // Courses of stone: 0 at the start, one per band of active weeks. Slow on
+  // purpose — this is the mark that says "a long time", so it must take one.
+  var PLINTH_BANDS = [4, 13, 26, 52, 104, 208];
+  function plinthCourses() {
+    var w = hist().weeks, n = 0;
+    for (var i = 0; i < PLINTH_BANDS.length; i++) if (w >= PLINTH_BANDS[i]) n = i + 1;
+    return n;
+  }
+
   function drawPlinth(g) {
     var ctx = st.ctx, u = g.u, cx = g.cx, by = g.by;
-    ctx.fillStyle = "#16161c";
-    roundRect(ctx, cx - 34 * u, by, 68 * u, 9 * u, 2 * u); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.07)";
-    ctx.fillRect(cx - 34 * u, by, 68 * u, 1.2);
+    var courses = plinthCourses();
+    // The base course is always there; each extra one is wider and sits under.
+    for (var i = courses; i >= 0; i--) {
+      var w = (68 + i * 9) * u, h = 9 * u, y = by + i * (7 * u);
+      ctx.fillStyle = i === 0 ? "#16161c" : "#12121a";
+      roundRect(ctx, cx - w / 2, y, w, h, 2 * u); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255," + (0.07 - i * 0.012).toFixed(3) + ")";
+      ctx.fillRect(cx - w / 2, y, w, 1.2);
+    }
+    // Trophy studs set into the front of the base course, one per grade held.
+    var t = hist().trophies || {};
+    var grades = [["bronze", "#c17d3c"], ["silver", "#9aa3ad"], ["gold", "#d4a017"], ["platinum", "#3bb6c9"]];
+    var held = grades.filter(function (gr) { return (t[gr[0]] || 0) > 0; });
+    held.forEach(function (gr, i) {
+      var span = (held.length - 1) * 7 * u;
+      ctx.fillStyle = gr[1];
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      ctx.arc(cx - span / 2 + i * 7 * u, by + 4.5 * u, 1.9 * u, 0, 6.2832);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  // The cloak. It is the day streak, so it is the one mark on the figure that
+  // can be lost — and the only one that moves.
+  function drawCloak(g) {
+    var streak = hist().streak;
+    if (streak < 2) return;
+    var ctx = st.ctx, u = g.u, cx = g.cx, by = g.by;
+    var reach = Math.min(1, streak / 60);
+    var len = (34 + reach * 30) * u;
+    var sway = Math.sin(st.t * 1.1) * 2.6 * u;
+    var top = by - 66 * u;
+    // Wider than the figure at the shoulders and flaring out, or the cuirass
+    // simply covers it and a 23-day streak leaves no mark at all.
+    ctx.save();
+    var grad = ctx.createLinearGradient(cx, top, cx, top + len);
+    grad.addColorStop(0, "rgba(194,65,12," + (0.34 + reach * 0.4).toFixed(2) + ")");
+    grad.addColorStop(0.6, "rgba(154,52,15," + (0.22 + reach * 0.25).toFixed(2) + ")");
+    grad.addColorStop(1, "rgba(124,45,18,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(cx - 21 * u, top);
+    ctx.lineTo(cx + 21 * u, top);
+    ctx.quadraticCurveTo(cx + 34 * u + sway, top + len * 0.62, cx + 26 * u + sway, top + len);
+    ctx.lineTo(cx - 26 * u + sway, top + len);
+    ctx.quadraticCurveTo(cx - 34 * u + sway, top + len * 0.62, cx - 21 * u, top);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
 
   function ghost(ctx, drawShape) {
@@ -199,6 +271,26 @@
     for (var i = 0; i < tier; i++) {
       ctx.fillRect(cx - 14 * u, by - (62 - i * 5) * u, 28 * u, 1.4 * u);
     }
+    // The engraving. Rays struck out from a centre, one per insignia band —
+    // a chest that has been decorated rather than merely forged.
+    var ins = hist().insignias;
+    if (ins > 0) {
+      var rays = Math.min(12, 2 + Math.floor(Math.sqrt(ins) * 1.6));
+      var ey = by - 56 * u, er = 6.5 * u;
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,0,0,0.42)";
+      ctx.lineWidth = Math.max(1, 0.9 * u);
+      for (var k = 0; k < rays; k++) {
+        var a = (k / rays) * Math.PI * 2 - Math.PI / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * er * 0.35, ey + Math.sin(a) * er * 0.35);
+        ctx.lineTo(cx + Math.cos(a) * er, ey + Math.sin(a) * er);
+        ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(cx, ey, er * 0.3, 0, 6.2832);
+      ctx.fillStyle = "rgba(0,0,0,0.42)"; ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -248,6 +340,14 @@
     ctx.lineTo(x - 3.4 * u, by - 22 * u - len);
     ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0;
+    // A notch per boss put down, filed into the edge from the guard upward.
+    // Capped at what the blade can hold — past that the count is the caption's
+    // job, not the metal's.
+    var notches = Math.min(Math.floor((len / u - 10) / 6), hist().bosses);
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    for (var n = 0; n < notches; n++) {
+      ctx.fillRect(x - 3.4 * u, by - (30 + n * 6) * u, 2.4 * u, 1.6 * u);
+    }
     // guard + grip stay cold; they are not the part being forged
     ctx.fillStyle = "#33333d";
     roundRect(ctx, x - 9 * u, by - 24 * u, 18 * u, 3.4 * u, 1.4 * u); ctx.fill();
@@ -289,6 +389,7 @@
     ctx.fillRect(0, 0, st.W, st.H);
 
     drawPlinth(g);
+    drawCloak(g);
     // Recompute the boxes as we draw, so hit-testing can never disagree with
     // what is on screen.
     st.boxes = {};
@@ -444,9 +545,12 @@
     if (st.raf) cancelAnimationFrame(st.raf);
     st.raf = 0;
   }
-  // The attribute list, straight from the profile. Nothing is derived here that
-  // the engine does not already own.
-  function sync(attrs) { st.attrs = Array.isArray(attrs) ? attrs : []; }
+  // The attribute list and the history behind it, straight from the profile.
+  // Nothing is derived here that the engine does not already own.
+  function sync(attrs, hist) {
+    st.attrs = Array.isArray(attrs) ? attrs : [];
+    st.hist = hist || null;
+  }
   // Lighting a part from the outside — the attribute cards below point back.
   function highlight(attrKey) {
     var part = null;

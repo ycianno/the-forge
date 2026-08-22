@@ -2069,8 +2069,40 @@ function syncEffigy(prof) {
   const on = currentView === "character" && charTab === "sheet" && host;
   if (!on) { Effigy.stop(); return; }
   Effigy.mount(host, { onPart: renderEffigyRead });
-  Effigy.sync(prof.attrs || []);
+  Effigy.sync(prof.attrs || [], effigyHistory(prof));
   if (!Effigy.isRunning()) Effigy.start();
+  renderEffigyAge(prof);
+}
+
+// What the statue has to record besides who you are this week. Attributes can
+// fall; none of these can, which is the point of a monument — a bad month must
+// not take the plinth back down a course.
+function effigyHistory(prof) {
+  const T = (settings && settings.trophies) || {};
+  const count = (g) => (T[g] ? Object.keys(T[g]).length : 0);
+  return {
+    weeks: prof.activeWeeks || 0,
+    bosses: Object.keys((settings && settings.bossDefeated) || {}).length,
+    insignias: Object.keys((settings && settings.insignias) || {}).length,
+    trophies: { bronze: count("bronze"), silver: count("silver"), gold: count("gold"), platinum: count("platinum") },
+    streak: prof.dayStreak || 0,
+  };
+}
+
+// The marks on the statue, said in words. The figure shows them; this says what
+// they are, so nobody has to guess why a course of stone appeared.
+function renderEffigyAge(prof) {
+  const el = document.getElementById("effigyAge");
+  if (!el) return;
+  const h = effigyHistory(prof);
+  const bits = [];
+  bits.push(`<span><b>${h.weeks}</b> active week${h.weeks === 1 ? "" : "s"}</span>`);
+  if (h.bosses) bits.push(`<span><b>${h.bosses}</b> boss${h.bosses === 1 ? "" : "es"} put down</span>`);
+  if (h.insignias) bits.push(`<span><b>${h.insignias}</b> insignia${h.insignias === 1 ? "" : "s"}</span>`);
+  if (h.streak >= 2) bits.push(`<span><b>${h.streak}</b>-day streak</span>`);
+  const tro = ["bronze", "silver", "gold", "platinum"].reduce((n, g) => n + (h.trophies[g] || 0), 0);
+  if (tro) bits.push(`<span><b>${tro}</b> troph${tro === 1 ? "y" : "ies"}</span>`);
+  el.innerHTML = bits.join("");
 }
 
 // What the piece under your finger is, and what the next tier of it costs.
