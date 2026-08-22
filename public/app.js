@@ -124,7 +124,6 @@ function seedCustomPlanTasks(m) {
 // same ids the engine reads.
 function applyModuleLayout() {
   const mods = getModules();
-  const anchor = document.getElementById("settingsModal");
   mods.forEach((m) => {
     const sec = document.getElementById(m.id);
     if (!sec) return;
@@ -175,7 +174,11 @@ function applyModuleLayout() {
         badge.style.setProperty("--ac", attrColor(m.attr));
       }
     }
-    if (anchor && anchor.parentNode === sec.parentNode) anchor.parentNode.insertBefore(sec, anchor);
+    // Order pursuits among themselves, inside their own container. This used
+    // to insert each section before the settings modal, which only worked
+    // while every section shared one parent — moving them into views would
+    // have silently stopped reordering from working at all.
+    if (m.id !== "daily" && sec.parentNode && sec.parentNode.id === "view-pursuits") sec.parentNode.appendChild(sec);
   });
 }
 
@@ -217,7 +220,9 @@ function customSectionHtml(m) {
 function renderCustomSections() {
   if (!window.Forge) return;
   const mods = getModules().filter((m) => m.custom);
-  const anchor = document.getElementById("settingsModal");
+  // A custom pursuit is a pursuit: it belongs on the Pursuits screen with the
+  // built-in ones, not wherever the settings modal happened to sit.
+  const home = (typeof viewEl === "function" && viewEl("pursuits")) || document.getElementById("settingsModal");
   const present = new Set();
   mods.forEach((m) => {
     present.add(m.id);
@@ -227,7 +232,8 @@ function renderCustomSections() {
       sec.id = m.id;
       sec.className = "section section-card glass";
       sec.open = true;
-      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(sec, anchor);
+      if (home && home.id === "view-pursuits") home.appendChild(sec);
+      else if (home && home.parentNode) home.parentNode.insertBefore(sec, home);
     }
     sec.dataset.custom = "1";
     sec.innerHTML = customSectionHtml(m);
@@ -2637,14 +2643,18 @@ function renderDays() {
   }
   const todayIndex = getTodayDayIndex();
   const entries = dayNames().map((day, dayIndex) => ({ day, dayIndex, isToday: dayIndex === todayIndex }));
+  // Today's view is today, on every screen size. The Week view is the board:
+  // today first on a phone, in calendar order on a desktop.
+  const onToday = viewOfSection("daily") === "today";
   const orderedEntries = isMobile() ? [entries[todayIndex]].concat(entries.filter((x) => x.dayIndex !== todayIndex)) : entries;
-  const visibleEntries = isMobile() && mobileFullWeekKey !== weekKey() ? [entries[todayIndex]] : orderedEntries;
+  const visibleEntries = onToday ? [entries[todayIndex]]
+    : (isMobile() && mobileFullWeekKey !== weekKey() ? [entries[todayIndex]] : orderedEntries);
   visibleEntries.forEach(({ day, dayIndex, isToday }) => {
     const date = addDays(selectedWeekStart, dayIndex);
     const tasks = questsForDate(date);
     const card = document.createElement("details");
     card.className = "day-card" + (isToday ? " today" : "");
-    card.open = isMobile() ? isToday : true;
+    card.open = onToday ? true : (isMobile() ? isToday : true);
     card.innerHTML = `<summary class="day-summary"><div class="day-heading"><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="day-subline"><span class="date-tag">${fmt(date)}</span><span class="day-remaining" id="dayLeft-${dayIndex}"></span></div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Add weekly routine for ${day}" aria-label="Add weekly routine for ${day}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
     const group = card.querySelector(".task-group");
     // Bucket by part of day first, so each header can carry its own count.
@@ -2685,9 +2695,11 @@ function renderDays() {
     group.insertAdjacentHTML("beforeend", `<button class="day-quick-add" type="button" data-quest-date="${iso(date)}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button>`);
     wrap.appendChild(card);
   });
-  if (isMobile() && mobileFullWeekKey !== weekKey()) {
+  if (onToday) {
+    wrap.insertAdjacentHTML("beforeend", `<button class="show-week-btn" type="button" data-view="week"><span>Today is handled?</span><strong>Open the week</strong></button>`);
+  } else if (isMobile() && mobileFullWeekKey !== weekKey()) {
     wrap.insertAdjacentHTML("beforeend", `<button class="show-week-btn" type="button"><span>Today is ready</span><strong>Show the other 6 days</strong></button>`);
-    wrap.querySelector(".show-week-btn").addEventListener("click", () => {
+    wrap.querySelector(".show-week-btn:not([data-view])").addEventListener("click", () => {
       mobileFullWeekKey = weekKey();
       renderDays(); loadWeekFields(); updateProgress();
     }, { once: true });
@@ -2733,6 +2745,9 @@ function renderStructure() {
   applySectionVisibility();
   renderScoreboard();
   renderReview();
+  // The cabinet is a screen now, so it has to be repainted when data arrives —
+  // not only when something opens it.
+  if (currentView === "cabinet") paintCabinet();
 }
 // updateLive() only refreshes values in DOM that already exists. Safe to call
 // on every change, including while a field has focus — it never replaces the
@@ -2745,6 +2760,7 @@ function updateLive() {
   updateStreakAndHeatmap();
   if (window.Game) Game.render();
   renderBoss();
+  renderSidebarLive();   // level, streak and boss HP follow the same data
 }
 // The debounced form for text input, where a keystroke should not pay for a
 // full widget refresh. Checkboxes stay immediate so the XP pop feels instant.
@@ -2755,19 +2771,16 @@ function updateLiveSoon() {
 }
 
 // ===== MOBILE SMART LAYOUT =====
+// Views do the work this used to: a pursuit is not on the Today screen at all,
+// so it no longer has to be collapsed out of the way there.
 function applyMobileSmartLayout() {
-  if (!isMobile()) return;
-  
-  // On mobile, auto-collapse non-essential sections
-  const sectionsToCollapse = ['scoreboard', 'workout', 'diet', 'study', 'projects', 'review'];
-  sectionsToCollapse.forEach(id => {
-    const el = document.getElementById(id);
-    if (el && el.tagName === 'DETAILS') el.open = false;
-  });
-  
-  // Keep Daily open
   const daily = document.getElementById('daily');
   if (daily) daily.open = true;
+  if (!isMobile()) return;
+  ['workout', 'diet', 'study', 'projects', 'review'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && el.tagName === 'DETAILS' && el.dataset.userOpened !== '1') el.open = false;
+  });
 }
 
 function loadWeekFields() {
@@ -3156,6 +3169,217 @@ function initSyncPanel() {
 }
 
 
+// ===== VIEWS =====
+// The app was one ~10,500px document: Today's list sat below the character
+// screen, the boss, the heatmap and the quest log, so the thing you open the
+// app to do was the fifth thing you reached. These are four screens instead,
+// switched by hash so the back button works.
+//
+// The views are assembled by MOVING the existing sections into containers
+// rather than by rewriting index.html. Every id and every selector in the rest
+// of this file keeps working, which is what makes a change this structural
+// safe to make in one step.
+const VIEWS = [
+  { id: "today",    label: "Today",    icon: "check",     title: "Today" },
+  { id: "week",     label: "Week",     icon: "clipboard", title: "This week" },
+  { id: "pursuits", label: "Pursuits", icon: "target",    title: "Pursuits" },
+  { id: "cabinet",  label: "Cabinet",  icon: "star",      title: "Cabinet" },
+];
+const VIEW_IDS = VIEWS.map((v) => v.id);
+let currentView = "today";
+
+function viewEl(id) { return document.getElementById(`view-${id}`); }
+// Which view a section id belongs to. Pursuit sections are whatever the module
+// list currently says they are, so a custom pursuit lands in the right place
+// without this map knowing about it.
+function viewOfSection(id) {
+  if (id === "daily") return currentView === "week" ? "week" : "today";
+  if (id === "boss") return "today";
+  if (id === "scoreboard" || id === "activity") return "week";
+  return "pursuits";
+}
+
+function buildViewShell() {
+  const shell = document.querySelector("main.shell");
+  if (!shell || document.getElementById("viewStack")) return;
+
+  const frame = document.createElement("div");
+  frame.className = "app-frame";
+  const side = document.createElement("aside");
+  side.className = "sidebar";
+  side.id = "sidebar";
+  const stack = document.createElement("div");
+  stack.className = "view-stack";
+  stack.id = "viewStack";
+  VIEWS.forEach((v) => {
+    const el = document.createElement("section");
+    el.className = "view";
+    el.id = `view-${v.id}`;
+    el.dataset.view = v.id;
+    el.setAttribute("role", "tabpanel");
+    el.setAttribute("aria-label", v.title);
+    stack.appendChild(el);
+  });
+  frame.appendChild(side);
+  frame.appendChild(stack);
+
+  const hero = shell.querySelector("section.hero");
+  shell.insertBefore(frame, hero || shell.firstElementChild);
+
+  const move = (view, node) => { if (node) viewEl(view).appendChild(node); };
+  // Today: what you came to do, then what it is worth beating.
+  move("today", document.getElementById("questsHub"));
+  move("today", document.getElementById("daily"));
+  move("today", document.getElementById("boss"));
+  // Week: who you are, how the week is going, and the whole board.
+  move("week", hero);
+  move("week", document.getElementById("scoreboard"));
+  move("week", document.getElementById("activity"));
+  move("week", shell.querySelector(".quote-box"));
+  // Pursuits: every remaining section card. Reading the module list here would
+  // depend on settings having loaded, and this runs before the first fetch —
+  // so take what is in the document and let applyModuleLayout() order it once
+  // the real module list exists.
+  shell.querySelectorAll("details.section-card").forEach((sec) => {
+    if (sec.closest(".view")) return;
+    move("pursuits", sec);
+  });
+  // Cabinet stops being a sheet you dismiss and becomes somewhere you go.
+  const cabBody = document.querySelector("#cabinetModal .modal");
+  if (cabBody) {
+    const head = cabBody.querySelector(".modal-head");
+    if (head) head.remove();
+    // The footer, not the first .modal-actions in the tree — the Records form
+    // inside the cabinet has one of its own, and removing that would take the
+    // Save button with it.
+    const closeBtn = cabBody.querySelector("#closeCabinetBtn");
+    const foot = closeBtn && closeBtn.closest(".modal-actions");
+    if (foot) foot.remove();
+    cabBody.classList.remove("modal", "glass");
+    cabBody.classList.add("cabinet-body");
+    move("cabinet", cabBody);
+    const backdrop = document.getElementById("cabinetModal");
+    if (backdrop) backdrop.remove();
+  }
+  renderSidebar();
+}
+
+// Nav is built from the module list, so a pursuit you add appears in it and one
+// you hide disappears from it. Before this the links, the five bottom tabs and
+// the scroll-spy map were three hand-maintained copies of the same six built-in
+// ids: a custom pursuit was reachable from nowhere, and hiding Training left a
+// "Train" tab that scrolled to a display:none element.
+function navItems() {
+  return VIEWS.map((v) => ({ view: v.id, label: v.label, icon: v.icon, sectionId: "" }));
+}
+function visiblePursuits() {
+  const hidden = getHiddenSections();
+  return getModules().filter((m) => m.id !== "daily" && !hidden.includes(m.id));
+}
+function renderSidebar() {
+  const side = document.getElementById("sidebar");
+  if (!side) return;
+  const nav = navItems().map((n) => `
+    <button class="sv-item${currentView === n.view ? " on" : ""}" type="button" data-view="${n.view}">
+      <span class="sv-ico" aria-hidden="true">${moduleIconSvg(n.icon)}</span>
+      <span class="sv-label">${escapeHtml(n.label)}</span>
+    </button>`).join("");
+  const pursuits = visiblePursuits().map((m) => `
+    <button class="sv-sub" type="button" data-jump="${escapeHtml(m.id)}" style="--ac:${pursuitColor(m)}">
+      <span class="sv-dot" aria-hidden="true"></span>${escapeHtml(m.name)}
+    </button>`).join("");
+  side.innerHTML = `
+    <div class="sv-id" id="sidebarIdentity"></div>
+    <nav class="sv-nav" role="tablist" aria-label="Views">${nav}</nav>
+    <div class="sv-group"><span class="sv-group-k">Pursuits</span>${pursuits}</div>
+    <div class="sv-foot" id="sidebarBoss"></div>`;
+  renderSidebarLive();
+}
+// Values only — never markup, so this is safe to call on every update.
+function renderSidebarLive() {
+  const id = document.getElementById("sidebarIdentity");
+  if (id) {
+    const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+    const streak = (window.Game && Game.computeDayStreak) ? Game.computeDayStreak() : 0;
+    const pct = prof && prof.next ? Math.min(100, Math.round(prof.into / prof.next * 100)) : 0;
+    id.innerHTML = `
+      <div class="sv-lvl"><b>${prof ? prof.level : 1}</b><span>LVL</span></div>
+      <div class="sv-idmeta">
+        <div class="sv-name">${escapeHtml((settings && settings.callsign) || "Player One")}</div>
+        <div class="sv-xpbar"><i style="width:${pct}%"></i></div>
+        <div class="sv-streak">${streak ? `🔥 ${streak} day${streak === 1 ? "" : "s"}` : "No streak yet"}</div>
+      </div>`;
+  }
+  const bossFoot = document.getElementById("sidebarBoss");
+  if (bossFoot) {
+    const d = computeBossDamage();
+    bossFoot.innerHTML = d.hasQuests
+      ? `<button class="sv-boss" type="button" data-view="today" title="${escapeHtml(d.boss.taunt)}">
+           <span class="sv-boss-top"><span>${d.boss.emoji}</span><b>${escapeHtml(d.boss.name)}</b></span>
+           <span class="sv-boss-hp"><i style="width:${Math.max(0, 100 - d.dmg)}%"></i></span>
+           <span class="sv-boss-sub">${Math.max(0, 100 - d.dmg)}% HP left</span>
+         </button>`
+      : "";
+  }
+}
+
+// One writer of which view is on screen. Also re-homes Daily, which is the same
+// board in both places — one card in Today, seven in Week — so there is never a
+// second copy of a day's ids in the document.
+function routeTo(view, opts) {
+  const next = VIEW_IDS.includes(view) ? view : "today";
+  const changed = next !== currentView;
+  currentView = next;
+  const daily = document.getElementById("daily");
+  if (daily) {
+    const home = viewEl(viewOfSection("daily"));
+    if (home && daily.parentNode !== home) {
+      // Keep Daily above the boss card in Today, and above nothing in Week.
+      const boss = home.querySelector(":scope > #boss");
+      home.insertBefore(daily, boss || null);
+    }
+    daily.open = true;
+  }
+  VIEWS.forEach((v) => {
+    const el = viewEl(v.id);
+    if (el) el.classList.toggle("on", v.id === next);
+  });
+  document.querySelectorAll("[data-view]").forEach((b) => {
+    if (b.classList.contains("view")) return;
+    b.classList.toggle("on", b.dataset.view === next);
+    if (b.hasAttribute("role")) b.setAttribute("aria-selected", String(b.dataset.view === next));
+  });
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.target === next));
+  if (location.hash.slice(1) !== next) {
+    // The first route on a cold load replaces rather than pushes, so the back
+    // button leaves the app instead of cycling through a hash you never chose.
+    const write = (opts && opts.fromHash) ? history.replaceState : history.pushState;
+    write.call(history, null, "", `#${next}`);
+  }
+  if (changed) {
+    // The cabinet used to be painted by openCabinet(); arriving by hash, back
+    // button or bottom tab has to fill it just the same.
+    if (next === "cabinet") paintCabinet();
+    renderDays();
+    loadWeekFields();
+    updateProgress();
+    if (!(opts && opts.keepScroll)) window.scrollTo(0, 0);
+  }
+  renderSidebarLive();
+}
+
+function initViews() {
+  buildViewShell();
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-view]");
+    if (btn && !btn.classList.contains("view")) { e.preventDefault(); routeTo(btn.dataset.view); return; }
+    const jump = e.target.closest("[data-jump]");
+    if (jump) { e.preventDefault(); scrollToSection(jump.dataset.jump); }
+  });
+  window.addEventListener("hashchange", () => routeTo(location.hash.slice(1), { fromHash: true }));
+  routeTo(location.hash.slice(1) || "today", { fromHash: true });
+}
+
 // ===== MOBILE TAB BAR =====
 function tabHaptic() {
   if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
@@ -3168,53 +3392,28 @@ function initMobileTabBar() {
   const tabBtns = document.querySelectorAll('.tab-btn');
   const moreDrawer = document.getElementById('moreDrawer');
 
-  tabBtns.forEach(btn => {
+  // A tab is a view now, not a scroll target. "More" is still a drawer,
+  // because it holds actions (reports, settings, share) rather than a screen.
+  tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.target;
       tabHaptic();
-
-      // Handle "More" drawer toggle
       if (target === 'more') {
         moreDrawer.classList.toggle('active');
-        // Update tab active state
-        tabBtns.forEach(b => b.classList.remove('active'));
+        tabBtns.forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         return;
       }
-
-      // Cabinet opens the trophy cabinet sheet (it's a modal, not a section).
-      if (target === 'cabinet') {
-        moreDrawer.classList.remove('active');
-        tabBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        openCabinet();
-        return;
-      }
-
-      // Close more drawer if open
       moreDrawer.classList.remove('active');
-
-      // Update active tab
-      tabBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      // Scroll to the target section. Today goes straight to today's task list
-      // (the dashboard hero is reachable by tapping the mobile header instead).
-      const targetEl = document.getElementById(target);
-      if (targetEl) {
-        if (targetEl.tagName === 'DETAILS' && !targetEl.open) targetEl.open = true;
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      routeTo(target);
     });
   });
-
-  initScrollSpy(tabBtns, moreDrawer);
 
   // Tapping the mobile header — the sticky context bar or the brand wordmark —
   // jumps back up to the dashboard hero (character screen).
   document.querySelectorAll('.mobile-context, .brand').forEach(el => {
     el.style.cursor = 'pointer';
-    el.addEventListener('click', () => { tabHaptic(); scrollToTop(); });
+    el.addEventListener('click', () => { tabHaptic(); routeTo('today'); scrollToTop(); });
   });
   
   // More drawer items
@@ -3256,54 +3455,21 @@ function initMobileTabBar() {
   // A second handler here used to dismiss the sheet behind its back.
 }
 
+// A section lives in exactly one view now, so jumping to one means going there
+// first — otherwise the scroll lands on a hidden element and nothing happens.
 function scrollToSection(id) {
+  const view = viewOfSection(id);
+  if (view !== currentView) routeTo(view, { keepScroll: true });
   const el = document.getElementById(id);
-  if (el) {
-    if (el.tagName === 'DETAILS' && !el.open) el.open = true;
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
+  if (!el) return;
+  if (el.tagName === 'DETAILS' && !el.open) el.open = true;
+  requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 
-// Keep the active bottom-tab in sync with what's actually on screen, so the bar
-// stops lying after the user scrolls. Sections without their own tab fold into
-// the nearest one — the whole top region (hero/boss/scoreboard) is
-// Today; diet→Train; projects/review→More. Cabinet is a modal, never scroll-lit.
-function initScrollSpy(tabBtns, moreDrawer) {
-  const MAP = [
-    ['charScreen', 'daily'], ['boss', 'daily'],
-    ['scoreboard', 'daily'], ['daily', 'daily'],
-    ['workout', 'workout'], ['diet', 'workout'],
-    ['study', 'study'],
-    ['projects', 'more'], ['review', 'more'],
-  ];
-  const LINE = 120; // activation line measured from the top of the viewport
-  let ticking = false;
-
-  function update() {
-    ticking = false;
-    if (!isMobile()) return;
-    if (moreDrawer && moreDrawer.classList.contains('active')) return; // don't fight the drawer
-    if (document.querySelector('.modal-backdrop.active')) return; // don't fight an open sheet (e.g. Cabinet)
-    // Pick the section sitting closest to the activation line from above — this
-    // is order-independent, so it stays correct even though the page's vertical
-    // order (scoreboard sits above the daily list) differs from MAP order.
-    let current = MAP[0][1];
-    let bestTop = -Infinity;
-    for (const [secId, target] of MAP) {
-      const el = document.getElementById(secId);
-      if (!el || el.offsetParent === null) continue; // skip hidden sections
-      const top = el.getBoundingClientRect().top;
-      if (top - LINE <= 0 && top > bestTop) { bestTop = top; current = target; }
-    }
-    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.target === current));
-  }
-
-  window.addEventListener('scroll', () => {
-    if (!ticking) { ticking = true; requestAnimationFrame(update); }
-  }, { passive: true });
-  window.addEventListener('resize', update);
-  update();
-}
+// The bottom tab used to be kept honest by a scroll-spy over a hand-maintained
+// map of six section ids — a list that rotted every time the section set
+// changed. With views the active tab is simply the active view, which routeTo()
+// already writes, so there is nothing left to guess at.
 
 // ===== SECTION VISIBILITY =====
 // The single writer of section `display`. Covers every pursuit section (built-in
@@ -3359,15 +3525,24 @@ function openSettings() {
   openModal("settingsModal");
 }
 
-function openCabinet() {
+// Everything the cabinet needs painted, in one place. The view can be reached
+// by hash, back button, bottom tab or button, and every one of those has to
+// fill all four panes — not just the two the old open path happened to call
+// alongside Game.renderCabinet().
+function paintCabinet() {
   initCabinetTabs();
   if (window.Game && Game.renderCabinet) Game.renderCabinet();
   renderTrophyCase();
   renderBestiary();
   showCabinetTab(cabinetTab);
+}
+function openCabinet() {
+  if (document.getElementById("view-cabinet")) { routeTo("cabinet"); paintCabinet(); return; }
+  initCabinetTabs();
+  paintCabinet();
   openModal("cabinetModal");
 }
-function closeCabinet() { closeModal("cabinetModal"); }
+function closeCabinet() { if (document.getElementById("view-cabinet")) routeTo("today"); else closeModal("cabinetModal"); }
 
 // ===== MODALS =====
 // One controller for every dialog. Before this, each modal hand-toggled .active
@@ -4121,8 +4296,13 @@ function bindEvents() {
   document.getElementById("prevWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, -7); applyWeekToUI(); };
   document.getElementById("nextWeekBtn").onclick = () => { selectedWeekStart = addDays(selectedWeekStart, 7); applyWeekToUI(); };
   document.getElementById("currentWeekBtn").onclick = () => { selectedWeekStart = getStartOfWeek(new Date()); applyWeekToUI(); };
-  document.getElementById("expandAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = true);
-  document.getElementById("collapseAllBtn").onclick = () => document.querySelectorAll("details.section-card").forEach(d => d.open = false);
+  // Expand-all / collapse-all held permanent seats in the topbar to manage one
+  // long scroll of sections. Views manage that now, so the buttons are gone.
+  // A pursuit the user opens by hand stays open across a re-render.
+  document.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (d && d.tagName === "DETAILS" && d.classList.contains("section-card")) d.dataset.userOpened = d.open ? "1" : "0";
+  }, true);
 
   document.querySelectorAll(".nav a[href^='#']").forEach(link => {
     link.addEventListener("click", e => {
@@ -4488,6 +4668,7 @@ function structuredCloneSafe(obj) { return JSON.parse(JSON.stringify(obj)); }
 // ===== INIT =====
 async function init() {
   bindEvents();  // event delegation + button handlers — once, up front
+  initViews();   // build the four screens before anything renders into them
 
   // Instant paint from the last-known cache so a reload never flashes the empty shell.
   // Writes stay suppressed (booting) so this can't clobber fresher server state.

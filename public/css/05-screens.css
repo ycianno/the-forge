@@ -1746,3 +1746,126 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
   .boss-emoji { font-size: 36px; }
   .boss-dmg-split { display: none; }   /* the hint line below already says it */
 }
+
+/* ===========================================================================
+ * THE SHELL — four screens instead of one 10,500px scroll
+ * ---------------------------------------------------------------------------
+ * Desktop is a sidebar and a pane: identity and destinations stay put while
+ * the content changes, so the boss's HP and your level are visible from every
+ * screen instead of being buried at the top of one. Below 1024px the sidebar
+ * goes away and the bottom tab bar becomes the switcher.
+ * ======================================================================== */
+.app-frame { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: var(--s-5); align-items: start; }
+
+.view-stack { min-width: 0; }
+.view { display: none; flex-direction: column; gap: var(--s-5); min-width: 0; }
+.view.on { display: flex; }
+.view > .section, .view > .hero { margin: 0; }
+
+/* Today is the agenda, so the section's own chrome is redundant there — the
+   screen is already called Today. In Week the same card keeps its header. */
+#view-today > #daily > summary { display: none; }
+#view-today > #daily > .content { padding-top: var(--s-4); }
+#view-today > #questsHub { margin: 0; }
+
+/* ----- sidebar ----- */
+.sidebar {
+  position: sticky; top: 92px;
+  display: flex; flex-direction: column; gap: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--glass); box-shadow: var(--e-2), var(--edge);
+}
+.sv-id { display: flex; align-items: center; gap: var(--s-3); }
+.sv-lvl {
+  display: grid; place-items: center; flex: 0 0 auto;
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent-success) 45%, transparent);
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--accent-success) 18%, transparent), transparent 70%);
+}
+.sv-lvl b { font-family: 'Outfit', sans-serif; font-size: var(--t-lg); font-weight: 900; line-height: 1; }
+.sv-lvl span { font-size: 8px; font-weight: 800; letter-spacing: .14em; color: var(--muted-2); }
+.sv-idmeta { min-width: 0; flex: 1 1 auto; }
+.sv-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-xpbar { height: 4px; margin: 6px 0 5px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.sv-xpbar i { display: block; height: 100%; border-radius: inherit; background: var(--gradient-brand); }
+.sv-streak { font-size: var(--t-2xs); font-weight: 700; color: var(--muted); }
+
+.sv-nav { display: flex; flex-direction: column; gap: 2px; }
+.sv-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 11px; border-radius: var(--r-sm);
+  border: 1px solid transparent; background: transparent;
+  color: var(--muted); font-size: var(--t-sm); font-weight: 700; text-align: left;
+}
+.sv-item:hover { background: rgba(255,255,255,.05); color: var(--text); transform: none; box-shadow: none; }
+.sv-item.on { background: color-mix(in srgb, var(--accent-primary) 14%, transparent); border-color: color-mix(in srgb, var(--accent-primary) 32%, transparent); color: var(--text); }
+.sv-ico { display: inline-flex; flex: 0 0 auto; }
+.sv-ico .ic { width: 16px; height: 16px; }
+.sv-item.on .sv-ico { color: var(--accent-primary); }
+
+.sv-group { display: flex; flex-direction: column; gap: 1px; padding-top: var(--s-3); border-top: 1px solid var(--line); }
+.sv-group-k { font-size: var(--t-2xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); margin-bottom: 6px; }
+.sv-sub {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 6px 10px; border-radius: var(--r-sm);
+  border: 1px solid transparent; background: transparent;
+  color: var(--muted); font-size: var(--t-xs); font-weight: 600; text-align: left;
+}
+.sv-sub:hover { background: rgba(255,255,255,.05); color: var(--text); transform: none; box-shadow: none; }
+.sv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ac, var(--muted-2)); flex: 0 0 auto; }
+
+.sv-foot:empty { display: none; }
+.sv-boss {
+  display: block; width: 100%; padding: 10px; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: rgba(255,255,255,.03);
+}
+.sv-boss:hover { transform: none; box-shadow: none; border-color: var(--line-strong); }
+.sv-boss-top { display: flex; align-items: center; gap: 6px; font-size: var(--t-xs); }
+.sv-boss-top b { font-family: 'Outfit', sans-serif; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-boss-hp { display: block; height: 5px; margin: 7px 0 5px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.sv-boss-hp i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--red), var(--amber)); }
+.sv-boss-sub { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); }
+
+@media (max-width: 1023px) {
+  .app-frame { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { display: none; }
+}
+
+/* Today is one column of one day. The days grid is a two-up board in Week,
+   which would otherwise leave today's card at half width beside an empty cell,
+   and a task list reads badly at 900px anyway. */
+#view-today { max-width: 780px; }
+#view-today #daysGrid { grid-template-columns: minmax(0, 1fr); }
+#view-today .show-week-btn { width: 100%; }
+
+/* The hero's two-column split was written against the full page width. With a
+   232px sidebar beside it the same viewport gives the pane ~980px, so the
+   character screen and the stat sheet both went cramped — the callsign wrapped
+   mid-name. Size it against the pane it actually lives in, not the window. */
+.view-stack { container-type: inline-size; container-name: pane; }
+@container pane (max-width: 1000px) {
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .hero-main { padding: var(--s-6); min-height: 0; }
+  .panel { padding: var(--s-6); }
+}
+@container pane (max-width: 720px) {
+  #daysGrid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Two-up only when there is genuinely room for two; below that the viewport
+   rule in 04-responsive already drops the quest log to one column, and
+   overriding it from here put a percentage badge past the edge of a phone. */
+@container pane (min-width: 481px) and (max-width: 720px) {
+  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* The cabinet stopped being a sheet, so it needs the surface the sheet used to
+   give it. Its panes were written for a modal 500–900px wide; the pane is
+   wider, so the wall of insignias gets more per row rather than more scroll. */
+.cabinet-body {
+  padding: var(--s-5);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--glass); box-shadow: var(--e-2), var(--edge);
+  max-height: none; overflow: visible;
+}
+.cabinet-body .cab-tabs { margin-top: 0; }

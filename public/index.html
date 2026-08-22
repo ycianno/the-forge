@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=3" />
   <link rel="stylesheet" href="css/03-components.css?v=4" />
   <link rel="stylesheet" href="css/04-responsive.css?v=3" />
-  <link rel="stylesheet" href="css/05-screens.css?v=14" />
+  <link rel="stylesheet" href="css/05-screens.css?v=19" />
   <link rel="stylesheet" href="css/06-mobile.css?v=6" />
 </head>
 <body>
@@ -25,46 +25,39 @@
     <div class="topbar">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></span><span>The Forge</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> <span id="streakUnit">Weeks</span></span><span class="save-state" id="saveState" role="status" aria-live="polite" data-state="saved">Saved</span></div>
       <nav class="nav" id="mainNav">
-        <!-- Desktop nav links -->
-        <a href="#scoreboard" class="desktop-nav-item">Quest Log</a>
-        <a href="#daily" class="desktop-nav-item">Daily</a>
-        <a href="#workout" class="desktop-nav-item">Training</a>
-        <a href="#diet" class="desktop-nav-item">Provisions</a>
-        <a href="#study" class="desktop-nav-item">Scholarship</a>
-        <a href="#projects" class="desktop-nav-item">Workshop</a>
-        <span class="nav-divider desktop-nav-item" aria-hidden="true"></span>
+        <!-- Destinations live in the sidebar, which is rendered from the module
+             list (renderSidebar). These are actions, not places. -->
         <button class="ghost nav-icon desktop-nav-item" id="openFocusBtn" title="Focus timer" aria-label="Focus timer"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="13" r="8"/><path d="M12 9.5V13l2.5 1.5"/><path d="M9 2h6"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openCalendarBtn" title="Calendar" aria-label="Calendar"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openReportBtn" title="Reports" aria-label="Reports"><svg viewBox="0 0 24 24" class="ic"><path d="M4 20V10M10 20V4M16 20v-7M3 20h18"/></svg></button>
-        <button class="ghost nav-icon desktop-nav-item" id="expandAllBtn" title="Expand all" aria-label="Expand all"><svg viewBox="0 0 24 24" class="ic"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg></button>
-        <button class="ghost nav-icon desktop-nav-item" id="collapseAllBtn" title="Collapse all" aria-label="Collapse all"><svg viewBox="0 0 24 24" class="ic"><path d="M8 5l4 4 4-4M8 19l4-4 4 4"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="soundToggle" title="Sound on" aria-label="Mute sounds"><svg viewBox="0 0 24 24" class="ic"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openCabinetBtn" title="Cabinet" aria-label="Cabinet"><svg viewBox="0 0 24 24" class="ic"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0V4zM6 6H3v1a3 3 0 0 0 3 3M18 6h3v1a3 3 0 0 1-3 3"/></svg></button>
         <button class="ghost nav-icon desktop-nav-item" id="openSettingsBtn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" class="ic"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
         <a href="/api/logout" class="danger nav-icon desktop-nav-item" title="Logout" aria-label="Logout" style="margin-left: 6px;"><svg viewBox="0 0 24 24" class="ic"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></a>
 
-        <!-- Mobile bottom tab bar -->
-        <button class="tab-btn active" data-target="daily" id="tabDaily">
+        <!-- Mobile bottom tab bar. Order matches the sidebar: the screens in the
+             order you move through them, then the drawer of actions. -->
+        <button class="tab-btn active" data-target="today" id="tabDaily">
           <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
           <span class="tab-label">Today</span>
+        </button>
+        <button class="tab-btn" data-target="week" id="tabWeek">
+          <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+          <span class="tab-label">Week</span>
+        </button>
+        <button class="tab-btn" data-target="pursuits" id="tabPursuits">
+          <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="12" r="9"/><path d="m15 9-2 5-5 2 2-5z"/></svg></span>
+          <span class="tab-label">Pursuits</span>
         </button>
         <button class="tab-btn" data-target="cabinet" id="tabCabinet">
           <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0V4zM6 6H3v1a3 3 0 0 0 3 3M18 6h3v1a3 3 0 0 1-3 3"/></svg></span>
           <span class="tab-label">Cabinet</span>
         </button>
-        <button class="tab-btn" data-target="workout" id="tabTrain">
-          <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
-          <span class="tab-label">Train</span>
-        </button>
-        <button class="tab-btn" data-target="study" id="tabStudy">
-          <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
-          <span class="tab-label">Study</span>
-        </button>
         <button class="tab-btn" data-target="more" id="tabMore">
           <span class="tab-icon"><svg viewBox="0 0 24 24" class="ic"><path d="M4 12h16M4 6h16M4 18h16"/></svg></span>
           <span class="tab-label">More</span>
         </button>
-      </nav>
+</nav>
     </div>
 
     <!-- Mobile Context Bar -->
@@ -708,7 +701,7 @@
   <script src="modules.js?v=19"></script>
   <script src="game.js?v=33"></script>
   <script src="fx.js?v=9"></script>
-  <script src="app.js?v=83"></script>
+  <script src="app.js?v=89"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>
