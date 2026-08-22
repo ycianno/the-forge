@@ -1275,6 +1275,9 @@ function attrName(attr) { return (settings.attrLabels && settings.attrLabels[att
 function attrColor(attr) { return (settings.attrColors && settings.attrColors[attr]) || (window.Forge && Forge.ATTR_COLOR[attr]) || "#94a3b8"; }
 // A pursuit's accent, already resolved by the engine (chosen shade → attribute
 // family base → neutral). Read it; never recompute it from the attribute here.
+// A pursuit's accent, assigned across the whole list by the engine — see
+// applyOverlays(), which hands each pursuit the next shade in its attribute's
+// family so two pursuits feeding one stat never look the same.
 function pursuitColor(m) { return (m && m.color) || Forge.NEUTRAL_ACCENT; }
 // A pursuit's weekly target value, from the descriptor. The settings key each
 // pursuit stores it under is the engine's business, not the UI's.

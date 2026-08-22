@@ -502,12 +502,31 @@
     const colors = settings.moduleColors || {};
     const hidden = settings.hiddenSections || [];
     const order = settings.moduleOrder;
+    // Each attribute owns five shades. They existed from the start and nothing
+    // ever assigned from them — accentFor() sees one module and cannot know its
+    // position, so every pursuit feeding a stat came out the family's first
+    // colour and two Mind pursuits were indistinguishable. Assigning here, where
+    // the whole list is in hand, is what the palette was for.
+    //
+    // The index is taken BEFORE the reorder below, so dragging a pursuit up the
+    // list never repaints it — only adding or removing one in the same family
+    // can shift the shades after it.
+    const famCount = {};
     modules.forEach((m) => {
       if (names[m.id]) m.name = names[m.id];
       // Identity overlays: chosen icon/colour beat the built-in or inferred one.
       // Applied uniformly to built-in and custom pursuits, exactly like names.
       if (icons[m.id]) m.icon = icons[m.id];
-      m.color = accentFor(m, colors[m.id]);
+      if (colors[m.id]) {
+        m.color = accentFor(m, colors[m.id]);      // a colour the user picked wins
+      } else if (!m.attr) {
+        m.color = NEUTRAL_ACCENT;
+      } else {
+        const family = PURSUIT_PALETTE[m.attr] || [];
+        const n = famCount[m.attr] || 0;
+        famCount[m.attr] = n + 1;
+        m.color = family.length ? family[n % family.length] : NEUTRAL_ACCENT;
+      }
       m.enabled = !hidden.includes(m.id);
     });
     if (Array.isArray(order) && order.length) {

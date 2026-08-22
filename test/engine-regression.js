@@ -244,7 +244,24 @@ else {
   const rt = Forge.targetOf(reading);
   if (!rt || rt.value !== 10 || rt.unit !== "pages/wk") { fails++; console.log("COUNTER TARGET READ DRIFT", rt); }
   // Overlays reach custom pursuits too: colour resolves inside Mind's family.
-  if (reading.color !== Forge.PURSUIT_PALETTE.Mind[0]) { fails++; console.log("CUSTOM PURSUIT COLOUR DRIFT", reading.color); }
+  if (Forge.PURSUIT_PALETTE.Mind.indexOf(reading.color) < 0) {
+    fails++; console.log("CUSTOM PURSUIT COLOUR OUTSIDE ITS FAMILY", reading.color);
+  }
+  // ...and it is a DIFFERENT shade from the built-in Mind pursuit beside it.
+  // Each attribute carries five shades precisely so two pursuits feeding one
+  // stat can be told apart; for a long time nothing assigned from them and
+  // every Mind pursuit came out the same purple. This is the assertion that
+  // stops that coming back.
+  const studyM = composed(cSettings).find((m) => m.id === "study");
+  if (studyM && studyM.attr === reading.attr && studyM.color === reading.color) {
+    fails++; console.log("TWO PURSUITS IN ONE FAMILY SHARE A COLOUR", reading.attr, reading.color);
+  }
+  // A colour the user picked still beats the automatic one.
+  const pickedSettings = Object.assign({}, cSettings, { moduleColors: { "custom-reading": Forge.PURSUIT_PALETTE.Mind[4] } });
+  const picked = composed(pickedSettings).find((m) => m.id === "custom-reading");
+  if (!picked || picked.color !== Forge.PURSUIT_PALETTE.Mind[4]) {
+    fails++; console.log("CHOSEN PURSUIT COLOUR IGNORED", picked && picked.color);
+  }
   Forge.setTargetOn(cSettings, reading, 25);
   if (cSettings.customModules[0].target.value !== 25) { fails++; console.log("COUNTER TARGET WRITE DRIFT", cSettings.customModules[0].target); }
 }
