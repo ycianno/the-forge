@@ -1929,6 +1929,111 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 }
 
 /* ===========================================================================
+ * THE CHARACTER SHEET
+ * ---------------------------------------------------------------------------
+ * The radar used to be the whole answer at 108px beside a callsign: you could
+ * see Mind was short and had no way to ask why. Here it is one reading among
+ * several, and the ladder is the spine — six rungs you can see at once instead
+ * of a rank name and a row of pips you have to decode.
+ * ======================================================================== */
+.char-room { padding: var(--s-5); }
+.char-tabs { margin-top: 0; margin-bottom: var(--s-4); }
+.char-pane { display: none; }
+.char-pane.active { display: flex; flex-direction: column; gap: var(--s-5); }
+.char-pane > .hero { margin: 0; }
+.char-pane > .room-body { padding: 0; border: none; background: none; box-shadow: none; }
+
+/* ----- the ladder ----- */
+.rank-ladder {
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: rgba(255,255,255,0.03);
+}
+.rl-head { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-4); }
+.rl-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md); }
+.rl-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
+.rl-steps {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s-2);
+}
+.rl-step { position: relative; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+/* The rail runs behind the marks, so a rung that is reached lights its own
+   segment and the ladder reads left to right without a separate track. */
+.rl-step::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 5px; height: 2px;
+  background: rgba(255,255,255,0.08);
+}
+.rl-step.done::before, .rl-step.here::before { background: var(--heat-2); }
+.rl-mark {
+  position: relative; z-index: 1;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--bg-2, #16161c); border: 2px solid rgba(255,255,255,0.16);
+}
+.rl-step.done .rl-mark { background: var(--heat-2); border-color: var(--heat-2); }
+.rl-step.here .rl-mark {
+  background: var(--heat-4); border-color: var(--heat-4);
+  box-shadow: 0 0 12px var(--heat-glow);
+}
+.rl-name {
+  font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-xs);
+  color: var(--muted-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rl-step.done .rl-name { color: var(--muted); }
+.rl-step.here .rl-name { color: var(--text); }
+.rl-lvl { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); }
+
+/* ----- the five attributes ----- */
+.attr-sheet {
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: rgba(255,255,255,0.03);
+}
+.as-head { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-4); }
+.as-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md); }
+.as-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
+.as-rows { display: grid; gap: var(--s-3); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.as-row {
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: rgba(0,0,0,0.22);
+  border-left: 3px solid var(--ac, var(--muted-2));
+  min-width: 0;
+}
+.as-row.is-behind { background: color-mix(in srgb, var(--ac) 8%, rgba(0,0,0,0.22)); }
+.as-row-head { display: flex; align-items: center; gap: var(--s-2); }
+.as-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); flex: 1 1 auto; min-width: 0; }
+.as-lvl { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-sm); color: var(--ac); flex: 0 0 auto; }
+.as-flag {
+  flex: 0 0 auto;
+  font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: var(--r-pill);
+  color: var(--heat-4); background: color-mix(in srgb, var(--heat-4) 16%, transparent);
+}
+.as-bar { height: 6px; margin: 9px 0 6px; border-radius: var(--r-pill); background: rgba(255,255,255,0.07); overflow: hidden; }
+.as-fill { display: block; height: 100%; border-radius: inherit; }
+.as-meta { display: flex; justify-content: space-between; gap: var(--s-2); font-size: var(--t-2xs); font-weight: 600; color: var(--muted-2); }
+.as-feeds { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+.as-feeds-k { font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); margin-right: 2px; }
+.as-feed {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--t-2xs); font-weight: 700; color: var(--muted);
+  padding: 3px 8px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--ac) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ac) 26%, transparent);
+}
+.as-feed-none { color: var(--muted-2); background: none; border-style: dashed; }
+
+@media (max-width: 768px) {
+  .char-room { padding: var(--s-3); }
+  .rl-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-3) var(--s-2); }
+  /* Three across means the rail would draw a line into empty space at the end
+     of each row, so it only spans within a row. */
+  .rl-step:nth-child(3n)::before { right: 50%; }
+  .rl-step:nth-child(3n+1)::before { left: 5px; }
+  .as-rows { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ===========================================================================
  * THE RECORD (Month)
  * ---------------------------------------------------------------------------
  * One room, four panes, five retired modals. The panes are the cabinet's tab

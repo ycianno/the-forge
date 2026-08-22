@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=5" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=4" />
-  <link rel="stylesheet" href="css/05-screens.css?v=34" />
+  <link rel="stylesheet" href="css/05-screens.css?v=35" />
   <link rel="stylesheet" href="css/06-mobile.css?v=7" />
 </head>
 <body>
@@ -168,11 +168,10 @@
 
       <aside class="panel glass char-panel">
         <div class="panel-head">
-          <h3 class="panel-title">Attributes</h3>
-          <span class="panel-sub">Your stat sheet</span>
+          <h3 class="panel-title">Shape</h3>
+          <span class="panel-sub">Where the training actually went</span>
         </div>
         <div class="attr-radar" id="attrRadar"></div>
-        <div class="attr-legend" id="attrLegend"></div>
       </aside>
     </section>
 
@@ -204,6 +203,23 @@
         </div>
         <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
       </div>
+    </section>
+
+    <!-- THE CHARACTER SHEET.
+         Two panes: who you are, and what you have. The identity block, the
+         stats and the trophy teaser are MOVED in from the hero at boot (see
+         buildViewShell) so every id Game.render() writes to keeps resolving;
+         the ladder and the attribute sheet are painted by renderCharacter(). -->
+    <section class="section char-room glass" id="charRoom">
+      <div class="settings-tabs char-tabs" role="tablist" aria-label="Character">
+        <button class="settings-tab active" data-char-tab="sheet" role="tab" aria-selected="true" aria-controls="charPaneSheet" type="button">Sheet</button>
+        <button class="settings-tab" data-char-tab="cabinet" role="tab" aria-selected="false" aria-controls="charPaneCabinet" type="button">Cabinet</button>
+      </div>
+      <div class="char-pane active" id="charPaneSheet" role="tabpanel">
+        <div class="rank-ladder" id="rankLadder"></div>
+        <div class="attr-sheet" id="attrSheet"></div>
+      </div>
+      <div class="char-pane" id="charPaneCabinet" role="tabpanel"></div>
     </section>
 
     <!-- THE RECORD.
@@ -712,10 +728,10 @@
   </main>
 
   <script src="modules.js?v=21"></script>
-  <script src="game.js?v=35"></script>
+  <script src="game.js?v=37"></script>
   <script src="fx-stage.js?v=2"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=104"></script>
+  <script src="app.js?v=106"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

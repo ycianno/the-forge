@@ -1749,6 +1749,119 @@ function markSelectedDay() {
   });
 }
 
+// ===== THE CHARACTER SHEET =====
+// A 108px radar wedged beside a callsign told you the shape of your training
+// and nothing else: you could see Mind was short and had no way to ask why.
+// The sheet answers that in one screen — each attribute's level, how far into
+// it you are, its whole lifetime pool, and which pursuits actually route XP
+// into it. The pursuit list is derived from the module list, so a custom
+// pursuit appears against its attribute without this code knowing about it.
+let charTab = "sheet";
+
+// Which pursuits feed an attribute: the modules that carry it, plus the task
+// categories the engine attributes to it. Both come from their owners rather
+// than from a copy kept here, which is what stops the two drifting apart.
+function feedersFor(attrKey) {
+  const mods = getModules().filter((m) => m.attr === attrKey && !getHiddenSections().includes(m.id));
+  return mods.map((m) => ({ name: m.name, color: pursuitColor(m) }));
+}
+
+function renderRankLadder(prof) {
+  const el = document.getElementById("rankLadder");
+  if (!el || !prof) return;
+  const ranks = (window.Game && Game.RANKS) ? Game.RANKS : [];
+  if (!ranks.length) { el.innerHTML = ""; return; }
+  const here = prof.rank.name;
+  const idx = ranks.findIndex((r) => r.name === here);
+  const next = ranks[idx + 1];
+  const steps = ranks.map((r, i) => {
+    const state = i < idx ? "done" : i === idx ? "here" : "todo";
+    return `<li class="rl-step ${state}">
+      <span class="rl-mark" aria-hidden="true"></span>
+      <span class="rl-name">${escapeHtml(r.name)}</span>
+      <span class="rl-lvl">Lv ${r.min}</span>
+    </li>`;
+  }).join("");
+  const toGo = next ? next.min - prof.level : 0;
+  el.innerHTML = `
+    <div class="rl-head">
+      <span class="rl-title">The ladder</span>
+      <span class="rl-sub">${next
+        ? `${escapeHtml(here)} · Tier ${escapeHtml(prof.rank.tier)} — ${toGo} level${toGo === 1 ? "" : "s"} to ${escapeHtml(next.name)}`
+        : `${escapeHtml(here)} — the top of the ladder`}</span>
+    </div>
+    <ol class="rl-steps">${steps}</ol>`;
+}
+
+function renderAttrSheet(prof) {
+  const el = document.getElementById("attrSheet");
+  if (!el || !prof) return;
+  const attrs = prof.attrs || [];
+  // "Behind" is relative: the lowest attribute is only worth calling out when
+  // there is a spread to speak of. Flagging Mind at Lv 1 when everything is at
+  // Lv 1 would be noise dressed as insight.
+  const levels = attrs.map((a) => a.level);
+  const lo = Math.min(...levels), hi = Math.max(...levels);
+  const spread = hi - lo >= 2;
+  el.innerHTML = `
+    <div class="as-head">
+      <span class="as-title">The five attributes</span>
+      <span class="as-sub">Every task routes its XP to exactly one of these</span>
+    </div>
+    <div class="as-rows">${attrs.map((a) => {
+      const feeders = feedersFor(a.key);
+      const chips = feeders.length
+        ? feeders.map((f) => `<span class="as-feed" style="--ac:${f.color}">${escapeHtml(f.name)}</span>`).join("")
+        : `<span class="as-feed as-feed-none">no pursuit routes here</span>`;
+      const behind = spread && a.level === lo ? `<span class="as-flag">behind</span>` : "";
+      return `<div class="as-row${behind ? " is-behind" : ""}" style="--ac:${a.color}">
+        <div class="as-row-head">
+          <span class="attr-dot" style="background:${a.color}"></span>
+          <span class="as-name">${escapeHtml(a.label || a.key)}</span>
+          ${behind}
+          <span class="as-lvl">Lv ${a.level}</span>
+        </div>
+        <div class="as-bar"><span class="as-fill" style="width:${a.pct}%;background:${a.color}"></span></div>
+        <div class="as-meta">
+          <span>${Number(a.into).toLocaleString()} / ${Number(a.need).toLocaleString()} XP to Lv ${a.level + 1}</span>
+          <span>${Number(a.xp).toLocaleString()} lifetime</span>
+        </div>
+        <div class="as-feeds"><span class="as-feeds-k">Fed by</span>${chips}</div>
+      </div>`;
+    }).join("")}</div>`;
+}
+
+function renderCharacter() {
+  const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+  if (!prof) return;
+  renderRankLadder(prof);
+  renderAttrSheet(prof);
+}
+
+function showCharTab(name) {
+  charTab = name === "cabinet" ? "cabinet" : "sheet";
+  document.querySelectorAll("[data-char-tab]").forEach((t) => {
+    const on = t.dataset.charTab === charTab;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", String(on));
+  });
+  ["sheet", "cabinet"].forEach((k) => {
+    const pane = document.getElementById("charPane" + k[0].toUpperCase() + k.slice(1));
+    if (pane) pane.classList.toggle("active", k === charTab);
+  });
+  if (charTab === "cabinet") paintCabinet();
+  else renderCharacter();
+}
+function initCharTabs() {
+  const bar = document.querySelector(".char-tabs");
+  if (!bar || bar._wired) return;
+  bar._wired = true;
+  bar.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-char-tab]");
+    if (t) showCharTab(t.dataset.charTab);
+  });
+}
+
 // ===== THE RECORD (Month) =====
 // Four panes over one span of history. Painting is lazy — Trends walks every
 // week in the database, and doing that on arrival at the room would cost the
@@ -2872,6 +2985,9 @@ function updateLive() {
   if (window.Game) Game.render();
   renderBoss();
   renderSidebarLive();   // level, streak and boss HP follow the same data
+  // The stat sheet reads the same profile Game.render() just recomputed, but
+  // walking every week to draw a room nobody is looking at is pure waste.
+  if (currentView === "character" && charTab === "sheet") renderCharacter();
 }
 // The debounced form for text input, where a keystroke should not pay for a
 // full widget refresh. Checkboxes stay immediate so the XP pop feels instant.
@@ -3392,8 +3508,12 @@ function buildViewShell() {
   // the same question, which is why they never belonged in different rooms.
   move("month", document.getElementById("activity"));
 
-  // Character: who you are becoming.
-  move("character", hero);
+  // Character: who you are becoming. The hero card and the attributes panel
+  // move into the Sheet pane above the ladder, and the cabinet becomes the
+  // second pane rather than a second building.
+  move("character", document.getElementById("charRoom"));
+  const sheetPane = document.getElementById("charPaneSheet");
+  if (sheetPane && hero) sheetPane.insertBefore(hero, sheetPane.firstChild);
 
   // The motivational quote is gone from index.html entirely — it was the one
   // node in the app that answered no question you could ask.
@@ -3433,7 +3553,7 @@ function buildViewShell() {
   unwrapModalInto(document.getElementById("monthPaneYear"), "yearModal", { remove: ["#yearCloseBtn"] });
 
   // Character: the cabinet is who you have become, not a separate building.
-  unwrapModalInto(viewEl("character"), "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
+  unwrapModalInto(document.getElementById("charPaneCabinet"), "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
   initQuickAdd();
 }
@@ -3579,7 +3699,7 @@ function routeTo(view, opts) {
   if (changed) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
     // button or bottom tab has to fill it just the same.
-    if (next === "character") paintCabinet();
+    if (next === "character") { initCharTabs(); showCharTab(charTab); }
     if (next === "month") { initMonthTabs(); showMonthTab(monthTab); }
     renderDays();
     loadWeekFields();
@@ -3970,7 +4090,12 @@ function paintCabinet() {
   showCabinetTab(cabinetTab);
 }
 function openCabinet() {
-  if (document.getElementById("view-character")) { routeTo("character"); paintCabinet(); return; }
+  if (document.getElementById("view-character")) {
+    routeTo("character");
+    initCharTabs();
+    showCharTab("cabinet");
+    return;
+  }
   initCabinetTabs();
   paintCabinet();
   openModal("cabinetModal");
@@ -5097,6 +5222,7 @@ function bindEvents() {
   initSettingsTabs();
   initCabinetTabs();
   initMonthTabs();
+  initCharTabs();
   wireModulesEditor();
   wireStatsEditor();
   

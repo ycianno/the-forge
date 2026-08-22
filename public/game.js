@@ -457,20 +457,12 @@
     if (pipWrap) pipWrap.innerHTML = Array.from({ length: 6 }, (_, i) =>
       `<span class="rank-pip ${i < p.rank.pips ? "on" : ""}"></span>`).join("");
 
-    // Radar + legend
+    // The radar is shape-at-a-glance and nothing more. The legend that used to
+    // sit under it — level, curve and lifetime pool per attribute — is now the
+    // attribute sheet in the Character room (renderAttrSheet in app.js), which
+    // says the same things and also says which pursuits feed each one.
     const radar = document.getElementById("attrRadar");
     if (radar) radar.innerHTML = attrRadarSvg(p.attrs);
-    const legend = document.getElementById("attrLegend");
-    if (legend) legend.innerHTML = p.attrs.map(a =>
-      `<div class="attr-row">
-        <div class="attr-row-head">
-          <span class="attr-dot" style="background:${a.color}"></span>
-          <span class="attr-name">${escapeHtml(a.label || a.key)}</span>
-          <span class="attr-lvl" style="color:${a.color}">Lv ${a.level}</span>
-        </div>
-        <div class="attr-prog"><span class="attr-prog-fill" style="width:${a.pct}%;background:${a.color}"></span></div>
-        <div class="attr-sub"><span>${Number(a.into).toLocaleString()} / ${Number(a.need).toLocaleString()} XP</span><span>${Number(a.xp).toLocaleString()} total</span></div>
-      </div>`).join("");
 
     // Level-up celebration — prefer the rich FX layer if present
     if (lastLevel !== null && p.level > lastLevel) {
@@ -1528,5 +1520,8 @@
     return nearestLocked(list, owned, 1)[0] || null;
   }
 
-  window.Game = { render, computeProfile, nextInCategory, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, weekXpByAttr, seasonSummary, yearSummary, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
+  // RANKS and ATTR_OF_CAT go out read-only: the Character room draws the ladder
+  // and says which pursuits feed which attribute, and neither of those should
+  // be a second copy of a list the engine already owns.
+  window.Game = { RANKS, ATTR_OF_CAT, render, computeProfile, nextInCategory, levelFromXp, xpForLevel, rankFor, checkXp, xpForCat, attrColorForCat, renderInsignias, renderCabinet, renderHeroTrophies, renderMissions, renderWeeklyQuests, renderQuests, heroClass, weekXp, weekXpBySource, weekXpByAttr, seasonSummary, yearSummary, calcWeekScore: (w) => (typeof calculateWeekScoreData === "function" ? calculateWeekScoreData(w) : 0) };
 })();
