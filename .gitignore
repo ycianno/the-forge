@@ -12,3 +12,6 @@ agent/hermes_state.json
 # Python bytecode from the optional agent
 __pycache__/
 *.pyc
+
+# Local UI-review sandbox credentials (throwaway, never deployed)
+.env.review
