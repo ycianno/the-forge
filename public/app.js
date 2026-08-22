@@ -2215,10 +2215,11 @@ function initCharTabs() {
 // same as opening a report you did not ask for.
 let monthTab = "calendar";
 const MONTH_PANE_PAINT = {
-  calendar: () => { renderCalendarMonth(); renderHeatmap(); },
+  calendar: () => { renderCalendarMonth(); initMonthAgenda(); renderMonthAgenda(); },
+  // The year map lives here now, so it is painted with the year.
   trends:   () => renderTrends(),
   season:   () => renderSeason(),
-  year:     () => renderYear(),
+  year:     () => { renderYear(); renderHeatmap(); },
 };
 
 // What a month actually contained, from the same per-day source the grid and
@@ -4050,9 +4051,13 @@ function buildViewShell() {
   // Each pane arrives carrying its own month/year nav and its own summary line.
   // The room header says both, for all four panes at once, so the copies go.
   unwrapModalInto(calPane, "calendarModal", { first: true, remove: [".cal-nav", "#calSummary"] });
-  // The heat map goes under the month grid: the same question at a different
-  // resolution, which is why they never belonged in different rooms.
-  if (calPane) calPane.appendChild(document.getElementById("activity"));
+  // The year map used to sit under the month grid. They are the same picture at
+  // two resolutions, and stacked on one screen the second one only says "here
+  // is that again, smaller". It goes to the Year pane, where a year map is
+  // simply what you came for, and the calendar gets the month's actual work
+  // in its place.
+  const yearPane = document.getElementById("monthPaneYear");
+  if (yearPane) yearPane.appendChild(document.getElementById("activity"));
   // The day detail was `insightsModal` — a dialog you opened from a heat cell
   // and dismissed. It is a caption for the grid above it, so it lives there.
   if (calPane) {
@@ -4060,7 +4065,7 @@ function buildViewShell() {
     detail.className = "day-detail";
     detail.id = "dayDetail";
     detail.hidden = true;
-    calPane.insertBefore(detail, document.getElementById("activity"));
+    calPane.insertBefore(detail, document.getElementById("monthAgenda"));
   }
   // The pane's tab already says Trends; a second heading saying Performance
   // Report is chrome the dialog needed and the room does not.
@@ -5170,6 +5175,113 @@ function renderWeekPulse() {
     } else {
       sum.textContent = `${doneAll} of ${totalAll} done so far · a streak week needs ${grade}%.`;
     }
+  }
+}
+
+// ===== WHAT IS IN THE MONTH =====
+// The grid says how each day went. It could not say what the days were made
+// of — you had a wall of coloured squares and no way to ask "what did I keep
+// dropping?" without opening thirty of them one at a time.
+//
+// Three lists over the same month. Missed leads, because it is the only one you
+// can still do something about; a list of things you completed is a reward, and
+// a list of things coming is a plan, but a list of things you dropped is a
+// decision waiting to be made.
+let agendaTab = "upcoming";
+const AGENDA_CAP = 60;   // a busy month is 200 rows; nobody reads 200 rows
+
+function monthAgendaRows(monthStart) {
+  const year = monthStart.getFullYear(), month = monthStart.getMonth();
+  const days = new Date(year, month + 1, 0).getDate();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const out = { missed: [], upcoming: [], done: [] };
+
+  for (let d = 1; d <= days; d++) {
+    const date = new Date(year, month, d);
+    const wk = database.weeks[iso(getStartOfWeek(date))];
+    const checks = (wk && wk.checks) || {};
+    const past = date < today;
+    const isToday = date.getTime() === today.getTime();
+
+    questsForDate(date).forEach((q) => {
+      const attr = q.attr || contextAttr(q.areaId);
+      const row = {
+        date, day: d, title: q.title, attr,
+        color: attrColor(attr),
+        time: q.dueTime || "",
+        ritual: q.scheduleType === "weekly",
+      };
+      const done = !!checks[questCheckId(q, date)];
+      if (done) out.done.push(row);
+      else if (past) out.missed.push(row);
+      else if (isToday || date > today) out.upcoming.push(row);
+    });
+  }
+  // Missed and completed read backwards from now; upcoming reads forwards.
+  out.missed.reverse();
+  out.done.reverse();
+  return out;
+}
+
+function renderMonthAgenda() {
+  const list = document.getElementById("monthAgendaList");
+  if (!list) return;
+  const rows = monthAgendaRows(recordMonth());
+  const counts = { missed: rows.missed.length, upcoming: rows.upcoming.length, done: rows.done.length };
+
+  document.querySelectorAll("[data-agenda]").forEach((b) => {
+    const k = b.dataset.agenda;
+    const on = k === agendaTab;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+    // The count belongs on the tab: which of the three is worth opening is the
+    // question you arrive with.
+    let n = b.querySelector(".ma-n");
+    if (!n) { n = document.createElement("span"); n.className = "ma-n"; b.appendChild(n); }
+    n.textContent = counts[k];
+  });
+
+  const picked = rows[agendaTab] || [];
+  if (!picked.length) {
+    const empty = agendaTab === "missed" ? "Nothing dropped this month."
+                : agendaTab === "upcoming" ? "Nothing left scheduled this month."
+                : "Nothing completed yet this month.";
+    list.innerHTML = `<p class="ma-empty">${empty}</p>`;
+    return;
+  }
+  const shown = picked.slice(0, AGENDA_CAP);
+  list.innerHTML = shown.map((r) => `
+    <button class="ma-row" type="button" data-agenda-date="${escapeHtml(iso(r.date))}" style="--ac:${r.color}">
+      <span class="ma-day"><b>${r.day}</b><span>${escapeHtml(dayNames()[r.date.getDay()].slice(0, 3))}</span></span>
+      <span class="ma-dot" aria-hidden="true"></span>
+      <span class="ma-name">${escapeHtml(r.title)}</span>
+      ${r.time ? `<span class="ma-time">${escapeHtml(fmtTime12(r.time))}</span>` : ""}
+      <span class="ma-kind">${r.ritual ? "ritual" : "quest"}</span>
+    </button>`).join("")
+    + (picked.length > shown.length
+        ? `<p class="ma-more">+${picked.length - shown.length} more — open a day to see the rest.</p>` : "");
+}
+function initMonthAgenda() {
+  const head = document.querySelector(".ma-tabs");
+  if (head && !head._wired) {
+    head._wired = true;
+    head.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-agenda]");
+      if (!b) return;
+      agendaTab = b.dataset.agenda;
+      renderMonthAgenda();
+    });
+  }
+  const list = document.getElementById("monthAgendaList");
+  if (list && !list._wired) {
+    list._wired = true;
+    // A row is a door into its day, which is where you can actually act on it.
+    list.addEventListener("click", (e) => {
+      const row = e.target.closest("[data-agenda-date]");
+      if (!row) return;
+      const date = new Date(row.dataset.agendaDate + "T00:00:00");
+      openDayInsights(date, dayPctInfo(date));
+    });
   }
 }
 

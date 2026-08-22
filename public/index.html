@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=6" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=5" />
-  <link rel="stylesheet" href="css/05-screens.css?v=55" />
+  <link rel="stylesheet" href="css/05-screens.css?v=56" />
   <link rel="stylesheet" href="css/06-mobile.css?v=8" />
 </head>
 <body>
@@ -310,7 +310,23 @@
         <button class="settings-tab" data-month-tab="season" role="tab" aria-selected="false" aria-controls="monthPaneSeason" type="button">Goals</button>
         <button class="settings-tab" data-month-tab="year" role="tab" aria-selected="false" aria-controls="monthPaneYear" type="button">Year</button>
       </div>
-      <div class="month-pane active" id="monthPaneCalendar" role="tabpanel" aria-labelledby="monthTabCalendar"></div>
+      <div class="month-pane active" id="monthPaneCalendar" role="tabpanel" aria-labelledby="monthTabCalendar">
+        <!-- WHAT IS IN THE MONTH.
+             The grid says how each day went; this says what the days were made
+             of. Missed comes first because it is the only one you can still do
+             something about. Painted by renderMonthAgenda(). -->
+        <section class="month-agenda" id="monthAgenda">
+          <div class="ma-head">
+            <span class="ma-title">The month's work</span>
+            <div class="ma-tabs" role="group" aria-label="Which tasks">
+              <button class="ma-tab" data-agenda="missed" type="button">Missed</button>
+              <button class="ma-tab active" data-agenda="upcoming" type="button">Upcoming</button>
+              <button class="ma-tab" data-agenda="done" type="button">Completed</button>
+            </div>
+          </div>
+          <div class="ma-list" id="monthAgendaList"></div>
+        </section>
+      </div>
       <div class="month-pane" id="monthPaneTrends" role="tabpanel"></div>
       <div class="month-pane" id="monthPaneSeason" role="tabpanel"></div>
       <div class="month-pane" id="monthPaneYear" role="tabpanel"></div>
@@ -850,7 +866,7 @@
   <script src="forge-stage.js?v=18"></script>
   <script src="effigy.js?v=4"></script>
   <script src="fx.js?v=14"></script>
-  <script src="app.js?v=129"></script>
+  <script src="app.js?v=130"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

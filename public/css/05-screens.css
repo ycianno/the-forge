@@ -2673,6 +2673,54 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 .month-pane > .room-body { padding: 0; border: none; background: none; box-shadow: none; }
 .month-pane > #activity { margin: 0; }
 
+/* ----- what is in the month -----
+   Three lists over one month. Missed leads because it is the only one you can
+   still act on. Every row is a door into its day. */
+.month-agenda { display: flex; flex-direction: column; gap: var(--s-3); }
+.ma-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+.ma-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md); }
+.ma-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); background: rgba(0,0,0,.35); border: 1px solid var(--line); }
+.ma-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border: none; border-radius: var(--r-pill);
+  background: transparent; color: var(--muted);
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+}
+.ma-tab:hover { background: rgba(255,255,255,.05); color: var(--text); transform: none; box-shadow: none; }
+.ma-tab.active { background: var(--gradient-brand); color: #1a1005; }
+.ma-n { font-family: 'Outfit', sans-serif; font-weight: 900; font-variant-numeric: tabular-nums; opacity: .75; }
+.ma-tab.active .ma-n { opacity: 1; }
+/* Missed is the one that should catch your eye when there is anything in it. */
+.ma-tab[data-agenda="missed"]:not(.active) .ma-n { color: var(--heat-4); opacity: 1; }
+
+.ma-list { display: flex; flex-direction: column; gap: 3px; max-height: 380px; overflow-y: auto; }
+.ma-row {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center; gap: var(--s-3);
+  padding: 7px 12px; border-radius: var(--r-sm);
+  background: rgba(255,255,255,.03); border: 1px solid var(--line);
+  border-left: 3px solid var(--ac, var(--muted-2));
+  color: var(--text); text-align: left;
+}
+.ma-row:hover { background: rgba(255,255,255,.06); border-color: var(--line-strong); transform: none; box-shadow: none; }
+.ma-day { display: flex; flex-direction: column; align-items: center; line-height: 1.05; min-width: 26px; }
+.ma-day b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-sm); }
+.ma-day span { font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-2); }
+.ma-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ac); flex: 0 0 auto; }
+.ma-name { font-size: var(--t-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ma-time { font-size: var(--t-2xs); font-weight: 700; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.ma-kind { font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-2); }
+.ma-empty, .ma-more { margin: var(--s-2) 0 0; font-size: var(--t-sm); color: var(--muted); }
+.ma-more { font-size: var(--t-2xs); color: var(--muted-2); }
+
+@media (max-width: 640px) {
+  .ma-head { gap: var(--s-2); }
+  .ma-tabs { width: 100%; justify-content: space-between; }
+  .ma-tab { flex: 1 1 0; justify-content: center; padding: 6px 6px; }
+  .ma-row { grid-template-columns: auto auto minmax(0, 1fr) auto; gap: var(--s-2); padding: 7px 9px; }
+  .ma-kind { display: none; }
+}
+
 /* One day, opened in place under the grid it belongs to. */
 .day-detail {
   padding: var(--s-4);
