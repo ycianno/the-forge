@@ -1749,6 +1749,107 @@ function markSelectedDay() {
   });
 }
 
+// ===== THE ANVIL =====
+// Today as a place. The engine lives in forge-stage.js and knows nothing about
+// tasks, storage or XP; this is the whole of the seam between them.
+//
+// The rule the phase lives or dies on: the anvil must be the *good* way to work
+// the day, never the only way. Three taps for "ship the redesign" is a ritual;
+// three taps for "make the bed" is a tax. So blows come from the estimate the
+// task already carries, and the plain list is always one tap away.
+const TODAY_MODES = ["anvil", "list"];
+function todayMode() {
+  const m = settings && settings.todayMode;
+  return TODAY_MODES.includes(m) ? m : "anvil";
+}
+
+// The day's work in the shape the stage wants. Every field is derived from the
+// same helpers the board uses, so the two can never disagree about what today
+// contains or what a task is worth.
+function anvilTasks() {
+  const date = addDays(selectedWeekStart, getTodayDayIndex());
+  return questsForDate(date).map((q) => {
+    const attr = q.attr || contextAttr(q.areaId);
+    const cat = q.category || attrCat(attr);
+    const id = questCheckId(q, date);
+    const box = document.getElementById(id);
+    return {
+      id,
+      title: q.title,
+      xp: (window.Game && Game.xpForCat) ? Game.xpForCat(cat) : 10,
+      minutes: Forge.questMinutesOf(q),
+      done: box ? box.checked : !!(getWeekData().checks || {})[id],
+    };
+  });
+}
+
+// Finishing a piece drives the board's own checkbox rather than writing a
+// check. That is deliberate: XP, the sound, the combo meter, the five-second
+// undo and the save are all hung off that one `change`, and a second path into
+// storage is how two of those quietly stop happening.
+function anvilComplete(checkId) {
+  const box = document.getElementById(checkId);
+  if (!box || box.checked) return;
+  box.checked = true;
+  box.dispatchEvent(new Event("change", { bubbles: true }));
+  if (window.ForgeStage) ForgeStage.popXp("+" + ((window.Game && Game.checkXp) ? Game.checkXp(box) : 10) + " XP");
+}
+
+function renderAnvilHud(tasks) {
+  const done = tasks.filter((t) => t.done).length;
+  const xp = tasks.reduce((n, t) => n + (t.done ? t.xp : 0), 0);
+  const setT = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setT("anvilDone", done + " / " + tasks.length);
+  setT("anvilXp", "+" + xp);
+  const bar = document.getElementById("anvilBar");
+  if (bar) bar.style.width = (tasks.length ? Math.round(done / tasks.length * 100) : 0) + "%";
+}
+
+// Called on every render of Today. Cheap when the mode is `list` — the stage is
+// stopped and nothing is walked.
+function syncAnvil(opts) {
+  const room = document.getElementById("anvilRoom");
+  if (!room || !window.ForgeStage) return;
+  const on = currentView === "today" && todayMode() === "anvil" && !document.body.classList.contains("in-focus");
+  room.hidden = !on;
+  document.body.classList.toggle("anvil-on", on);
+  if (!on) { ForgeStage.stop(); return; }
+  ForgeStage.mount(document.getElementById("anvilStage"), {
+    complete: anvilComplete,
+    // One mute switch for the whole app — the anvil respects the same toggle
+    // in the topbar that silences every other sound.
+    muted: () => !!(window.FX && FX.sfxOn && !FX.sfxOn()),
+  });
+  const tasks = anvilTasks();
+  ForgeStage.sync(tasks, opts);
+  renderAnvilHud(tasks);
+  const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+  ForgeStage.setStreak(prof ? prof.dayStreak : 0);
+  if (!ForgeStage.isRunning()) ForgeStage.start();
+}
+
+function setTodayMode(mode) {
+  const next = TODAY_MODES.includes(mode) ? mode : "anvil";
+  settings.todayMode = next;
+  persistSettings();
+  document.querySelectorAll("[data-today-mode]").forEach((b) => {
+    const on = b.dataset.todayMode === next;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  syncAnvil({ snap: true });
+}
+function initTodayModes() {
+  const bar = document.querySelector(".anvil-modes");
+  if (!bar || bar._wired) return;
+  bar._wired = true;
+  bar.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-today-mode]");
+    if (b) setTodayMode(b.dataset.todayMode);
+  });
+  setTodayMode(todayMode());
+}
+
 // ===== THE CHARACTER SHEET =====
 // A 108px radar wedged beside a callsign told you the shape of your training
 // and nothing else: you could see Mind was short and had no way to ask why.
@@ -2988,6 +3089,7 @@ function updateLive() {
   // The stat sheet reads the same profile Game.render() just recomputed, but
   // walking every week to draw a room nobody is looking at is pure waste.
   if (currentView === "character" && charTab === "sheet") renderCharacter();
+  syncAnvil();
 }
 // The debounced form for text input, where a keystroke should not pay for a
 // full widget refresh. Checkboxes stay immediate so the XP pop feels instant.
@@ -3479,7 +3581,9 @@ function buildViewShell() {
   shell.insertBefore(frame, hero || shell.firstElementChild);
 
   const move = (view, node) => { if (node) viewEl(view).appendChild(node); };
-  // Today: the day's work, and nothing that is about any other day.
+  // Today: the day's work, and nothing that is about any other day. The anvil
+  // sits above the board; which of the two you see is the Today mode.
+  move("today", document.getElementById("anvilRoom"));
   move("today", document.getElementById("questsHub"));
   move("today", document.getElementById("daily"));
 
@@ -3709,6 +3813,8 @@ function routeTo(view, opts) {
     const write = (opts && opts.fromHash) ? history.replaceState : history.pushState;
     write.call(history, null, "", `#${next}`);
   }
+  if (next === "today") { initTodayModes(); syncAnvil({ snap: true }); }
+  else if (window.ForgeStage) ForgeStage.stop();
   if (changed) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
     // button or bottom tab has to fill it just the same.
@@ -4659,6 +4765,8 @@ function enterFocusMode() {
   routeTo("today");
   host.hidden = false;
   document.body.classList.add("in-focus");
+  if (window.ForgeStage) ForgeStage.stop();
+  syncAnvil();
   window.scrollTo(0, 0);
   return true;
 }
@@ -4666,6 +4774,7 @@ function exitFocusMode() {
   const host = focusHostEl();
   document.body.classList.remove("in-focus");
   if (host) host.hidden = true;
+  syncAnvil({ snap: true });
 }
 function openFocus() {
   const sel = document.getElementById("focusTarget");
@@ -5264,6 +5373,7 @@ function bindEvents() {
   initCabinetTabs();
   initMonthTabs();
   initCharTabs();
+  initTodayModes();
   wireModulesEditor();
   wireStatsEditor();
   

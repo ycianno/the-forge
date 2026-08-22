@@ -153,6 +153,22 @@
     const n = Number(q && q.estMinutes);
     return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
   }
+  // How many blows a task is worth on the anvil (Today's forge mode).
+  //
+  // This is the whole economy of that screen, which is why it lives in the
+  // engine and not in the renderer. The rule: an unestimated or trivial task
+  // costs exactly one blow — the same effort as ticking it — so a twenty-item
+  // day never becomes sixty taps. Weight buys ceremony, and only up to four,
+  // because a fifth blow adds nothing you can feel and a lot you have to do.
+  //
+  // The steps are quarter-hours-and-a-bit: under 25 minutes is one, an hour is
+  // three, anything from 75 minutes up is four.
+  function strikesFor(minutes) {
+    const m = Number(minutes);
+    if (!Number.isFinite(m) || m <= 0) return 1;
+    return Math.max(1, Math.min(4, 1 + Math.floor(m / 25)));
+  }
+  function strikesForQuest(q) { return strikesFor(questMinutesOf(q)); }
   // What a week's plan actually asks of you, per day. Drives the plan-health
   // readout, which exists because a plan can quietly grow past the point where
   // any day is winnable and nothing in the app used to say so.
@@ -810,7 +826,7 @@
     PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     BOSSES, BOSS_ATTR, bossKeyHash, bossForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
-    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, planLoad, parseQuickTask, DAY_WORDS,
+    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, strikesFor, strikesForQuest, planLoad, parseQuickTask, DAY_WORDS,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });

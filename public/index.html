@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=5" />
   <link rel="stylesheet" href="css/03-components.css?v=11" />
   <link rel="stylesheet" href="css/04-responsive.css?v=4" />
-  <link rel="stylesheet" href="css/05-screens.css?v=36" />
+  <link rel="stylesheet" href="css/05-screens.css?v=37" />
   <link rel="stylesheet" href="css/06-mobile.css?v=7" />
 </head>
 <body>
@@ -203,6 +203,27 @@
         </div>
         <div class="boss-meta"><span class="boss-weak" id="bossWeak"></span><span class="boss-taunt" id="bossTaunt"></span></div>
       </div>
+    </section>
+
+    <!-- THE ANVIL.
+         Today's tasks as pieces to be heated and struck. The toggle is not a
+         nicety: the anvil is meant to be the good way to work the day, never
+         the only one, so the plain list is always one tap away and the choice
+         is remembered. The canvas is created by forge-stage.js. -->
+    <section class="section anvil-room glass" id="anvilRoom">
+      <div class="anvil-head">
+        <div class="anvil-hud">
+          <div class="ah-stat"><b id="anvilDone">0 / 0</b><span>Worked</span></div>
+          <div class="ah-stat"><b id="anvilXp">+0</b><span>XP today</span></div>
+          <div class="ah-track"><span id="anvilBar"></span></div>
+        </div>
+        <div class="anvil-modes" role="group" aria-label="How to work today">
+          <button class="anvil-mode active" data-today-mode="anvil" type="button" aria-pressed="true">Anvil</button>
+          <button class="anvil-mode" data-today-mode="list" type="button" aria-pressed="false">List</button>
+        </div>
+      </div>
+      <div class="anvil-stage" id="anvilStage"></div>
+      <p class="hint anvil-foot">Tap a piece to put it in the fire · tap the anvil to strike · heavier tasks take more blows</p>
     </section>
 
     <!-- THE CHARACTER SHEET.
@@ -727,11 +748,12 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="modules.js?v=21"></script>
+  <script src="modules.js?v=22"></script>
   <script src="game.js?v=37"></script>
   <script src="fx-stage.js?v=2"></script>
+  <script src="forge-stage.js?v=7"></script>
   <script src="fx.js?v=13"></script>
-  <script src="app.js?v=107"></script>
+  <script src="app.js?v=108"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>
