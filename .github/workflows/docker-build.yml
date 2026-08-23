@@ -32,5 +32,13 @@ jobs:
             sleep 1
           done
           echo "server did not come up"; docker logs forge-ci; exit 1
+      # The check used to read `$(...)` inside double quotes, which the RUNNER's
+      # shell expanded before docker exec ever ran — so it inspected the runner's
+      # own PID 1 (root) instead of the container's, and `test "0" != 0` failed on
+      # every push since the step was written. The command is passed to docker exec
+      # as argv now, with no container-side shell to expand anything twice.
       - name: Runtime user is non-root
-        run: docker exec forge-ci sh -c "test \"$(awk '/^Uid:/ {print $2}' /proc/1/status)\" != 0"
+        run: |
+          uid=$(docker exec forge-ci awk '/^Uid:/ {print $2}' /proc/1/status)
+          echo "container PID 1 runs as uid ${uid:-<empty>}"
+          test -n "$uid" && test "$uid" != "0"
