@@ -103,7 +103,7 @@ html { scroll-padding-top: 84px; }
   }
   /* First cell of each row is the title (Day name / certification). */
   .content td:first-child {
-    font-size: 16px;
+    font-size: var(--t-md);
     font-weight: 800;
     padding-top: 8px;
   }
@@ -171,7 +171,7 @@ html { scroll-padding-top: 84px; }
   .settings-tabs, .ins-filters { position: static; }
 
   /* --- Calmer card headers: smaller titles, no overflowing pills/subtitles --- */
-  .summary-left h2 { font-size: 17px; line-height: 1.2; }
+  .summary-left h2 { font-size: var(--t-md); line-height: 1.2; }
   details.section-card > summary .hint { display: none; } /* cut explainer text on mobile */
   details.section-card > summary .pill { display: none; } /* was overflowing the card */
   details.section-card > summary .xp-chip { display: none; } /* keep mobile headers calm */
@@ -182,7 +182,7 @@ html { scroll-padding-top: 84px; }
   .boss-card { gap: 11px; padding: 16px; }
   .boss-arena { width: 58px; height: 58px; }
   .boss-emoji { font-size: 30px; }
-  .boss-name { font-size: 19px; line-height: 1.15; }
+  .boss-name { font-size: var(--t-lg); line-height: 1.15; }
   .boss-top { flex-wrap: wrap; }
   /* At this width the aside has nowhere to be. The clock rejoins the act band,
      where it belongs anyway — it is the reason to act — and the taunt drops to
@@ -218,7 +218,7 @@ html { scroll-padding-top: 84px; }
   font-size: var(--t-sm);
   line-height: 1.5;
   border: 1px dashed var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-lg);
 }
 
 /* ----- First-run onboarding ("Choose your path") ----- */
@@ -226,27 +226,27 @@ html { scroll-padding-top: 84px; }
 .onboard-hero { text-align: center; margin-bottom: 22px; }
 .onboard-mark { width: 56px; height: 56px; margin: 0 auto 12px; }
 .onboard-mark svg { width: 52px; height: 52px; fill: var(--accent-primary); filter: drop-shadow(0 0 14px var(--score-glow)); }
-.onboard-hero h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
-.onboard-sub { color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 46ch; margin: 0 auto; }
-.onboard-loop { margin: 12px auto 0; max-width: 46ch; font-size: var(--t-sm); font-weight: 600; line-height: 1.5; color: var(--text); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; }
+.onboard-hero h2 { font-size: var(--t-xl); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+.onboard-sub { color: var(--muted); font-size: var(--t-md); line-height: 1.55; max-width: 46ch; margin: 0 auto; }
+.onboard-loop { margin: 12px auto 0; max-width: 46ch; font-size: var(--t-sm); font-weight: 600; line-height: 1.5; color: var(--text); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: var(--r-md); padding: 9px 14px; }
 .onboard-field { margin-bottom: 18px; }
 .onboard-field > label { display: block; font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
-#onboardCallsign { width: 100%; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--text); font-size: 15px; font-family: inherit; }
+#onboardCallsign { width: 100%; padding: 12px 14px; border-radius: var(--r-md); background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--text); font-size: var(--t-md); font-family: inherit; }
 #onboardCallsign:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--score-glow); }
 .onboard-paths { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .onboard-path {
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   padding: 14px 16px; text-align: left; cursor: pointer;
-  background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 14px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: var(--r-lg);
   transition: all 0.18s cubic-bezier(0.4,0,0.2,1); justify-content: flex-start;
 }
 .onboard-path:hover { background: rgba(255,255,255,0.08); border-color: var(--accent-primary); transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,0.35); }
-.onboard-path .op-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.onboard-path .op-name { font-size: var(--t-md); font-weight: 700; color: var(--text); }
 .onboard-path .op-desc { font-size: var(--t-xs); line-height: 1.4; color: var(--muted); font-weight: 500; }
 .onboard-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
 .onboard-skip { background: transparent; border: 1px solid var(--line); }
 .onboard-hint { font-size: var(--t-xs); color: var(--muted-2); }
-@media (max-width: 560px) { .onboard-paths { grid-template-columns: 1fr; } .onboard-hero h2 { font-size: 22px; } }
+@media (max-width: 560px) { .onboard-paths { grid-template-columns: 1fr; } .onboard-hero h2 { font-size: var(--t-xl); } }
 
 /* Empty state — shown when a section has no items yet (e.g. after "Start blank"). */
 .empty-state { text-align: center; padding: 28px 20px; border: 1px dashed var(--line); border-radius: var(--r-md); background: rgba(255,255,255,0.02); }
@@ -262,7 +262,7 @@ html { scroll-padding-top: 84px; }
 .pursuit-card-ico[aria-expanded="true"] { border-color: var(--ac, #8b93a7); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ac, #8b93a7) 22%, transparent); }
 .pursuit-identity {
   margin-top: 10px; padding: 12px; display: flex; flex-direction: column; gap: 12px;
-  border: 1px solid var(--border); border-radius: 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
   background: color-mix(in srgb, var(--ac, var(--accent-primary)) 5%, transparent);
 }
 .pi-row { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
@@ -273,7 +273,7 @@ html { scroll-padding-top: 84px; }
 .pi-icons { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
 .pi-icon {
   display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
-  border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.03);
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: rgba(255,255,255,.03);
   color: var(--muted); cursor: pointer; transition: color .12s, border-color .12s, background .12s;
 }
 .pi-icon .ic { width: 15px; height: 15px; }
@@ -302,7 +302,7 @@ html { scroll-padding-top: 84px; }
    jumps to the pursuit it reports on, and carries that pursuit's accent. */
 .metric-jump {
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
-  cursor: pointer; border-radius: 12px;
+  cursor: pointer; border-radius: var(--r-md);
   border: 1px solid var(--line); background: rgba(255,255,255,0.025);
   transition: border-color .14s, background .14s, transform .14s;
 }
@@ -334,7 +334,7 @@ html { scroll-padding-top: 84px; }
 .pe-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--ac, var(--accent-primary)); cursor: pointer; }
 .pe-check span { text-decoration: none; opacity: 1; }
 .pe-plan-link {
-  margin-top: 4px; padding: 8px 14px; border-radius: 9px; cursor: pointer;
+  margin-top: 4px; padding: 8px 14px; border-radius: var(--r-sm); cursor: pointer;
   border: 1px solid color-mix(in srgb, var(--ac, var(--accent-primary)) 40%, transparent);
   background: color-mix(in srgb, var(--ac, var(--accent-primary)) 10%, transparent);
   color: var(--text); font-weight: 700; font-size: var(--t-sm);
@@ -381,7 +381,7 @@ html { scroll-padding-top: 84px; }
     flex-wrap: nowrap;
     gap: 0;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: var(--r-md);
     overflow: hidden;
     background: rgba(255, 255, 255, 0.03);
   }
@@ -409,7 +409,7 @@ html { scroll-padding-top: 84px; }
     min-height: 62px;
     gap: 6px;
     padding: 10px 4px;
-    border-radius: 14px;
+    border-radius: var(--r-lg);
     font-size: var(--t-2xs);
   }
   .more-drawer .more-icon { height: 22px; }

@@ -23,7 +23,7 @@ const APP = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf
 // Two, and only two, because each one is separately proved below. A third
 // appearing without its own proof is exactly the regression this file is for.
 const calls = APP.match(/FX\.bossHit\(/g) || [];
-assert.equal(calls.length, 2, "expected exactly two FX.bossHit() call sites, found " + calls.length);
+assert.equal(calls.length, 3, "expected exactly three FX.bossHit() call sites, found " + calls.length);
 
 // ---- site 1: the automatic hit, guarded by a real increase ----------------
 // The call must be preceded on the same statement by the bossGained condition.
@@ -49,6 +49,35 @@ assert.ok(/^\s*if\s*\(\s*!bossPending\s*\|\|\s*bossPending\.left\s*<=\s*0\s*\)\s
   "fire a hit against a boss that has taken no damage");
 assert.ok(/bossPending\.left--/.test(lbbFn),
   "landBossBlow() must consume a blow from the queue, or one click fires forever");
+
+// ---- site 3: the season claim, on Month's track ---------------------------
+// Same mechanic one horizon up: a week that reached the grade can be spent
+// against the month's season, by hand, once. The honesty rule is identical to
+// the week boss's — nothing here may GRANT progress, it may only let you
+// collect progress the weeks already earned — so it gets the same kind of
+// structural proof rather than a raised call count.
+const csw = APP.slice(APP.indexOf("function claimSeasonWeek("));
+const cswEnd = csw.indexOf("\n}\n");
+const cswFn = csw.slice(0, cswEnd === -1 ? csw.length : cswEnd);
+
+assert.ok(cswFn.indexOf("FX.bossHit(") !== -1,
+  "the third FX.bossHit() call site is not inside claimSeasonWeek() — if it moved, " +
+  "whatever it moved into needs its own guard and its own assertion here");
+
+// The refusal is the whole guard. Without `!node.cleared` a click banks damage
+// for a week that never reached the grade; without `node.claimed` the same week
+// can be spent every time you open the room, and the season falls to one node
+// clicked five times.
+assert.ok(/if\s*\(\s*!node\s*\|\|\s*node\.claimed\s*\|\|\s*!node\.cleared\s*\)\s*return false;/.test(cswFn),
+  "claimSeasonWeek() must refuse a missing node, an already-claimed week, and a " +
+  "week that never reached the grade — otherwise the season can be beaten with " +
+  "one week clicked repeatedly");
+
+// The claim has to be written before the damage is redrawn, or a reload undoes
+// the blow the user just watched land.
+assert.ok(cswFn.indexOf("settings.seasonClaims") < cswFn.indexOf("FX.bossHit("),
+  "the claim must be recorded before the hit is played, or the effect can fire " +
+  "for damage that was never persisted");
 
 // ---- the queue only ever replays damage already earned --------------------
 // This is the honesty rule for the whole mechanic: the bar may lag behind the

@@ -27,13 +27,16 @@
   --t-xs:  12px;   /* pills, badges, captions */
   --t-sm:  13px;   /* secondary text, hints */
   --t-md:  15px;   /* body, task titles */
-  --t-lg:  19px;   /* card headings */
-  --t-xl:  26px;   /* section headings */
+  --t-lg:  19px;   /* card headings — every card in the app titles itself here */
+  --t-xl:  26px;   /* the one hero figure or name a card is allowed */
   --t-2xl: 40px;   /* display figures */
+  /* Sizes above --t-2xl are deliberate one-offs and stay in px: the focus
+     timer, the level number, the boss's emoji. They are pictures, not type. */
 
   /* Radius. Rounder than this and a card stops reading as a panel and starts
      reading as a pill; the old 26px on every glass surface is what made the
      whole app feel soft and same-y. */
+  --r-2xs: 4px;    /* inner parts — bar caps, dots, the smallest chips */
   --r-xs: 6px;
   --r-sm: 8px;
   --r-md: 10px;
@@ -79,6 +82,57 @@
   --heat-4: #fbbf24;
   --heat-5: #fff7ed;   /* white hot — the rarest state in the app */
   --heat-glow: rgba(249, 115, 22, 0.30);
+}
+
+
+/* ===========================================================================
+ * FINISHES
+ * ---------------------------------------------------------------------------
+ * A finish is the heat ramp in another hue, bought with embers. It lives here
+ * beside the ramp it overrides rather than in a theme block, because it is
+ * orthogonal to theme: any of the ten themes can be worn with any finish.
+ *
+ * Every ramp below climbs in luminance in exactly the order the default does —
+ * ash, dull, working, hot, bright, white. That is not a style choice, it is the
+ * contract: the ramp is how this app says "more" without a legend, and
+ * test/embers.js fails the build if a finish ever breaks the climb.
+ * ======================================================================== */
+
+:root[data-finish="quench"] {
+  --heat-0: #2f3338;
+  --heat-1: #0f3a56;
+  --heat-2: #0e6d94;
+  --heat-3: #22a5c4;
+  --heat-4: #7fd4e6;
+  --heat-5: #f2fbff;
+  --heat-glow: rgba(34, 165, 196, 0.30);
+}
+:root[data-finish="verdigris"] {
+  --heat-0: #31352f;
+  --heat-1: #14431f;
+  --heat-2: #137a3c;
+  --heat-3: #2aa85c;
+  --heat-4: #7fd694;
+  --heat-5: #f2fff6;
+  --heat-glow: rgba(42, 168, 92, 0.30);
+}
+:root[data-finish="bloodiron"] {
+  --heat-0: #38302e;
+  --heat-1: #781824;
+  --heat-2: #c02236;
+  --heat-3: #ef5566;
+  --heat-4: #fba9b1;
+  --heat-5: #fff2f3;
+  --heat-glow: rgba(239, 85, 102, 0.30);
+}
+:root[data-finish="moonsilver"] {
+  --heat-0: #33313a;
+  --heat-1: #413878;
+  --heat-2: #6a5ad4;
+  --heat-3: #9d8df3;
+  --heat-4: #d0c8fb;
+  --heat-5: #f7f5ff;
+  --heat-glow: rgba(157, 141, 243, 0.30);
 }
 
 /* ===========================================================================

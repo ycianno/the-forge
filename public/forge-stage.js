@@ -910,6 +910,15 @@
   function popXp(text) { nums(stage.ANVIL.x, stage.ANVIL.y - 70, text, HEAT[4], 22); }
 
   window.ForgeStage = {
+    // A finish repaints the ramp without touching a single call site: the
+    // stops are mutated in place, so every HEAT[i] already written below keeps
+    // working. A finish may change the ramp's HUE but never its ORDER — the
+    // ramp is this app's one information channel, and test/embers.js proves
+    // every finish stays monotonic in luminance.
+    setHeat: function (a) {
+      if (!Array.isArray(a) || a.length !== HEAT.length) return;
+      for (var i = 0; i < HEAT.length; i++) HEAT[i] = a[i];
+    },
     mount: mount, start: start, stop: stop, sync: sync,
     resize: resize, setStreak: setStreak, setNow: setNow, popXp: popXp,
     strikesFor: strikesFor,

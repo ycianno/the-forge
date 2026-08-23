@@ -403,12 +403,15 @@
     });
   }
 
-  function bossDefeated(name) {
+  // `sub` is optional and defaults to the week, which is where the only boss
+  // used to live. The season at the end of Month's track borrows this same
+  // moment — a kill is a kill — and only needs to say which horizon fell.
+  function bossDefeated(name, sub) {
     celebrate({
       kind: "boss",
       sound: () => arp([392, 523.25, 659.25, 880, 1046.5], 75, "sawtooth", 0.14),
       vibe: [0, 60, 50, 60, 90],
-      k: "BOSS DEFEATED", v: name, vSize: "34px", sub: "Week conquered",
+      k: "BOSS DEFEATED", v: name, vSize: "34px", sub: sub || "Week conquered",
       color: heatVar(3), sparks: 38, energy: 1.9, shake: 7, hold: 2500
     });
   }

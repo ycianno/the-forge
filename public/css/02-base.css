@@ -241,12 +241,12 @@ h1 {
   transform: translateY(-1px);
 }
 .mini .label { margin-bottom: 6px; }
-.mini strong { display: block; font-size: 17px; font-weight: 700; }
+.mini strong { display: block; font-size: var(--t-md); font-weight: 700; }
 .mini input {
   background: transparent;
   border: none;
   padding: 0;
-  font-size: 17px;
+  font-size: var(--t-md);
   font-weight: 700;
   color: var(--text);
   box-shadow: none;
@@ -285,9 +285,9 @@ h1 {
   letter-spacing: -0.04em; 
   text-shadow: 0 4px 20px var(--score-glow);
 }
-.score-label { color: var(--muted); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.1em; }
-.status-line { margin-top: 8px; color: var(--text); font-size: 14px; opacity: 0.8; }
-.save-state { display:inline-flex; align-items:center; margin-left:8px; padding:3px 7px; border:1px solid rgba(255,255,255,.08); border-radius:9var(--r-chip); color:var(--muted); font-size: var(--t-2xs); font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+.score-label { color: var(--muted); font-weight: 700; font-size: var(--t-md); text-transform: uppercase; letter-spacing: 0.1em; }
+.status-line { margin-top: 8px; color: var(--text); font-size: var(--t-md); opacity: 0.8; }
+.save-state { display:inline-flex; align-items:center; margin-left:8px; padding:3px 7px; border:1px solid rgba(255,255,255,.08); border-radius:var(--r-chip); color:var(--muted); font-size: var(--t-2xs); font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
 .save-state[data-state="saving"] { color:var(--accent-primary); border-color:color-mix(in srgb, var(--accent-primary) 35%, transparent); }
 .save-state[data-state="queued"] { color:#fbbf24; border-color:rgba(251,191,36,.35); }
 .save-state[data-state="failed"] { color:#f87171; border-color:rgba(248,113,113,.4); }
@@ -295,7 +295,7 @@ h1 {
 .quest-session-notes-wrap > summary { width:max-content; padding:8px 0 2px; color:var(--muted); font-size: var(--t-2xs); font-weight:800; cursor:pointer; list-style:none; }
 .quest-session-notes-wrap > summary::before { content:"+ "; color:var(--ac, var(--accent-primary)); }
 .quest-session-notes-wrap[open] > summary::before { content:"− "; }
-.show-week-btn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:15px 16px; border:1px dashed rgba(255,255,255,.14); border-radius:14px; background:rgba(255,255,255,.025); color:var(--muted); text-align:left; }
+.show-week-btn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:15px 16px; border:1px dashed rgba(255,255,255,.14); border-radius: var(--r-lg); background:rgba(255,255,255,.025); color:var(--muted); text-align:left; }
 .show-week-btn strong { color:var(--accent-primary); font-size: var(--t-xs); }
 
 .actions { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -307,13 +307,26 @@ details.section-card {
   overflow: hidden; 
   transition: all 0.3s ease;
 }
+/* ONE CARD HEAD.
+   Two generations of card were stacked in the same room. This head was written
+   first — a 26px heading in 24/28 padding — and the compact cards that came
+   later (the week pulse, the plan head, the boss) titled themselves at 15px in
+   16/20. Nothing about the content said those were different ranks; they were
+   different months of authorship, and Week showed 26 / 15 / 11 / 9px of card
+   title on one screen.
+
+   The rank they share is this one: 19px title, an 11px kicker above it when a
+   card needs one, and 26px kept for the single hero of a card (the boss's
+   name, a level number) — one per screen, not one per card. The horizontal
+   padding is 20px on every card in the app, which is the part the eye actually
+   reads as alignment; vertical padding still varies with what a card holds. */
 details.section-card > summary {
   list-style: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  padding: 24px 28px;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-5);
   cursor: pointer;
   user-select: none;
   transition: background 0.2s ease;
@@ -322,12 +335,12 @@ details.section-card > summary:hover {
   background: rgba(255, 255, 255, 0.02);
 }
 details.section-card > summary::-webkit-details-marker { display:none; }
-.summary-left h2 { margin: 0; font-size: 26px; letter-spacing: -0.02em; font-weight: 800; }
+.summary-left h2 { margin: 0; font-size: var(--t-lg); letter-spacing: -0.02em; font-weight: 800; }
 .hint { color: var(--muted); font-size: var(--t-sm); margin: 6px 0 0; line-height: 1.5; }
 .chev { 
   color: var(--muted); 
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-  font-size: 20px;
+  font-size: var(--t-lg);
 }
 details[open] .chev { transform: rotate(180deg); color: var(--text); }
 
@@ -346,7 +359,7 @@ details.section-card.has-accent > summary:hover {
 }
 .sec-icon {
   flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  width: 46px; height: 46px; border-radius: 13px;
+  width: 46px; height: 46px; border-radius: var(--r-lg);
   color: var(--ac, #8b93a7);
   background: color-mix(in srgb, var(--ac, #8b93a7) 15%, transparent);
   border: 1px solid color-mix(in srgb, var(--ac, #8b93a7) 32%, transparent);

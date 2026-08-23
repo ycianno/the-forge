@@ -13,17 +13,20 @@
        cascade is exactly what it was as a single file. Sequential slices, not a
        re-grouping: 01 tokens/themes, 02 base+topbar+hero, 03 components,
        04 the early responsive blocks, 05 the screens, 06 the mobile passes. -->
-  <link rel="stylesheet" href="css/01-tokens.css?v=6" />
-  <link rel="stylesheet" href="css/02-base.css?v=6" />
-  <link rel="stylesheet" href="css/03-components.css?v=11" />
-  <link rel="stylesheet" href="css/04-responsive.css?v=5" />
-  <link rel="stylesheet" href="css/05-screens.css?v=60" />
-  <link rel="stylesheet" href="css/06-mobile.css?v=10" />
+  <link rel="stylesheet" href="css/01-tokens.css?v=8" />
+  <link rel="stylesheet" href="css/02-base.css?v=7" />
+  <link rel="stylesheet" href="css/03-components.css?v=12" />
+  <link rel="stylesheet" href="css/04-responsive.css?v=6" />
+  <link rel="stylesheet" href="css/05-screens.css?v=73" />
+  <link rel="stylesheet" href="css/06-mobile.css?v=11" />
 </head>
 <body>
   <main class="shell">
     <div class="topbar">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 192 192"><path d="M22 80 L62 64 L62 96 Z"/><rect x="54" y="56" width="118" height="28" rx="8"/><path d="M86 84 H142 L124 120 H100 Z"/><path d="M60 120 H160 L178 156 H42 Z"/></svg></span><span>The Forge</span> <span id="streakBadge" class="streak-badge" style="display:none;">🔥 <span id="streakCount">0</span> <span id="streakUnit">Weeks</span></span><span class="save-state" id="saveState" role="status" aria-live="polite" data-state="saved">Saved</span></div>
+      <!-- The run state. Empty until renderHud() fills it; see THE HUD in
+           05-screens.css for why state is allowed on a bar that is for actions. -->
+      <div class="hud" id="hud"></div>
       <nav class="nav" id="mainNav">
         <!-- Destinations live in the sidebar, which is rendered from the module
              list (renderSidebar). These are actions, not places. -->
@@ -281,6 +284,7 @@
       <div class="settings-tabs char-tabs" role="tablist" aria-label="Character">
         <button class="settings-tab active" data-char-tab="sheet" role="tab" aria-selected="true" aria-controls="charPaneSheet" type="button">Sheet</button>
         <button class="settings-tab" data-char-tab="cabinet" role="tab" aria-selected="false" aria-controls="charPaneCabinet" type="button">Cabinet</button>
+        <button class="settings-tab" data-char-tab="embers" role="tab" aria-selected="false" aria-controls="charPaneEmbers" type="button">Embers</button>
       </div>
       <div class="char-pane active" id="charPaneSheet" role="tabpanel">
         <!-- THE EFFIGY. Five attributes, five pieces of a forged figure. Hold
@@ -293,14 +297,27 @@
           </div>
           <div class="ef-stage" id="effigyStage"></div>
           <div class="ef-read" id="effigyRead">
-            <span class="ef-hint">Hold the figure to bring the fire up · touch a piece to read it</span>
+            <span class="ef-hint">Hold the figure to bring the fire up · click a piece to keep it open</span>
           </div>
+          <!-- The chosen piece's whole run through the six bands. Hidden until
+               you pick a piece, because an empty ladder is worse than none. -->
+          <div class="ef-evo" id="effigyEvo" hidden></div>
           <div class="ef-age" id="effigyAge"></div>
         </section>
         <div class="rank-ladder" id="rankLadder"></div>
+        <!-- A SMALL VIEW OF THE TROPHIES. Counts and a door, deliberately not
+             the Cabinet's tier cards — the Sheet used to carry a full copy of
+             those and it was removed for being the same thing twice. What was
+             missing was not the detail, it was any sign at all on the sheet
+             that the shelf exists. -->
+        <div class="sheet-trophies" id="sheetTrophies"></div>
         <div class="attr-sheet" id="attrSheet"></div>
       </div>
       <div class="char-pane" id="charPaneCabinet" role="tabpanel"></div>
+      <!-- EMBERS. What XP is for. Earned from what you already did, spent on
+           finishes that did not exist before this — nothing that was free
+           becomes paid. -->
+      <div class="char-pane" id="charPaneEmbers" role="tabpanel"></div>
     </section>
 
     <!-- THE RECORD.
@@ -321,6 +338,10 @@
         </div>
         <div class="mh-stats" id="recStats"></div>
       </div>
+      <!-- THE SEASON TRACK. The month as a run of weeks with the season at the
+           end of it. It sits above the tabs, not inside one, because it is what
+           the room is about — the four panes are ways of reading it. -->
+      <div class="season-track" id="seasonTrack"></div>
       <div class="settings-tabs month-tabs" role="tablist" aria-label="The record">
         <button class="settings-tab active" data-month-tab="calendar" role="tab" aria-selected="true" aria-controls="monthPaneCalendar" type="button">Calendar</button>
         <button class="settings-tab" data-month-tab="trends" role="tab" aria-selected="false" aria-controls="monthPaneTrends" type="button">Trends</button>
@@ -373,6 +394,19 @@
         <button class="pl-edit" id="planEditBtn" type="button">Edit pursuits<svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
       </div>
       <div class="pl-body" id="planHeadBody"></div>
+    </section>
+
+    <!-- THE FORGE TREE. The plan head says what this week asks; this says what
+         the plan has already built. One limb per pursuit, on the same rungs the
+         Cabinet's insignia chain counts, so the two can never disagree. -->
+    <section class="section forge-tree glass" id="forgeTree">
+      <div class="pl-top">
+        <div class="pl-titles">
+          <span class="pl-title">The tree</span>
+          <span class="pl-sub">What the weeks have actually built</span>
+        </div>
+      </div>
+      <div class="pl-body" id="treeBody"></div>
     </section>
 
     <details id="workout" class="section section-card glass" open>
@@ -880,10 +914,10 @@
   <script src="modules.js?v=24"></script>
   <script src="game.js?v=38"></script>
   <script src="fx-stage.js?v=2"></script>
-  <script src="forge-stage.js?v=18"></script>
-  <script src="effigy.js?v=5"></script>
-  <script src="fx.js?v=14"></script>
-  <script src="app.js?v=133"></script>
+  <script src="forge-stage.js?v=19"></script>
+  <script src="effigy.js?v=7"></script>
+  <script src="fx.js?v=15"></script>
+  <script src="app.js?v=145"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

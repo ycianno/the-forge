@@ -46,6 +46,11 @@
     cv: null, ctx: null, host: null, api: null, ro: null,
     W: 0, H: 0, dpr: 1, running: false, raf: 0, lastT: 0,
     attrs: [], hist: null, boxes: {}, hovering: null,
+    // A part you clicked stays chosen after the pointer leaves it. Before this
+    // the only way to read a piece was to keep the cursor on it, so the readout
+    // appeared and vanished and could not be studied — which is most of why the
+    // figure felt like decoration rather than an instrument.
+    locked: null,
     tiers: null,        // last seen tiers, so a band crossing can be noticed
     mountedAt: 0,       // tier-ups during the load settle are not tier-ups
     flash: {},          // per part: 1 → 0 after a tier-up
@@ -459,7 +464,7 @@
     st.boxes = {};
     PARTS.forEach(function (part) {
       st.boxes[part] = boxFor(part, g);
-      DRAW[part](g, st.hovering === part);
+      DRAW[part](g, st.hovering === part || st.locked === part);
     });
     ctx.restore();
 
@@ -525,7 +530,9 @@
   }
   function report() {
     if (!st.api || !st.api.onPart) return;
-    var part = st.hovering;
+    // Hover wins while it lasts, because pointing at a piece should answer
+    // about that piece; when it ends the chosen piece is still chosen.
+    var part = st.hovering || st.locked;
     if (!part) return st.api.onPart(null);
     var a = attrFor(part);
     if (!a) return st.api.onPart(null);
@@ -535,6 +542,7 @@
       part: part, label: PART_LABEL[part], attr: a.key, attrLabel: a.label || a.key,
       color: a.color, level: a.level, tier: tier, tierName: tierName(tier),
       nextName: next ? next.name : null, nextAt: next ? next.min : null,
+      locked: st.locked === part,
     });
   }
 
@@ -553,7 +561,11 @@
     if (e.cancelable) e.preventDefault();
     st.holding = true;
     var next = partAt(pt(e));
-    if (next !== st.hovering) { st.hovering = next; report(); }
+    // Clicking a piece chooses it; clicking it again, or clicking the ground,
+    // lets it go. Holding still raises the fire either way.
+    st.locked = (next && next === st.locked) ? null : next;
+    if (next !== st.hovering) { st.hovering = next; }
+    report();
   }
   function onUp() { st.holding = false; }
 
@@ -662,6 +674,15 @@
   }
 
   window.Effigy = {
+    // A finish repaints the ramp without touching a single call site: the
+    // stops are mutated in place, so every HEAT[i] already written below keeps
+    // working. A finish may change the ramp's HUE but never its ORDER — the
+    // ramp is this app's one information channel, and test/embers.js proves
+    // every finish stays monotonic in luminance.
+    setHeat: function (a) {
+      if (!Array.isArray(a) || a.length !== HEAT.length) return;
+      for (var i = 0; i < HEAT.length; i++) HEAT[i] = a[i];
+    },
     mount: mount, start: start, stop: stop, sync: sync,
     resize: resize, highlight: highlight,
     isRunning: function () { return st.running; },

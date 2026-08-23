@@ -1003,6 +1003,18 @@ function getStartOfWeek(date) {
 function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
 function fmt(date) { return date.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
 function iso(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+// iso() read backwards. game.js has its own copy of this, but it is private to
+// that file's IIFE, so calling it from here is a ReferenceError rather than a
+// missing global you would notice. Parsed by hand and not through Date(string),
+// because "2026-08-02" is parsed as UTC midnight and lands on the 1st for
+// anyone west of Greenwich — which is the whole of this app's day arithmetic
+// off by one.
+function ymdToDate(s) {
+  if (!s) return null;
+  const a = String(s).split("-").map(Number);
+  if (!a[0] || !a[1] || !a[2]) return null;
+  return new Date(a[0], a[1] - 1, a[2]);
+}
 // "45m", "1h", "1h 40m" — never "0h 45m", never a bare minute count over an hour.
 function fmtDuration(minutes) {
   const total = Math.max(0, Math.round(Number(minutes) || 0));
@@ -1758,6 +1770,214 @@ function markSelectedDay() {
 // readout that says whether the week you have designed is a week anyone could
 // win — existed, but only inside the settings dialog, behind a tab, which is
 // the last place you would go looking for it.
+/* ===========================================================================
+ * EMBERS — somewhere for XP to go
+ * ---------------------------------------------------------------------------
+ * XP only ever went up. A single currency that only accumulates stops being a
+ * currency somewhere around level 10, and this profile is past 20 — the number
+ * is a record, not a decision, and there has never been a moment where having
+ * more of it let you choose anything.
+ *
+ * Embers are the second currency and they exist to be spent. Three rules kept
+ * them from being either a grind or a paywall:
+ *
+ *   1. They are EARNED FROM WHAT YOU ALREADY DID. Every source below is
+ *      derived from state the app was already keeping — bosses you have
+ *      already killed, seasons already fallen, streak milestones already
+ *      passed. Nothing new has to be tracked, and installing this does not
+ *      start you at zero: the ledger reads your whole history on first paint.
+ *   2. Nothing that was free becomes paid. Every one of the ten themes stays
+ *      free forever. Embers buy FINISHES, which did not exist before this, so
+ *      the shop can only ever add.
+ *   3. A finish may change the ramp's hue. It may never change its order.
+ *      The heat ramp is the one information channel this app has — monotonic
+ *      in luminance, readable in greyscale, meaning "more" without a legend.
+ *      A cosmetic that scrambled it would cost the user the ability to read
+ *      their own month. test/embers.js proves every ramp still climbs.
+ *
+ * Balance is derived, never stored: earned minus the cost of what you own. So
+ * there is no counter to corrupt, no way to end up negative, and changing a
+ * price later re-settles honestly instead of leaving a phantom balance.
+ * ======================================================================== */
+const EMBER_RATES = { boss: 25, season: 100, streakStep: 10 };
+const STREAK_MARKS = [7, 14, 30, 60, 100, 200, 365];
+
+// Hue only. Every ramp below is the same six-step climb in luminance as the
+// default — ash, dull, working, hot, bright, white — wearing a different
+// colour. The order is what carries meaning; the hue is what you bought.
+const FINISHES = [
+  { id: "forge",     name: "Forge",      cost: 0,   note: "The smith's own fire",
+    ramp: ["#3a3632", "#7c2d12", "#c2410c", "#f97316", "#fbbf24", "#fff7ed"] },
+  { id: "quench",    name: "Quench",     cost: 150, note: "Steel straight out of the water",
+    ramp: ["#2f3338", "#0f3a56", "#0e6d94", "#22a5c4", "#7fd4e6", "#f2fbff"] },
+  { id: "verdigris", name: "Verdigris",  cost: 150, note: "Copper left out in the weather",
+    ramp: ["#31352f", "#14431f", "#137a3c", "#2aa85c", "#7fd694", "#f2fff6"] },
+  { id: "bloodiron", name: "Blood Iron", cost: 250, note: "Iron that remembers what it was for",
+    ramp: ["#38302e", "#781824", "#c02236", "#ef5566", "#fba9b1", "#fff2f3"] },
+  { id: "moonsilver",name: "Moonsilver", cost: 400, note: "Cold, and worth more than it looks",
+    ramp: ["#33313a", "#413878", "#6a5ad4", "#9d8df3", "#d0c8fb", "#f7f5ff"] },
+];
+function finishById(id) { return FINISHES.find((f) => f.id === id) || FINISHES[0]; }
+
+function emberState() {
+  const e = (settings && settings.embers) || {};
+  return {
+    owned: Array.isArray(e.owned) ? e.owned : [],
+    active: typeof e.active === "string" ? e.active : "forge",
+  };
+}
+// Every ember you have ever earned, and what earned it. Read from history, so
+// this is the same answer on a fresh install as on the machine it happened on.
+function emberLedger() {
+  const rows = [];
+  const bosses = (settings && settings.bossDefeated) || {};
+  const nBosses = Object.keys(bosses).length;
+  if (nBosses) rows.push({ k: "Bosses felled", n: nBosses, each: EMBER_RATES.boss, total: nBosses * EMBER_RATES.boss });
+
+  const claims = (settings && settings.seasonClaims) || {};
+  let seasons = 0;
+  for (const mKey in claims) {
+    const parts = String(mKey).split("-");
+    const start = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+    if (!parts[0] || !parts[1]) continue;
+    const t = seasonTrackData(start);
+    if (t.nodes.length && t.hp <= 0) seasons++;
+  }
+  if (seasons) rows.push({ k: "Seasons conquered", n: seasons, each: EMBER_RATES.season, total: seasons * EMBER_RATES.season });
+
+  const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+  const best = prof ? Math.max(prof.dayStreak || 0, (settings && settings.bestDayStreak) || 0) : 0;
+  let streakTotal = 0, marks = 0;
+  STREAK_MARKS.forEach((m, i) => { if (best >= m) { marks++; streakTotal += EMBER_RATES.streakStep * (i + 1); } });
+  if (marks) rows.push({ k: "Streak marks passed", n: marks, each: null, total: streakTotal, sub: `best run ${best} day${best === 1 ? "" : "s"}` });
+
+  const earned = rows.reduce((a, r) => a + r.total, 0);
+  const st = emberState();
+  const spent = st.owned.reduce((a, id) => a + finishById(id).cost, 0);
+  return { rows, earned, spent, balance: Math.max(0, earned - spent), owned: st.owned, active: st.active };
+}
+
+function buyFinish(id) {
+  const f = FINISHES.find((x) => x.id === id);
+  const led = emberLedger();
+  if (!f || f.cost === 0 || led.owned.includes(id) || led.balance < f.cost) return false;
+  const owned = led.owned.concat([id]);
+  settings.embers = Object.assign({}, settings.embers || {}, { owned, active: id });
+  patchSettingsSoon({ "embers.owned": owned, "embers.active": id });
+  applyFinish(id);
+  if (window.FX && FX.badge) FX.badge(f.name, "Finish unlocked");
+  renderEmbers();
+  return true;
+}
+function equipFinish(id) {
+  const led = emberLedger();
+  const f = FINISHES.find((x) => x.id === id);
+  if (!f || (f.cost > 0 && !led.owned.includes(id))) return false;
+  settings.embers = Object.assign({}, settings.embers || {}, { owned: led.owned, active: id });
+  patchSettingsSoon({ "embers.active": id });
+  applyFinish(id);
+  renderEmbers();
+  return true;
+}
+// One writer for what a finish actually changes: an attribute on the root for
+// the CSS side, and the two canvases, which own their own copy of the ramp.
+function applyFinish(id) {
+  const f = finishById(id);
+  document.documentElement.dataset.finish = f.id;
+  if (window.Effigy && Effigy.setHeat) Effigy.setHeat(f.ramp);
+  if (window.ForgeStage && ForgeStage.setHeat) ForgeStage.setHeat(f.ramp);
+}
+
+/* ===========================================================================
+ * THE FORGE TREE — Pursuits' playable thing
+ * ---------------------------------------------------------------------------
+ * Pursuits was the last room that only reported, and the only one that was
+ * pure configuration: a plan head saying what this week asks, and nine forms
+ * under it. What it could never say is what the plan has actually *built*.
+ *
+ * One limb per pursuit, grown from the same measurement the Cabinet's insignia
+ * chain already uses — the number of weeks that pursuit was alive at all —
+ * against the same rungs, so a limb and its insignia can never disagree about
+ * where you are. Hold a limb and the fire comes up under it: it tells you what
+ * the next rung costs and how far off it is. That is the effigy's contract at
+ * a different subject, and it is deliberately read-only. You do not spend
+ * anything here; the tree is what the weeks spent on you.
+ * ======================================================================== */
+const TREE_RUNGS = [
+  { at: 1,  name: "First step" },
+  { at: 4,  name: "Devotee" },
+  { at: 13, name: "Adept" },
+  { at: 26, name: "Stalwart" },
+  { at: 52, name: "Master" },
+];
+function treeRungFor(weeks) {
+  let i = -1;
+  TREE_RUNGS.forEach((r, n) => { if (weeks >= r.at) i = n; });
+  return { index: i, cur: i >= 0 ? TREE_RUNGS[i] : null, next: TREE_RUNGS[i + 1] || null };
+}
+// Weeks in which a pursuit earned anything at all, per pursuit. Walks the whole
+// history, which is what computeProfile() already does on every live update —
+// but only Pursuits ever asks for this, and only when it is on screen.
+function pursuitLifetimeWeeks() {
+  const counts = {};
+  if (!window.Game || !Game.weekXpBySource) return counts;
+  const weeks = (database && database.weeks) || {};
+  for (const key in weeks) {
+    const bySource = Game.weekXpBySource(weeks[key]);
+    for (const id in bySource) {
+      if (bySource[id] > 0) counts[id] = (counts[id] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function renderPursuitTree() {
+  const host = document.getElementById("treeBody");
+  if (!host) return;
+  const mods = visiblePursuits();
+  if (!mods.length) {
+    host.innerHTML = `<p class="pl-empty">No pursuits yet. Add one from Edit pursuits and the tree starts growing.</p>`;
+    return;
+  }
+  const counts = pursuitLifetimeWeeks();
+  const top = TREE_RUNGS[TREE_RUNGS.length - 1].at;
+
+  const limbs = mods.map((m) => {
+    // XP is bucketed by a module's `source`, not by its id — Training banks
+    // under "training", Provisions under "nutrition". Keying on the id made
+    // every built-in pursuit read as never once alive.
+    const weeks = counts[m.source || m.id] || 0;
+    const r = treeRungFor(weeks);
+    // Growth is logarithmic against the rungs rather than linear against 52,
+    // or every limb but a year-old one is a stub.
+    const grown = Math.min(100, Math.round(Math.log1p(weeks) / Math.log1p(top) * 100));
+    const toNext = r.next ? r.next.at - weeks : 0;
+    const label = r.cur ? r.cur.name : "Unbroken";
+    const sub = r.next
+      ? `${toNext} more week${toNext === 1 ? "" : "s"} to ${r.next.name}`
+      : "Nothing above this";
+    const notches = TREE_RUNGS.map((rung, i) => {
+      const y = Math.round(Math.log1p(rung.at) / Math.log1p(top) * 100);
+      return `<i class="tr-notch${i <= r.index ? " is-cut" : ""}" style="bottom:${y}%"></i>`;
+    }).join("");
+    return `<button class="tr-limb${r.cur ? " is-alive" : ""}" type="button"
+        data-tree="${escapeHtml(m.id)}" style="--ac:${pursuitColor(m)}"
+        aria-label="${escapeHtml(m.name)} — ${escapeHtml(label)}, ${weeks} week${weeks === 1 ? "" : "s"}">
+      <span class="tr-stem"><i class="tr-grow" style="height:${grown}%"></i>${notches}</span>
+      <span class="tr-meta">
+        <span class="tr-n">${weeks}</span>
+        <span class="tr-name">${escapeHtml(m.name)}</span>
+        <span class="tr-rung">${escapeHtml(label)}</span>
+      </span>
+      <span class="tr-next">${escapeHtml(sub)}</span>
+    </button>`;
+  }).join("");
+
+  const lit = mods.filter((m) => (counts[m.source || m.id] || 0) > 0).length;
+  host.innerHTML = `<div class="tr-row">${limbs}</div>
+    <p class="tr-foot">${lit} of ${mods.length} alive · hold a limb to see what the next rung costs</p>`;
+}
+
 function renderPlanHead() {
   const body = document.getElementById("planHeadBody");
   if (!body) return;
@@ -1814,6 +2034,44 @@ function initPlanHead() {
     openSettings();
     const tab = document.querySelector('#settingsModal [data-settings-tab="modules"]');
     if (tab) tab.click();
+  });
+  initPursuitTree();
+}
+
+// Hold raises the fire under a limb and it says what the next rung costs; a tap
+// is still a tap and takes you to that pursuit. The two are told apart by time
+// rather than by two separate controls, which is what the effigy does — and a
+// press that becomes a hold must NOT also navigate on release, or every look
+// ends somewhere you did not ask to go.
+function initPursuitTree() {
+  const host = document.getElementById("treeBody");
+  if (!host || host._wired) return;
+  host._wired = true;
+  let held = null, timer = null;
+  const release = () => {
+    clearTimeout(timer);
+    if (held) held.classList.remove("is-held");
+    held = null;
+  };
+  host.addEventListener("pointerdown", (e) => {
+    const limb = e.target.closest("[data-tree]");
+    if (!limb) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => { held = limb; limb.classList.add("is-held"); }, 180);
+  });
+  host.addEventListener("pointerup", (e) => {
+    const limb = e.target.closest("[data-tree]");
+    const wasHeld = held === limb && limb;
+    release();
+    if (limb && !wasHeld) scrollToSection(limb.dataset.tree);
+  });
+  host.addEventListener("pointercancel", release);
+  host.addEventListener("pointerleave", release);
+  // Keyboard has no press-and-hold, so focus does the revealing instead.
+  host.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const limb = e.target.closest("[data-tree]");
+    if (limb) { e.preventDefault(); scrollToSection(limb.dataset.tree); }
   });
 }
 
@@ -2057,9 +2315,48 @@ function renderCharacter() {
   const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
   if (!prof) return;
   renderRankLadder(prof);
+  renderSheetTrophies(prof);
   renderAttrSheet(prof);
   syncEffigy(prof);
   initShapeLink();
+}
+
+// The shelf, in one line. The Sheet used to carry a full copy of the Cabinet's
+// four tier cards and it was cut for being the same thing twice — but cutting
+// it left the sheet with no sign that the shelf exists at all, which is its own
+// kind of wrong. This is counts and a door: enough to know there is something
+// to go and look at, not enough to be a second opinion about it.
+const TROPHY_TIERS = [
+  { k: "bronze",   label: "Bronze",   c: "#c98a52" },
+  { k: "silver",   label: "Silver",   c: "#c7ccd4" },
+  { k: "gold",     label: "Gold",     c: "#f0b429" },
+  { k: "platinum", label: "Platinum", c: "#8fd3e8" },
+];
+function renderSheetTrophies(prof) {
+  const host = document.getElementById("sheetTrophies");
+  if (!host) return;
+  const T = (settings && settings.trophies) || {};
+  const insignias = Object.keys((settings && settings.insignias) || {}).length;
+  const cells = TROPHY_TIERS.map((t) => {
+    const n = T[t.k] ? Object.keys(T[t.k]).length : 0;
+    return `<span class="st-t${n ? "" : " is-none"}" style="--tc:${t.c}" title="${t.label}">
+      <b>${n}</b><span>${t.label}</span>
+    </span>`;
+  }).join("");
+  const total = TROPHY_TIERS.reduce((a, t) => a + (T[t.k] ? Object.keys(T[t.k]).length : 0), 0);
+  host.innerHTML = `
+    <div class="rl-head">
+      <span class="rl-title">The shelf</span>
+      <button class="st-more" type="button" data-char-tab-jump="cabinet">Open the Cabinet<svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
+    </div>
+    <div class="st-tiers">${cells}</div>
+    <p class="st-sum">${total} troph${total === 1 ? "y" : "ies"} banked · ${insignias} insignia${insignias === 1 ? "" : "s"} earned</p>`;
+  if (!host._wired) {
+    host._wired = true;
+    host.addEventListener("click", (e) => {
+      if (e.target.closest("[data-char-tab-jump]")) showCharTab("cabinet");
+    });
+  }
 }
 
 // ----- the effigy ---------------------------------------------------------
@@ -2129,7 +2426,8 @@ function renderEffigyRead(info) {
   const el = document.getElementById("effigyRead");
   if (!el) return;
   if (!info) {
-    el.innerHTML = `<span class="ef-hint">Hold the figure to bring the fire up · touch a piece to read it</span>`;
+    el.innerHTML = `<span class="ef-hint">Hold the figure to bring the fire up · click a piece to keep it open</span>`;
+    renderEffigyEvolution(null);
     highlightAttr(null);
     return;
   }
@@ -2140,7 +2438,103 @@ function renderEffigyRead(info) {
     `<span class="ef-part" style="--ac:${info.color}">${escapeHtml(info.label)}</span>` +
     `<span class="ef-of">forged from ${escapeHtml(info.attrLabel)} · Lv ${info.level}</span>` +
     `<span class="ef-tier">${escapeHtml(info.tierName)}</span>` + to;
+  renderEffigyEvolution(info);
   highlightAttr(info.attr);
+}
+
+// WHAT A PIECE BECOMES.
+// The figure could say which tier a piece is at and what the next one is
+// called, and nothing else — so "what does this thing do" was a fair question.
+// Every piece climbs the same six bands the character does, and that is a
+// ladder, which is a picture. Choosing a piece draws its whole run: what it
+// has been, what it is, and what it turns into next, with the levels underneath
+// so the next tier is a number you can go and earn rather than a promise.
+//
+// It reads Game.RANKS, the same list the rank ladder and the effigy's own tier
+// maths use, so a piece and its owner can never disagree about what Journeyman
+// means.
+function renderEffigyEvolution(info) {
+  const el = document.getElementById("effigyEvo");
+  if (!el) return;
+  if (!info) { el.innerHTML = ""; el.hidden = true; return; }
+  const RANKS = (window.Game && Game.RANKS) ? Game.RANKS : [];
+  if (!RANKS.length) { el.hidden = true; return; }
+  el.hidden = false;
+
+  const cur = info.tier;
+  const steps = RANKS.map((r, i) => {
+    const state = i < cur ? "done" : i === cur ? "on" : "todo";
+    return `<li class="ev-step is-${state}">
+      <span class="ev-dot"></span>
+      <span class="ev-name">${escapeHtml(r.name)}</span>
+      <span class="ev-lv">Lv ${r.min}</span>
+    </li>`;
+  }).join("");
+
+  const gap = info.nextAt != null ? info.nextAt - info.level : 0;
+  const line = info.nextAt != null
+    ? `<b>${escapeHtml(info.label)}</b> is ${escapeHtml(info.tierName)}. ${gap} more level${gap === 1 ? "" : "s"} of ${escapeHtml(info.attrLabel)} and it is reforged as <b>${escapeHtml(info.nextName)}</b>.`
+    : `<b>${escapeHtml(info.label)}</b> is ${escapeHtml(info.tierName)} — there is nothing above it.`;
+
+  // How far along the road this piece has come, as a fraction of the gaps
+  // between dots — so the lit part ends ON the current dot, not past it.
+  const run = RANKS.length > 1 ? cur / (RANKS.length - 1) : 0;
+  el.innerHTML = `<ol class="ev-run" style="--ac:${info.color};--run:${run}">${steps}</ol>
+    <p class="ev-line">${line}</p>`;
+}
+
+// The ember pane. A ledger of what you already did, then the shelf. The ledger
+// comes first on purpose: the first question anyone asks a currency they have
+// never seen before is "where did this come from", and answering it with a
+// balance alone is how a number reads as arbitrary.
+function renderEmbers() {
+  const host = document.getElementById("charPaneEmbers");
+  if (!host) return;
+  const led = emberLedger();
+
+  const ledger = led.rows.length
+    ? led.rows.map((r) => `<li class="em-row">
+        <span class="em-row-k">${escapeHtml(r.k)}</span>
+        <span class="em-row-n">${r.n}${r.each ? ` × ${r.each}` : ""}${r.sub ? ` · ${escapeHtml(r.sub)}` : ""}</span>
+        <span class="em-row-v">+${r.total.toLocaleString()}</span>
+      </li>`).join("")
+    : `<li class="em-row is-empty"><span class="em-row-k">Nothing yet</span><span class="em-row-n">Fell a boss, clear a season, or hold a streak to seven days</span><span class="em-row-v">0</span></li>`;
+
+  const shelf = FINISHES.map((f) => {
+    const owned = f.cost === 0 || led.owned.includes(f.id);
+    const on = led.active === f.id;
+    const afford = led.balance >= f.cost;
+    const stops = f.ramp.map((c) => `<i style="background:${c}"></i>`).join("");
+    const action = on ? `<span class="em-state">Worn</span>`
+      : owned ? `<button class="em-buy" type="button" data-equip="${f.id}">Wear</button>`
+      : `<button class="em-buy${afford ? " can" : ""}" type="button" data-buy="${f.id}"${afford ? "" : " disabled"}>${f.cost.toLocaleString()} 🔥</button>`;
+    return `<div class="em-finish${on ? " is-on" : ""}${owned ? " is-owned" : ""}">
+      <div class="em-fin-top"><span class="em-fin-name">${escapeHtml(f.name)}</span>${action}</div>
+      <div class="em-ramp" role="img" aria-label="${escapeHtml(f.name)} ramp">${stops}</div>
+      <div class="em-fin-note">${escapeHtml(f.note)}</div>
+    </div>`;
+  }).join("");
+
+  host.innerHTML = `
+    <div class="em-head">
+      <div class="em-bal"><b>${led.balance.toLocaleString()}</b><span>embers to spend</span></div>
+      <div class="em-sub">${led.earned.toLocaleString()} earned · ${led.spent.toLocaleString()} spent</div>
+    </div>
+    <p class="em-blurb">Embers come from what you already did — every boss you have felled, every season you have put down, every streak mark you have passed. They buy <strong>finishes</strong>: the colour of the fire itself, in the forge, on the effigy and across every heat reading in the app. Every theme stays free.</p>
+    <ul class="em-ledger">${ledger}</ul>
+    <div class="em-shelf-k">Finishes</div>
+    <div class="em-shelf">${shelf}</div>
+    <p class="em-foot">A finish changes the fire's colour, never its order — the coldest stop is always the coldest. Nothing you can buy here can make your own history harder to read.</p>`;
+
+  if (!host._wired) {
+    host._wired = true;
+    host.addEventListener("click", (e) => {
+      const buy = e.target.closest("[data-buy]");
+      if (buy) { buyFinish(buy.dataset.buy); return; }
+      const eq = e.target.closest("[data-equip]");
+      if (eq) equipFinish(eq.dataset.equip);
+    });
+  }
 }
 
 // The shape and the sheet are two views of one set of numbers, so pointing at
@@ -2188,19 +2582,24 @@ function initShapeLink() {
   }
 }
 
+const CHAR_TABS = ["sheet", "cabinet", "embers"];
 function showCharTab(name) {
-  charTab = name === "cabinet" ? "cabinet" : "sheet";
+  charTab = CHAR_TABS.includes(name) ? name : "sheet";
   document.querySelectorAll("[data-char-tab]").forEach((t) => {
     const on = t.dataset.charTab === charTab;
     t.classList.toggle("active", on);
     t.setAttribute("aria-selected", String(on));
   });
-  ["sheet", "cabinet"].forEach((k) => {
+  CHAR_TABS.forEach((k) => {
     const pane = document.getElementById("charPane" + k[0].toUpperCase() + k.slice(1));
     if (pane) pane.classList.toggle("active", k === charTab);
   });
-  if (charTab === "cabinet") { if (window.Effigy) Effigy.stop(); paintCabinet(); }
-  else renderCharacter();
+  // The effigy is a running canvas; anything that is not the sheet must stop it
+  // rather than leave it drawing behind a hidden pane.
+  if (charTab === "sheet") { renderCharacter(); return; }
+  if (window.Effigy) Effigy.stop();
+  if (charTab === "cabinet") paintCabinet();
+  else renderEmbers();
 }
 function initCharTabs() {
   const bar = document.querySelector(".char-tabs");
@@ -2312,6 +2711,9 @@ function shiftRecord(delta) {
 }
 function paintRecord() {
   renderMonthHead();
+  // The track is above the tabs, so it repaints with the room rather than with
+  // any one pane — the year tab moves it a year at a time along with the rest.
+  renderSeasonTrack();
   MONTH_PANE_PAINT[monthTab]();
 }
 
@@ -2343,6 +2745,23 @@ function initMonthTabs() {
   if (next) next.onclick = () => shiftRecord(1);
   const nowBtn = document.getElementById("recNow");
   if (nowBtn) nowBtn.onclick = () => { calViewDate = new Date(); paintRecord(); };
+
+  // A node is two things at once: a claim when there is one to make, and a door
+  // into that week's days when there is not. Claiming wins, because a week you
+  // can claim is the only thing on this strip that is asking for something.
+  const track = document.getElementById("seasonTrack");
+  if (track && !track._wired) {
+    track._wired = true;
+    track.addEventListener("click", (e) => {
+      const node = e.target.closest("[data-season-week]");
+      if (!node || node.classList.contains("is-future")) return;
+      if (claimSeasonWeek(node.dataset.seasonWeek)) return;
+      // Not claimable — show me which days it was made of instead. The week
+      // lives in this month by construction, so the grid does not have to move.
+      showMonthTab("calendar");
+      highlightCalendarWeek(node.dataset.seasonWeek);
+    });
+  }
 }
 function renderHeatmap() {
   const grid = document.getElementById("heatmapGrid");
@@ -2956,7 +3375,23 @@ function renderPursuitTaskPanels() {
 
 let goalEditorState = null;
 let questEditorState = null;
-let mobileFullWeekKey = "";
+// THE BOARD IS ONE DAY AT A TIME.
+// Week was 5,555px tall and 3,521 of it was this board — seven full day cards,
+// the same tasks the Quest Log summarises above them and Today lists below.
+// A room you have to scroll five screens through is not a room you can look at.
+// Phones already showed one day and offered the other six; that is now what
+// every screen does, and the pulse above the board is the switcher: clicking a
+// day shows that day rather than scrolling three thousand pixels to it.
+// `fullWeekKey` is still an opt-in per week — asking for all seven is a thing
+// you do for this week, not a setting you have to remember to turn back off.
+let fullWeekKey = "";
+let boardDayIndex = null;   // which day the board is showing; null = today
+let boardDayKey = "";       // the week that index belongs to
+function focusedDayIndex() {
+  if (boardDayIndex == null || boardDayKey !== weekKey()) return getTodayDayIndex();
+  return boardDayIndex;
+}
+function setFocusedDay(di) { boardDayIndex = di; boardDayKey = weekKey(); }
 function closeEditorModal(id) { closeModal(id); }
 function openGoalEditor(type, id) {
   const list = type === "study" ? getStudyGoals() : getProjectGoals();
@@ -3377,8 +3812,14 @@ function renderDays() {
   const orderedEntries = isMobile()
     ? [entries[todayIndex]].concat(byWeekOrder(entries.filter((x) => x.dayIndex !== todayIndex), (e) => e.dayIndex))
     : byWeekOrder(entries, (e) => e.dayIndex);
+  const showAll = fullWeekKey === weekKey();
+  const focusIndex = focusedDayIndex();
+  // The board is a two-up grid of seven cards. One card in a two-column grid is
+  // a half-width day beside an empty cell, so the grid drops a column when it
+  // is only drawing one.
+  wrap.classList.toggle("is-single", !onToday && !showAll);
   const visibleEntries = onToday ? [entries[todayIndex]]
-    : (isMobile() && mobileFullWeekKey !== weekKey() ? [entries[todayIndex]] : orderedEntries);
+    : (showAll ? orderedEntries : [entries[focusIndex]]);
   visibleEntries.forEach(({ day, dayIndex, isToday }) => {
     const date = addDays(selectedWeekStart, dayIndex);
     const tasks = questsForDate(date);
@@ -3387,7 +3828,8 @@ function renderDays() {
     // and draws the bar. A second header saying the same three things is the
     // kind of duplication that makes one screen feel like two.
     card.className = "day-card" + (isToday ? " today" : "") + (onToday ? " is-solo" : "");
-    card.open = onToday ? true : (isMobile() ? isToday : true);
+    // A board showing one day has nothing to collapse it for.
+    card.open = onToday ? true : (showAll ? (isMobile() ? isToday : true) : true);
     card.innerHTML = `<summary class="day-summary"><div class="day-heading"><div class="day-title">${day}${isToday ? '<span class="today-tag">Today</span>' : ''}</div><div class="day-subline"><span class="date-tag">${fmt(date)}</span><span class="day-remaining" id="dayLeft-${dayIndex}"></span></div></div><div class="day-actions"><span class="badge" id="dayBadge-${dayIndex}">0/0</span><button class="icon-btn edit-day-btn" type="button" data-day-index="${dayIndex}" title="Add weekly routine for ${day}" aria-label="Add weekly routine for ${day}"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg></button></div></summary><div class="day-content"><div class="bar"><div class="bar-fill" id="dayBar-${dayIndex}"></div></div><div class="task-group"></div></div>`;
     const group = card.querySelector(".task-group");
     // Two skeletons for one list, and which one you get depends on what you are
@@ -3408,11 +3850,16 @@ function renderDays() {
   });
   if (onToday) {
     wrap.insertAdjacentHTML("beforeend", `<button class="show-week-btn" type="button" data-view="week"><span>Today is handled?</span><strong>Open the week</strong></button>`);
-  } else if (isMobile() && mobileFullWeekKey !== weekKey()) {
-    wrap.insertAdjacentHTML("beforeend", `<button class="show-week-btn" type="button"><span>Today is ready</span><strong>Show the other 6 days</strong></button>`);
+  } else {
+    // The switch works both ways, and it says which state you are in — a button
+    // that only ever opens is a trapdoor.
+    const label = showAll
+      ? `<span>All seven days are open</span><strong>Back to one day</strong>`
+      : `<span>Showing ${escapeHtml(dayNames()[focusIndex])} — pick another above</span><strong>Show all seven</strong>`;
+    wrap.insertAdjacentHTML("beforeend", `<button class="show-week-btn" type="button">${label}</button>`);
     wrap.querySelector(".show-week-btn:not([data-view])").addEventListener("click", () => {
-      mobileFullWeekKey = weekKey();
-      renderDays(); loadWeekFields(); updateProgress();
+      fullWeekKey = showAll ? "" : weekKey();
+      renderDays(); loadWeekFields(); updateProgress(); renderWeekPulse();
     }, { once: true });
   }
   updateAgendaNow();
@@ -3454,6 +3901,9 @@ function renderStructure() {
   renderPursuitTaskPanels();
   applyModuleLayout();
   applySectionVisibility();
+  // After visibility, because a hidden pursuit is not one of the cards this
+  // gets to call the first one.
+  applyPursuitCollapse();
   renderScoreboard();
   renderReview();
   // The sidebar is built from the module list and from the user's chrome
@@ -3462,7 +3912,7 @@ function renderStructure() {
   // you just added appear in the sidebar without a reload.
   renderSidebar();
   applyChrome();
-  if (currentView === "pursuits") renderPlanHead();
+  if (currentView === "pursuits") { renderPlanHead(); renderPursuitTree(); }
   // The cabinet is a pane of Character now, so it has to be repainted when data
   // arrives — not only when something opens it.
   if (currentView === "character") paintCabinet();
@@ -3487,6 +3937,8 @@ function updateLive() {
   // The stat sheet reads the same profile Game.render() just recomputed, but
   // walking every week to draw a room nobody is looking at is pure waste.
   if (currentView === "character" && charTab === "sheet") renderCharacter();
+  // A boss felled in this session is embers earned in this session.
+  else if (currentView === "character" && charTab === "embers") renderEmbers();
   syncAnvil();
 }
 // The debounced form for text input, where a keystroke should not pay for a
@@ -4049,6 +4501,7 @@ function buildViewShell() {
   // so take what is in the document and let applyModuleLayout() order it once
   // the real module list exists.
   move("pursuits", document.getElementById("planHead"));
+  move("pursuits", document.getElementById("forgeTree"));
   shell.querySelectorAll("details.section-card").forEach((sec) => {
     if (sec.closest(".view")) return;
     move("pursuits", sec);
@@ -4101,7 +4554,7 @@ function buildViewShell() {
   unwrapModalInto(document.getElementById("charPaneCabinet"), "cabinetModal", { drop: ["#closeCabinetBtn"], className: "cabinet-body" });
   renderSidebar();
   applyChrome();
-  if (currentView === "pursuits") renderPlanHead();
+  if (currentView === "pursuits") { renderPlanHead(); renderPursuitTree(); }
   initQuickAdd();
 }
 
@@ -4165,7 +4618,7 @@ const HEADER_ACTIONS = {
   cabinet:  { label: "Cabinet",     el: "openCabinetBtn",  note: "Also Character → Cabinet" },
 };
 const SIDEBAR_BLOCKS = {
-  identity: { label: "Who you are",  note: "Level, name, XP and streak" },
+  identity: { label: "Who you are",  note: "Name, rank, class and your run" },
   rooms:    { label: "The rooms",    note: "Today, Week, Month, Character, Pursuits" },
   pursuits: { label: "Your pursuits", note: "A jump to each one" },
   live:     { label: "The live block", note: "Whatever you pick below" },
@@ -4175,6 +4628,12 @@ const CHROME_DEFAULTS = {
   sidebar: ["identity", "rooms", "pursuits", "live"],
   live: "boss",
 };
+function liveModeOk(v) {
+  if (["boss", "today", "streak", "none"].includes(v)) return true;
+  if (typeof v !== "string" || v.indexOf("pursuit:") !== 0) return false;
+  const id = v.slice(8);
+  return getModules().some((m) => m.id === id && m.enabled !== false);
+}
 function getChrome() {
   const c = (settings && settings.chrome) || {};
   const clean = (list, catalog, fallback) => {
@@ -4184,7 +4643,10 @@ function getChrome() {
   return {
     header: clean(c.header, HEADER_ACTIONS, CHROME_DEFAULTS.header),
     sidebar: clean(c.sidebar, SIDEBAR_BLOCKS, CHROME_DEFAULTS.sidebar),
-    live: ["boss", "today", "streak", "none"].includes(c.live) ? c.live : CHROME_DEFAULTS.live,
+    // "pursuit:<id>" pins one pursuit's week to the foot of the sidebar. It is
+    // validated against the live module list rather than a fixed set, so a
+    // pursuit you delete quietly falls back instead of pinning a ghost.
+    live: liveModeOk(c.live) ? c.live : CHROME_DEFAULTS.live,
   };
 }
 function setChrome(patch) {
@@ -4243,7 +4705,16 @@ function renderChromePanel() {
   const b = document.getElementById("sidebarChromeList");
   if (b) { b.dataset.kind = "sidebar"; b.innerHTML = chromeRowsHtml("sidebar"); }
   const sel = document.getElementById("sidebarLiveSelect");
-  if (sel) sel.value = getChrome().live;
+  if (sel) {
+    // The four fixed choices are in the markup; the pursuits are not, because
+    // they are the user's and change. Rebuilt on every open so a pursuit added
+    // a minute ago is pinnable now.
+    sel.querySelectorAll("option[data-pin]").forEach((o) => o.remove());
+    const pins = visiblePursuits().map((m) =>
+      `<option value="pursuit:${escapeHtml(m.id)}" data-pin="1">Pin — ${escapeHtml(m.name)}</option>`).join("");
+    sel.insertAdjacentHTML("beforeend", pins);
+    sel.value = getChrome().live;
+  }
 }
 function chromeToggle(kind, key, on) {
   const list = getChrome()[kind].slice();
@@ -4378,16 +4849,88 @@ function renderSidebarLive() {
     const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
     const streak = prof ? (prof.dayStreak || 0) : 0;
     const shield = prof && prof.streakUsed > 0 ? " 🛡️" : "";
-    const pct = prof && prof.next ? Math.min(100, Math.round(prof.into / prof.next * 100)) : 0;
+    // WHO, not how far. The level number and the XP bar moved to the HUD in the
+    // top bar, which is on screen in every room and has the width to label
+    // them — leaving this block saying the same two things again in a 46px
+    // circle and a 4px line, which is most of why it read as an afterthought.
+    // What the HUD cannot say is who you are: the rank you hold, the class the
+    // attributes have made you, and the run you are protecting.
+    const rank = prof && prof.rank ? prof.rank : null;
+    const cls = prof && prof.heroClass ? prof.heroClass : null;
+    const pips = rank ? Math.max(1, Math.min(5, rank.pips || 1)) : 1;
     id.innerHTML = `
-      <div class="sv-lvl"><b>${prof ? prof.level : 1}</b><span>LVL</span></div>
+      <button class="sv-crest" type="button" data-view="character" title="Character sheet" style="--cc:${cls ? cls.color : "var(--muted)"}">
+        <!-- heroClass().icon is SVG path data, not markup — it needs the tag. -->
+        <span class="sv-crest-mark" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="${escapeHtml(cls && cls.icon ? cls.icon : "M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z")}"/></svg></span>
+        <span class="sv-crest-pips" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => `<i${i < pips ? ' class="on"' : ""}></i>`).join("")}</span>
+      </button>
       <div class="sv-idmeta">
         <div class="sv-name">${escapeHtml((settings && settings.callsign) || "Player One")}</div>
-        <div class="sv-xpbar"><i style="width:${pct}%"></i></div>
-        <div class="sv-streak">${streak ? `🔥 ${streak} day${streak === 1 ? "" : "s"}${shield}` : "No streak yet"}</div>
+        <div class="sv-rank">${rank ? `${escapeHtml(rank.name)} · ${escapeHtml(rank.tier)}` : "Unranked"}</div>
+        <div class="sv-streak${streak ? " is-lit" : ""}">${streak ? `🔥 ${streak}-day run${shield}` : "No run yet — clear today"}</div>
       </div>`;
   }
   renderSidebarFoot();
+  renderHud();
+}
+
+// The top bar's run state. Values only, same contract as the sidebar's live
+// block: this replaces innerHTML on every update and must never hold an input.
+// It draws nothing below 769px — the mobile context bar is already saying it —
+// and nothing at all until a profile exists, so a cold boot shows an empty bar
+// rather than "Level 1, 0 XP" for the half second before the fetch lands.
+function renderHud() {
+  const hud = document.getElementById("hud");
+  if (!hud) return;
+  const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+  if (!prof) { hud.innerHTML = ""; return; }
+
+  const into = prof.xpIntoLevel || 0;
+  const need = prof.xpForNext || 0;
+  const pct = need ? Math.min(100, Math.round(into / need * 100)) : 0;
+  const left = Math.max(0, need - into);
+
+  const cells = [`
+    <button class="hud-cell hud-xp" type="button" data-view="character" title="Character sheet">
+      <span class="hud-v">${prof.level}</span>
+      <span class="hud-stack">
+        <span class="hud-line"><span class="hud-k">Level</span><span class="hud-sub">${left.toLocaleString()} XP to ${prof.level + 1}</span></span>
+        <span class="hud-bar"><i style="width:${pct}%"></i></span>
+      </span>
+    </button>`];
+
+  // Today, from the same reader the sidebar's live block uses, so the two can
+  // never disagree about what the day is at.
+  const info = dayPctInfo(addDays(selectedWeekStart, getTodayDayIndex()));
+  if (info && info.total) {
+    cells.push(`
+      <button class="hud-cell hud-day${info.pct >= 100 ? " is-clear" : ""}" type="button" data-view="today" title="Today">
+        <span class="hud-v">${info.done}/${info.total}</span>
+        <span class="hud-stack">
+          <span class="hud-line"><span class="hud-k">Today</span><span class="hud-sub">${info.pct}%</span></span>
+          <span class="hud-bar"><i style="width:${info.pct}%"></i></span>
+        </span>
+      </button>`);
+  }
+
+  // The boss only exists while there is a fight, which is the point of it.
+  const d = computeBossDamage();
+  if (d && d.hasQuests && d.boss) {
+    const hp = Math.max(0, 100 - d.dmg);
+    cells.push(`
+      <button class="hud-cell hud-boss" type="button" data-view="week" title="${escapeHtml(d.boss.taunt || d.boss.name)}">
+        <span class="hud-emoji" aria-hidden="true">${d.boss.emoji}</span>
+        <span class="hud-stack">
+          <span class="hud-line"><span class="hud-k">${escapeHtml(d.boss.name)}</span><span class="hud-sub">${hp}% HP</span></span>
+          <span class="hud-bar"><i style="width:${hp}%"></i></span>
+        </span>
+      </button>`);
+  }
+
+  hud.innerHTML = cells.join("");
+  // routeTo() lights every [data-view] for the room you are in, and it has
+  // already run by the time these exist on a route change.
+  hud.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === currentView));
 }
 
 // The live block. It used to be the boss and only the boss; for someone who
@@ -4397,6 +4940,23 @@ function renderSidebarFoot() {
   if (!foot) return;
   const mode = getChrome().live;
   if (mode === "none") { foot.innerHTML = ""; return; }
+
+  // A pinned pursuit. The sidebar already lists every pursuit as a door; this
+  // keeps one of them open — the one you are actually trying to move this week,
+  // with the same number the Quest Log shows, so pinning it can never give you
+  // a second opinion about how it is going.
+  if (mode.indexOf("pursuit:") === 0) {
+    const id = mode.slice(8);
+    const m = getModules().find((x) => x.id === id);
+    if (!m) { foot.innerHTML = ""; return; }
+    const x = pursuitMetric(m);
+    foot.innerHTML = `<button class="sv-live sv-live-pin" type="button" data-jump="${escapeHtml(m.id)}" title="${escapeHtml(x.title)} — ${escapeHtml(x.sub)}" style="--ac:${x.color}">
+        <span class="sv-live-top"><b>${escapeHtml(x.title)}</b><span class="sv-live-v">${x.pct}%</span></span>
+        <span class="sv-live-bar"><i style="width:${Math.min(100, x.pct)}%"></i></span>
+        <span class="sv-live-sub">${escapeHtml(x.sub)}</span>
+      </button>`;
+    return;
+  }
 
   if (mode === "today") {
     const date = addDays(selectedWeekStart, getTodayDayIndex());
@@ -4474,7 +5034,7 @@ function routeTo(view, opts) {
   // so without this the queue existed and the card never said so.
   if (next === "week") { armBossFight(); renderBoss(); renderWeekPulse(); }
   else if (bossPending) settleBossFight();
-  if (next === "pursuits") { initPlanHead(); renderPlanHead(); }
+  if (next === "pursuits") { initPlanHead(); renderPlanHead(); renderPursuitTree(); }
   if (next !== "character" && window.Effigy) Effigy.stop();
   if (changed) {
     // The cabinet used to be painted by openCabinet(); arriving by hash, back
@@ -4809,6 +5369,51 @@ function scrollToSection(id) {
 // so never appear in the Pursuits editor — older settings may still hide these.
 const NON_PURSUIT_SECTIONS = ["boss", "scoreboard"];
 function getHiddenSections() { return settings.hiddenSections || []; }
+// ===== WHICH PURSUITS ARE OPEN =====
+// Pursuits was nine section cards, all open, all full height — 5,194px of one
+// room. Nine headings you can see at once is a plan; nine open forms is a
+// scroll. They start closed with the first one open, and which ones you leave
+// open is remembered.
+//
+// This lives in localStorage rather than in settings on purpose: it is a view
+// preference for this browser, not data about the plan, and routing it through
+// the server would mean a settings round-trip on every disclosure triangle.
+const OPEN_SECTIONS_KEY = "forge.openSections";
+function pursuitCards() {
+  const room = viewEl("pursuits");
+  if (!room) return [];
+  return [...room.querySelectorAll(":scope > details.section-card")]
+    .filter((el) => el.style.display !== "none");
+}
+function openSectionsPref() {
+  try {
+    const raw = localStorage.getItem(OPEN_SECTIONS_KEY);
+    return raw ? new Set(JSON.parse(raw)) : null;   // null = never chosen
+  } catch (e) { return null; }
+}
+// Writes what the room actually looks like rather than editing a stored set.
+// `toggle` is queued, not synchronous, so a set edited per event lands in an
+// order nobody controls — and setting .open on an element that is already open
+// fires nothing at all, which is how the default silently persisted as empty.
+// Reading the DOM makes every path agree by construction.
+function rememberOpenSection() {
+  const open = pursuitCards().filter((el) => el.open).map((el) => el.id);
+  try { localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(open)); } catch (e) {}
+}
+function applyPursuitCollapse() {
+  const cards = pursuitCards();
+  if (!cards.length) return;
+  const pref = openSectionsPref();
+  cards.forEach((el, i) => {
+    // No stored preference yet: the first pursuit is open so the room is never
+    // a wall of closed lids, and the rest wait to be asked for.
+    const want = pref ? pref.has(el.id) : i === 0;
+    if (el.open !== want) el.open = want;
+    el.dataset.userOpened = want ? "1" : "0";
+  });
+  if (!pref) rememberOpenSection();
+}
+
 function applySectionVisibility() {
   const hidden = getHiddenSections();
   const ids = getModules().map((m) => m.id).concat(NON_PURSUIT_SECTIONS);
@@ -5160,8 +5765,11 @@ function renderWeekPulse() {
     const lvl = info ? hmLevel(info.pct) : 0;
     const none = !info && !future;
     const label = dayNames()[di].slice(0, 3);
+    // Which day the board below is drawing. Nothing is "shown" when all seven
+    // are open, because then every cell is.
+    const shown = fullWeekKey !== weekKey() && di === focusedDayIndex();
     const title = `${label} — ${info ? `${info.pct}% (${info.done}/${info.total})` : future ? "not yet" : "no record"}`;
-    return `<button class="wp-day d${lvl}${none ? " none" : ""}${future ? " future" : ""}${isToday ? " today" : ""}" type="button" data-day-jump="${di}" title="${escapeHtml(title)}"${future ? ' tabindex="-1"' : ""}>
+    return `<button class="wp-day d${lvl}${none ? " none" : ""}${future ? " future" : ""}${isToday ? " today" : ""}${shown ? " is-shown" : ""}" type="button" data-day-jump="${di}" title="${escapeHtml(title)}"${future ? ' tabindex="-1"' : ""}${shown ? ' aria-current="true"' : ""}>
       <span class="wp-dow">${escapeHtml(label)}</span>
       <span class="wp-num">${info ? info.pct + "%" : future ? "·" : "—"}</span>
       <span class="wp-sub">${info && info.total ? `${info.done}/${info.total}` : ""}</span>
@@ -5664,6 +6272,159 @@ function recordMonth() {
   if (!calViewDate) calViewDate = new Date();
   return new Date(calViewDate.getFullYear(), calViewDate.getMonth(), 1);
 }
+
+/* ===========================================================================
+ * THE SEASON TRACK — Month's playable thing
+ * ---------------------------------------------------------------------------
+ * Every other room has something you do with your hands: Today has the anvil,
+ * Week has a boss you land blows on, Character has an effigy you can hold.
+ * Month had four read-only panes. It reported.
+ *
+ * The month is a run: one node per calendar week, and the season standing at
+ * the end of it. A week that reached the streak grade is a week you *can*
+ * clear, and clearing it is a blow — but you land it by hand, exactly like the
+ * week boss, and for exactly the same reason. Nothing here grants progress;
+ * it only lets you collect progress the weeks already earned. A node you have
+ * not claimed pulses; a claimed one is spent and stays spent.
+ *
+ * State is one array of week keys per month in settings.seasonClaims. Claims
+ * are per week-key rather than per index, so a claim survives you scrolling
+ * back through the year and cannot be moved by a month boundary.
+ * ======================================================================== */
+function seasonClaims(monthKey) {
+  const all = (settings && settings.seasonClaims) || {};
+  const got = all[monthKey];
+  return Array.isArray(got) ? got : [];
+}
+function monthKeyOf(monthStart) {
+  return `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, "0")}`;
+}
+// The weeks a month touches, in order. A week belongs to the month its start
+// falls in — otherwise the last week of August and the first of September are
+// the same node twice, and clearing one clears the other.
+function seasonTrackData(monthStart) {
+  const mKey = monthKeyOf(monthStart);
+  const claimed = new Set(seasonClaims(mKey));
+  const grade = (settings && settings.streakGrade) || 75;
+  const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const thisWeek = getStartOfWeek(today);
+
+  const nodes = [];
+  let cur = getStartOfWeek(monthStart);
+  if (cur < monthStart) cur = addDays(cur, 7);   // that week belongs to last month
+  while (cur < monthEnd) {
+    const key = iso(cur);
+    const wk = database.weeks[key];
+    const pct = wk ? calculateWeekScoreData(wk) : 0;
+    const future = cur > thisWeek;
+    const live = cur.getTime() === thisWeek.getTime();
+    nodes.push({
+      key, start: new Date(cur), pct,
+      cleared: !future && pct >= grade,
+      claimed: claimed.has(key),
+      live, future,
+      label: `W${nodes.length + 1}`,
+    });
+    cur = addDays(cur, 7);
+  }
+  // One blow per week in the month, so a month you clear entirely is a month
+  // whose season falls — and a five-week month is not easier than a four.
+  const per = nodes.length ? 100 / nodes.length : 0;
+  const dmg = Math.min(100, Math.round(nodes.filter((n) => n.claimed).length * per));
+  const ready = nodes.filter((n) => n.cleared && !n.claimed).length;
+  return { mKey, nodes, grade, dmg, hp: Math.max(0, 100 - dmg), ready, per: Math.round(per) };
+}
+// The season's own face. Derived from the month so it is stable — the same
+// month always meets the same season — and never random.
+const SEASONS = [
+  { name: "The Long Dark",   emoji: "🌑" }, { name: "The Thaw",       emoji: "💧" },
+  { name: "The First Green", emoji: "🌱" }, { name: "The Quickening", emoji: "🌿" },
+  { name: "The High Sun",    emoji: "☀️" }, { name: "The Dry Month",  emoji: "🔥" },
+  { name: "The Swelter",     emoji: "🌡️" }, { name: "The Long Heat",  emoji: "🏜️" },
+  { name: "The Turning",     emoji: "🍂" }, { name: "The Rust",       emoji: "🍁" },
+  { name: "The Grey",        emoji: "🌫️" }, { name: "The Cold Forge", emoji: "❄️" },
+];
+function seasonFace(monthStart) { return SEASONS[monthStart.getMonth() % 12]; }
+
+// Arriving at the grid from a node should say which seven squares you came for.
+function highlightCalendarWeek(weekKey) {
+  const start = ymdToDate(weekKey);
+  if (!start) return;
+  const keys = new Set(Array.from({ length: 7 }, (_, i) => iso(addDays(start, i))));
+  const cells = document.querySelectorAll(".cal-cell[data-date]");
+  cells.forEach((c) => c.classList.remove("is-weekmark"));
+  let first = null;
+  cells.forEach((c) => {
+    if (!keys.has(c.dataset.date)) return;
+    void c.offsetWidth;
+    c.classList.add("is-weekmark");
+    if (!first) first = c;
+  });
+  if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function renderSeasonTrack() {
+  const host = document.getElementById("seasonTrack");
+  if (!host) return;
+  const m = recordMonth();
+  const t = seasonTrackData(m);
+  const face = seasonFace(m);
+  const dead = t.hp <= 0;
+
+  const nodes = t.nodes.map((n) => {
+    const state = n.future ? "future" : n.claimed ? "claimed" : n.cleared ? "ready" : n.pct > 0 ? "short" : "empty";
+    const range = `${fmt(n.start)} – ${fmt(addDays(n.start, 6))}`;
+    const title = n.future ? `${range} — not yet`
+      : n.claimed ? `${range} — claimed, ${n.pct}%`
+      : n.cleared ? `${range} — ${n.pct}%, ready to claim`
+      : `${range} — ${n.pct}%, needs ${t.grade}%`;
+    return `<button class="st-node is-${state}${n.live ? " is-live" : ""}" type="button"
+        data-season-week="${n.key}" title="${escapeHtml(title)}"${n.future ? ' tabindex="-1"' : ""}>
+        <span class="st-ring"><span class="st-fill" style="height:${Math.min(100, n.pct)}%"></span><span class="st-pct">${n.future ? "·" : n.pct + "%"}</span></span>
+        <span class="st-lbl">${n.label}</span>
+      </button>`;
+  }).join("");
+
+  // How far the lit part of the path runs: to the last node that is spent.
+  const lastClaimed = t.nodes.reduce((acc, n, i) => (n.claimed ? i : acc), -1);
+  const runPct = t.nodes.length > 1 ? Math.max(0, lastClaimed) / (t.nodes.length - 1) * 100 : 0;
+
+  host.innerHTML = `
+    <div class="st-head">
+      <span class="st-k">The season</span>
+      <span class="st-name">${face.emoji} ${escapeHtml(face.name)}</span>
+      <span class="st-hp-n">${dead ? "Fallen" : t.hp + "% HP"}</span>
+    </div>
+    <div class="st-hp"><i style="width:${t.hp}%"></i></div>
+    <div class="st-path" style="--run:${lastClaimed < 0 ? 0 : runPct}%">${nodes}</div>
+    <p class="st-foot">${
+      dead ? `Every week of ${escapeHtml(face.name)} is spent. The season is done.`
+      : t.ready ? `<strong>${t.ready} week${t.ready === 1 ? "" : "s"} ready.</strong> Claim ${t.ready === 1 ? "it" : "them"} — each one takes ${t.per}% off the season.`
+      : `A week at ${t.grade}% or better can be claimed against the season. Tap a week to open it.`
+    }</p>`;
+}
+
+// Claiming is a blow, so it gets the blow's ceremony — the same one the week
+// boss uses, at the horizon above it.
+function claimSeasonWeek(weekKey) {
+  const m = recordMonth();
+  const t = seasonTrackData(m);
+  const node = t.nodes.find((n) => n.key === weekKey);
+  if (!node || node.claimed || !node.cleared) return false;
+
+  const all = Object.assign({}, (settings && settings.seasonClaims) || {});
+  all[t.mKey] = seasonClaims(t.mKey).concat([weekKey]);
+  settings.seasonClaims = all;
+  patchSettingsSoon({ ["seasonClaims." + t.mKey]: all[t.mKey] });
+
+  const after = seasonTrackData(m);
+  const host = document.getElementById("seasonTrack");
+  if (window.FX && FX.bossHit) FX.bossHit({ from: host, damage: t.per, weak: after.hp <= 0 });
+  if (after.hp <= 0 && window.FX && FX.bossDefeated) FX.bossDefeated(seasonFace(m).name, "Season conquered");
+  renderSeasonTrack();
+  return true;
+}
 function seasonMonthStart() { return recordMonth(); }
 function curSeasonSummary() { return (window.Game && Game.seasonSummary) ? Game.seasonSummary(seasonMonthStart()) : null; }
 function seasonGoalProgress(g, s, prof) {
@@ -6098,7 +6859,10 @@ function bindEvents() {
   // A pursuit the user opens by hand stays open across a re-render.
   document.addEventListener("toggle", (e) => {
     const d = e.target;
-    if (d && d.tagName === "DETAILS" && d.classList.contains("section-card")) d.dataset.userOpened = d.open ? "1" : "0";
+    if (d && d.tagName === "DETAILS" && d.classList.contains("section-card")) {
+      d.dataset.userOpened = d.open ? "1" : "0";
+      if (d.parentNode === viewEl("pursuits")) rememberOpenSection();
+    }
   }, true);
 
   document.querySelectorAll(".nav a[href^='#']").forEach(link => {
@@ -6214,12 +6978,18 @@ function bindEvents() {
     landBossBlow();
   });
 
-  // A cell in the pulse is a door into that day's card on the board below.
+  // A cell in the pulse is the board's day switch. It used to scroll you to a
+  // card three thousand pixels down; now it decides which card the board draws,
+  // and only falls back to scrolling when all seven are already open.
   const wpDays = document.getElementById("wpDays");
   if (wpDays) wpDays.addEventListener("click", (e) => {
     const cell = e.target.closest("[data-day-jump]");
     if (!cell || cell.classList.contains("future")) return;
     const di = Number(cell.dataset.dayJump);
+    if (fullWeekKey !== weekKey()) {
+      setFocusedDay(di);
+      renderDays(); loadWeekFields(); updateProgress(); renderWeekPulse();
+    }
     const cards = document.querySelectorAll("#daysGrid .day-card");
     // The board draws today first on a phone and in calendar order on a desktop,
     // so find the card by its own day index rather than by position.
@@ -6504,6 +7274,7 @@ async function importBackup(e) {
       localStorage.setItem(APP_DB_KEY, JSON.stringify(database));
       localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
       if (settings.theme) applyTheme(settings.theme);
+      applyFinish(emberState().active);
       applyWeekToUI();
       alert("Backup imported successfully.");
     } catch (err) { alert("Could not import backup: " + err.message); }
@@ -6534,6 +7305,7 @@ async function init() {
     // pure render getters never have to mutate state; server data replaces it.
     migrateQuestModelIfNeeded();
     if (settings.theme) applyTheme(settings.theme);
+    applyFinish(emberState().active);
     renderStructure();
     applyWeekToUI();
   }
@@ -6563,6 +7335,7 @@ async function init() {
   }
   cacheState();
   if (settings.theme) applyTheme(settings.theme);
+  applyFinish(emberState().active);
   renderStructure();
   applyWeekToUI();
   await flushPendingWrites();

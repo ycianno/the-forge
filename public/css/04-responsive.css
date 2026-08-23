@@ -11,6 +11,8 @@
 
 /* ===== MOBILE RESPONSIVE (768px) ===== */
 @media (max-width: 768px) {
+  /* The root size, not a component size — the scale below is absolute px, so
+     this only reaches text nothing else has claimed. */
   body { font-size: 14px; }
   .grid, .grid-4 { grid-template-columns: 1fr; }
   .calendar { grid-template-columns: 1fr; }
@@ -61,7 +63,7 @@
   }
   .context-week strong, .context-today strong {
     display: block;
-    font-size: 14px;
+    font-size: var(--t-md);
     font-weight: 700;
   }
   .context-score {
@@ -102,8 +104,8 @@
   .hero-main .subtitle { display: none; }
   .hero-main { padding: 16px; min-height: auto; }
   .hero-grid { gap: 8px; margin-bottom: 12px; }
-  .mini { padding: 10px 14px; border-radius: 14px; }
-  .mini strong, .mini input { font-size: 14px; }
+  .mini { padding: 10px 14px; border-radius: var(--r-lg); }
+  .mini strong, .mini input { font-size: var(--t-md); }
   .mini .label { font-size: var(--t-2xs); margin-bottom: 2px; }
   
   .panel { padding: 20px; }
@@ -111,10 +113,10 @@
   
   .metric, .day-card, .calendar-cell { padding: 14px; border-radius: var(--r-md); }
   details.section-card > summary { padding: 16px; gap: 12px; }
-  .sec-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .sec-icon { width: 38px; height: 38px; border-radius: var(--r-md); }
   .sec-icon .ic { width: 19px; height: 19px; }
   .content { padding: 0 16px 16px; }
-  h1 { font-size: 40px; margin: 12px 0; }
+  h1 { font-size: var(--t-2xl); margin: 12px 0; }
   
   /* Bottom Tab Bar */
   .nav { 
@@ -167,6 +169,7 @@
   .tab-btn.active {
     color: var(--accent-primary);
   }
+  /* Sizes the glyph inside the tab, not type on a scale. */
   .tab-icon { font-size: 22px; line-height: 1; }
   .tab-label {
     font-size: var(--t-2xs); font-weight: 700; letter-spacing: 0.02em;
@@ -177,7 +180,7 @@
      longest label, not by a round number. */
   @media (max-width: 460px) {
     .tab-btn { padding: 8px 2px; }
-    .tab-label { font-size: 9px; letter-spacing: 0; }
+    .tab-label { font-size: var(--t-2xs); letter-spacing: 0; }
     .tab-icon .ic { width: 21px; height: 21px; }
   }
   
@@ -193,7 +196,6 @@
   .season-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   
   /* Section headers smaller */
-  .summary-left h2 { font-size: 20px; }
   .summary-left .hint { font-size: var(--t-xs); }
   
   /* Day card compact */
