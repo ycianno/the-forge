@@ -1794,10 +1794,16 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .tr-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
 .tr-bar-fill { width: 62%; max-width: 22px; border-radius: 4px 4px 0 0; min-height: 2px; transition: height 0.4s ease; }
 .tr-bar-lbl { font-size: var(--t-2xs); color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; max-width: 100%; }
-.tr-bar-fill.g3 { background: #22c55e; }
-.tr-bar-fill.g2 { background: #4ade80; }
-.tr-bar-fill.g1 { background: #f59e0b; }
-.tr-bar-fill.g0 { background: #ef4444; }
+/* These were hardcoded green/amber/red — a semantic traffic light left over
+   from before the palette. Hardcoded, so they did not even pick up the theme's
+   remap: a grass-green bar chart on a screen where everything else is heat.
+   The ramp is monotonic in luminance, so the grade still reads without colour,
+   and a bad week is quenched rather than alarmed — red punishes where this
+   should describe. */
+.tr-bar-fill.g3 { background: var(--heat-4); }
+.tr-bar-fill.g2 { background: var(--heat-3); }
+.tr-bar-fill.g1 { background: var(--heat-2); }
+.tr-bar-fill.g0 { background: rgba(100, 116, 139, 0.5); }
 .tr-bar-fill.gz { background: rgba(255,255,255,0.08); }
 .tr-bar-fill.gx { background: var(--accent-primary); }
 .tr-skip { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
