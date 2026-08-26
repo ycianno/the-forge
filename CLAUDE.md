@@ -290,8 +290,34 @@ something to play with — the anvil grew a hammer, a quench and a clock that
 heats the metal; Character grew the effigy; Week's boss became something you
 land blows on — and gave Pursuits the plan head it never had.
 
-**The standing direction: every room should have a playable thing in it.**
-Today, Week and Character have one. Month and Pursuits do not yet.
+**The standing direction was: every room should have a playable thing in it.**
+All five now do — the anvil in Today, the boss you land blows on in Week, the
+effigy in Character, the season weeks you claim in Month (`claimSeasonWeek`),
+and the tree you hold a limb of in Pursuits (`renderPursuitTree`). The direction
+is met; what it turns into next is an open question, not a backlog item.
+
+A fourth pass took the two surfaces the room work never touched. The frame stops
+repeating itself: the boss is drawn once rather than in both the HUD and the
+sidebar (`body[data-live]` decides which, because below 1024px the sidebar is
+gone and the HUD cell is the only one), the weekly streak and the daily run no
+longer wear the same flame, and the chrome carries no emoji. The sidebar gained
+`renderSidebarRung()` — the near edge of the ladder Character draws in full.
+
+And the app stopped forgetting. `settings` had always held every boss felled and
+every month worked without any of it becoming keepable; `autoMilestones()` now
+banks each fight and each finished season, keyed so a re-render cannot bank the
+same August twice and filed under the week it belongs to rather than today.
+Turning that on is deliberately quiet — see `RECORD_KINDS_BACKFILL` and the
+`hasHistory` gate in `checkAutoRecords()`, and `test/record-archive.js`, which
+exists because the first version posted twenty-six records where three were
+right.
+
+Still open, and not to be decided alone: the **quests/rituals split** (habi
+separated a thing you do once from a thing you do daily; the Forge still merges
+them, and splitting touches `questCheckId`, the riskiest thing in the app), and
+the **rank curve** — Forgemaster sits at 9,677,006 XP and is unreachable, which
+is more conspicuous now the ladder is drawn in two places. Left alone by
+explicit decision.
 
 There is an optional Discord companion in `agent/` (local Ollama, off by
 default) and a reminder sync path in `sync-reminders.js` / `send-reminders.js`.
