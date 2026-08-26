@@ -54,6 +54,7 @@ const MODULE_ICONS = {
   calendar:  "M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18",
   helm:      "M12 2a8 8 0 0 0-8 8v6a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-6a8 8 0 0 0-8-8zM4 12h16M9 19v-7M15 19v-7",
   flame:     "M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z",
+  shield:    "M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z",
   heart:     "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z",
 };
 function moduleIconSvg(name) {
@@ -2832,6 +2833,13 @@ function updateStreakAndHeatmap() {
   const badge = document.getElementById("streakBadge");
   const count = document.getElementById("streakCount");
   if (badge && count) {
+    // This is the WEEKLY streak — consecutive weeks that met the grade. The
+    // sidebar carries the daily run. Both are real and both were wearing the
+    // same flame, which made two different numbers look like one thing that
+    // could not make up its mind. Heat stays on the daily run, because that is
+    // the one that can be lost tomorrow; weeks get a calendar.
+    const mark = badge.querySelector(".streak-mark");
+    if (mark) mark.innerHTML = moduleIconSvg("calendar");
     count.textContent = streak;
     const unit = document.getElementById("streakUnit");
     if (unit) unit.textContent = streak === 1 ? "Week" : "Weeks";
@@ -4661,6 +4669,12 @@ function setChrome(patch) {
 function applyChrome() {
   const nav = document.getElementById("mainNav");
   if (!nav) return;
+  // The sidebar's live slot and the HUD can both be showing the boss. Below
+  // 1024px the sidebar is gone and the HUD is the only place it appears, so the
+  // HUD cell has to keep existing — this publishes what the live slot is
+  // currently holding and lets CSS drop the duplicate on wide screens only,
+  // which also means pinning the live slot to a pursuit hands the boss back.
+  document.body.dataset.live = getChrome().live;
   const order = getChrome().header;
   Object.keys(HEADER_ACTIONS).forEach((k) => {
     const el = document.getElementById(HEADER_ACTIONS[k].el);
@@ -4848,7 +4862,11 @@ function renderSidebarLive() {
     // the sidebar quietly said "No streak yet" beside a 17-day streak.
     const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
     const streak = prof ? (prof.dayStreak || 0) : 0;
-    const shield = prof && prof.streakUsed > 0 ? " 🛡️" : "";
+    // The grace day was a shield emoji spliced into a text node. It is the one
+    // piece of state in the chrome that says "you are one bad day from cold",
+    // so it gets the same stroke icon everything else uses.
+    const shield = prof && prof.streakUsed > 0
+      ? `<span class="sv-shield" title="Grace day spent">${moduleIconSvg("shield")}</span>` : "";
     // WHO, not how far. The level number and the XP bar moved to the HUD in the
     // top bar, which is on screen in every room and has the width to label
     // them — leaving this block saying the same two things again in a 46px
@@ -4867,7 +4885,7 @@ function renderSidebarLive() {
       <div class="sv-idmeta">
         <div class="sv-name">${escapeHtml((settings && settings.callsign) || "Player One")}</div>
         <div class="sv-rank">${rank ? `${escapeHtml(rank.name)} · ${escapeHtml(rank.tier)}` : "Unranked"}</div>
-        <div class="sv-streak${streak ? " is-lit" : ""}">${streak ? `🔥 ${streak}-day run${shield}` : "No run yet — clear today"}</div>
+        <div class="sv-streak${streak ? " is-lit" : ""}">${streak ? `<span class="sv-flame" aria-hidden="true">${moduleIconSvg("flame")}</span>${streak}-day run${shield}` : "No run yet — clear today"}</div>
       </div>`;
   }
   renderSidebarFoot();

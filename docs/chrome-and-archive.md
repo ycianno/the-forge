@@ -45,27 +45,41 @@ Cabinet"*. Those three are correctly **off by default**.
 paints a `.hud-boss` cell in the top bar. Both are live, both default-on, both
 say *48%*. One fight, two identical readouts, 500px apart.
 
-**Fix:** the boss is a live thing, and the sidebar foot is already the
-configurable `live` slot built for exactly this. Drop `.hud-boss` from the HUD.
+**Fix — and NOT by deleting `.hud-boss`.** The breakpoints matter:
 
-### 2.2 Identity is split across both surfaces, and neither is complete
+| width | HUD | sidebar | boss |
+|---|---|---|---|
+| < 769px | hidden | hidden | neither, correctly — the mobile context bar says it |
+| 769–1023px | visible | hidden | the HUD cell is the **only** one |
+| ≥ 1024px | visible | visible | **drawn twice** |
 
-The top bar has your **level and XP-to-next**. The sidebar has your **name,
-rank and tier**. To answer "where am I?" you read two places, and neither one
-alone is an answer.
+Deleting the cell would take the fight off tablet entirely.
 
-**Fix:** identity belongs to the sidebar — name, rank, tier, level, XP to next,
-and the run, in one block. The top bar keeps *today* and actions.
+**Landed:** `applyChrome()` publishes the live slot as `body[data-live]`, and one
+CSS rule inside the ≥1025px query hides `.hud-boss` only when the sidebar is
+actually holding the boss. Pinning the live slot to a pursuit hands the HUD cell
+straight back.
 
-### 2.3 Two different streaks, both unlabelled
+### 2.2 Identity is split across both surfaces — ~~and neither is complete~~
 
-The brand shows **🔥 44 Weeks**. The sidebar shows **🔥 34-day run**. Both are
-true — active weeks and current daily streak — and nothing on screen explains
-why one is bigger than the other. Same icon, same colour, different meaning.
+**Retracted.** This was written before reading `renderSidebarLive()`, which
+explains the split as a decision: *"WHO, not how far. The level number and the
+XP bar moved to the HUD in the top bar, which is on screen in every room and has
+the width to label them… What the HUD cannot say is who you are."* The HUD
+carries progress (level, today, fight); the sidebar carries identity (name,
+rank, class, run). That is coherent and it stays.
 
-**Fix:** one streak in the chrome (the daily run, since that is the one that can
-be lost), with active-weeks demoted to Character where the other lifetime
-figures already live.
+### 2.3 Two streaks wearing the same flame
+
+Narrower than first written, and the first version got the mechanic wrong: the
+brand badge is not "active weeks", it is the **weekly streak** — consecutive
+weeks that met the grade. The sidebar carries the **daily run**. Both are real,
+both are already labelled ("44 Weeks", "34-day run"), so the problem is only
+that an identical flame on both made two different numbers look like one thing
+that could not make up its mind.
+
+**Landed:** heat stays on the daily run, because that is the one that can be
+lost tomorrow. The weekly streak takes a calendar mark.
 
 ### 2.4 The sidebar stops 270px short
 
@@ -134,10 +148,10 @@ weeks, HP, goals — and when it ends it leaves **no artifact at all**.
 
 | step | what | risk |
 |---|---|---|
-| 1 | Drop `.hud-boss`; boss lives only in the sidebar `live` slot | low |
-| 2 | Move level + XP into the sidebar identity block; top bar keeps today + actions | low |
-| 3 | One streak in the chrome; active-weeks moves to Character | low |
-| 4 | Chrome emoji → the `IP` icon set | low |
+| 1 | ~~Drop `.hud-boss`~~ → scope it to `body[data-live="boss"]` at ≥1025px | low · **done** |
+| 2 | ~~Move level + XP into the sidebar~~ — retracted, the split is deliberate | — |
+| 3 | Distinguish the two streaks: flame for the daily run, calendar for weeks | low · **done** |
+| 4 | Chrome emoji → stroke icons | low · **done** |
 | 5 | Fill the sidebar foot with the next rung | medium |
 | 6 | Bank finished seasons as Records (`season:YYYY-MM`) | medium |
 | 7 | Bank every boss defeat and best-streak records | medium |

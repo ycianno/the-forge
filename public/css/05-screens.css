@@ -2181,6 +2181,12 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 }
 @media (min-width: 1025px) {
   .hud { flex: 1 1 auto; justify-content: center; gap: var(--s-6); }
+  /* One fight, one readout. At this width the sidebar's live slot is on screen
+     too, and when it is holding the boss the HUD was painting the same name and
+     the same percentage 500px away. Scoped to the live slot rather than deleted
+     outright: below 1024px the sidebar is gone and this cell is the only place
+     the fight appears, and pinning the live slot to a pursuit hands it back. */
+  body[data-live="boss"] .hud-boss { display: none; }
 }
 .hud-cell {
   display: flex; align-items: center; gap: var(--s-3);
@@ -3425,3 +3431,14 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
  * ======================================================================== */
 #viewStack { transform: translate3d(var(--shake-x, 0), var(--shake-y, 0), 0); }
 @media (prefers-reduced-motion: reduce) { #viewStack { transform: none; } }
+
+/* Chrome marks. The frame was the last place emoji survived the identity pass —
+   a flame on the weekly badge, a second flame and a shield in the sidebar — and
+   it is the surface on screen in every room. These size the stroke icons that
+   replaced them so they sit on the text baseline rather than above it. */
+.streak-badge .streak-mark { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-right: 5px; }
+.streak-badge .streak-mark .ic { width: 13px; height: 13px; }
+.sv-streak .sv-flame { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }
+.sv-streak .sv-flame .ic { width: 13px; height: 13px; }
+.sv-streak .sv-shield { display: inline-grid; place-items: center; width: 12px; height: 12px; margin-left: 5px; vertical-align: -2px; opacity: .75; }
+.sv-streak .sv-shield .ic { width: 12px; height: 12px; }
