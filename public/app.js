@@ -4729,10 +4729,11 @@ const SIDEBAR_BLOCKS = {
   rooms:    { label: "The rooms",    note: "Today, Week, Month, Character, Pursuits" },
   pursuits: { label: "Your pursuits", note: "A jump to each one" },
   live:     { label: "The live block", note: "Whatever you pick below" },
+  rung:     { label: "The next rung",  note: "What the next rank costs" },
 };
 const CHROME_DEFAULTS = {
   header: ["focus", "sound", "settings", "logout"],
-  sidebar: ["identity", "rooms", "pursuits", "live"],
+  sidebar: ["identity", "rooms", "pursuits", "live", "rung"],
   live: "boss",
 };
 function liveModeOk(v) {
@@ -4948,11 +4949,44 @@ function renderSidebar() {
     rooms:    `<nav class="sv-nav" role="tablist" aria-label="Views">${nav}</nav>`,
     pursuits: pursuits ? `<div class="sv-group"><span class="sv-group-k">Pursuits</span>${pursuits}</div>` : "",
     live:     `<div class="sv-foot" id="sidebarBoss"></div>`,
+    rung:     `<div class="sv-rung" id="sidebarRung"></div>`,
   };
   side.innerHTML = getChrome().sidebar.map((k) => blocks[k] || "").join("");
   renderSidebarLive();
+  renderSidebarRung();
 }
 // Values only — never markup, so this is safe to call on every update.
+// The sidebar ended 270px short of the viewport, and an empty quarter is most
+// of why a frame reads as an afterthought. What belongs in it is the one thing
+// the rooms cannot say from here: the next rung. Character draws the whole
+// ladder; this is its near edge, and it reads from the same Game.RANKS so the
+// two can never disagree about what you are climbing towards.
+function renderSidebarRung() {
+  const host = document.getElementById("sidebarRung");
+  if (!host) return;
+  const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
+  const ranks = (window.Game && Game.RANKS) ? Game.RANKS : [];
+  if (!prof || !ranks.length) { host.innerHTML = ""; return; }
+  const next = ranks.find((r) => r.min > prof.level);
+  if (!next) {
+    // The top of the ladder. Say so rather than showing an empty block.
+    host.innerHTML = `<span class="sv-rung-k">The ladder</span>
+      <div class="sv-rung-name">${escapeHtml(prof.rank ? prof.rank.name : "")}</div>
+      <div class="sv-rung-sub">Nothing above this rung</div>`;
+    return;
+  }
+  const here = ranks.filter((r) => r.min <= prof.level).pop() || ranks[0];
+  const span = Math.max(1, next.min - here.min);
+  const done = Math.max(0, Math.min(span, prof.level - here.min));
+  const pct = Math.round(done / span * 100);
+  const left = next.min - prof.level;
+  host.innerHTML = `
+    <span class="sv-rung-k">Next rung</span>
+    <div class="sv-rung-name">${escapeHtml(next.name)}</div>
+    <div class="sv-rung-bar"><i style="width:${pct}%"></i></div>
+    <div class="sv-rung-sub">${left} level${left === 1 ? "" : "s"} away · Lv ${next.min}</div>`;
+}
+
 function renderSidebarLive() {
   const id = document.getElementById("sidebarIdentity");
   if (id) {
@@ -4989,6 +5023,7 @@ function renderSidebarLive() {
   }
   renderSidebarFoot();
   renderHud();
+  renderSidebarRung();   // values only — rides the same live pass
 }
 
 // The top bar's run state. Values only, same contract as the sidebar's live

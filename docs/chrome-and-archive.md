@@ -86,10 +86,10 @@ lost tomorrow. The weekly streak takes a calendar mark.
 589px of content in an 860px viewport. Below "Lord Snooze" there is nothing.
 That empty quarter is most of why it reads as sad.
 
-**Fix:** the dead space is the right home for one *earned* thing. In order of
-preference: **the next rung** (what the next rank costs and how far off it is —
-the ladder is already the spine of Character and this is its natural teaser),
-this month's season, or the week's shape.
+**Landed:** the next rung — Character draws the whole ladder, this is its near
+edge. A configurable `rung` block reading the same `Game.RANKS`, so the two can
+never disagree. 589px → 691px. Deliberately quiet: it is a direction, not a
+score, so it gets no heat until the bar is moving.
 
 ### 2.5 The chrome is the last place emoji survived
 
@@ -152,10 +152,30 @@ weeks, HP, goals — and when it ends it leaves **no artifact at all**.
 | 2 | ~~Move level + XP into the sidebar~~ — retracted, the split is deliberate | — |
 | 3 | Distinguish the two streaks: flame for the daily run, calendar for weeks | low · **done** |
 | 4 | Chrome emoji → stroke icons | low · **done** |
-| 5 | Fill the sidebar foot with the next rung | medium |
-| 6 | Bank finished seasons as Records (`season:YYYY-MM`) | medium |
-| 7 | Bank every boss defeat and best-streak records | medium |
+| 5 | Fill the sidebar with the next rung | medium · **done** |
+| 6 | Bank finished seasons as Records (`season:YYYY-MM`) | medium · **done** |
+| 7 | Bank every boss defeat | medium · **done** |
+| — | ~~Best-streak records~~ — dropped: `streak:30/100/365` already covers the milestones, and banking every new best is noise. A run that *ended* would be worth keeping, but detecting the break needs state the app does not hold yet. | — |
 
 Steps 1–4 are subtraction and cost almost nothing. Steps 6–7 are the ones that
 change what the app *is* — a tracker that keeps what you did rather than
 showing it once and forgetting.
+
+---
+
+## 5. What actually shipped
+
+All of section 4 except best-streak, on `redesign/floor-10-chrome`.
+
+Two findings in section 2 were **wrong and are struck through above** rather than
+quietly removed — the identity split is deliberate and documented in
+`renderSidebarLive()`, and the brand badge is a weekly streak rather than the
+lifetime active-weeks count this document first called it.
+
+One bug worth remembering, found by running the upgrade path rather than reading
+it: the first version of the record backfill claimed its flag unconditionally.
+`Game.render()` can land before the first fetch resolves, so the one quiet pass
+was spent against an empty database and the real history — 10 seasons, 14
+bosses — flooded in on the render after it. **26 records posted where 3 were
+correct.** The flag is now gated on the database actually being loaded, and
+`test/record-archive.js` pins that.

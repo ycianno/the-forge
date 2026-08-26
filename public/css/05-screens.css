@@ -3442,3 +3442,30 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 .sv-streak .sv-flame .ic { width: 13px; height: 13px; }
 .sv-streak .sv-shield { display: inline-grid; place-items: center; width: 12px; height: 12px; margin-left: 5px; vertical-align: -2px; opacity: .75; }
 .sv-streak .sv-shield .ic { width: 12px; height: 12px; }
+
+/* THE NEXT RUNG.
+   The sidebar used to stop ~270px short of the viewport, and an empty quarter
+   is most of why a frame reads as an afterthought. Character draws the whole
+   ladder; this is its near edge — the one thing the rooms cannot say from here.
+   Deliberately quiet: it is a direction, not a score, so it gets no heat until
+   the bar is actually moving. */
+.sv-rung { display: flex; flex-direction: column; gap: 5px; }
+.sv-rung-k {
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted-2);
+}
+.sv-rung-name {
+  font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md);
+  color: var(--text); line-height: 1.1;
+}
+.sv-rung-bar {
+  height: 5px; border-radius: var(--r-pill); background: rgba(0,0,0,.45);
+  overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,.6);
+}
+.sv-rung-bar i {
+  display: block; height: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, var(--heat-1), var(--heat-3));
+  transition: width .5s cubic-bezier(.2,1.3,.4,1);
+}
+.sv-rung-sub { font-size: var(--t-2xs); color: var(--muted-2); }
+.sidebar > .sv-rung:empty { display: none; padding: 0; border: none; }
