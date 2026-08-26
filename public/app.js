@@ -1652,31 +1652,130 @@ async function saveRecordForm() {
 // silent-first-run pattern: on the very first run we seed settings.seenRecords
 // with whatever is already true (creating NO historical records); thereafter only
 // freshly-crossed milestones POST a keepable record (source:auto, deduped by ext_key).
+// Every entry carries a `kind` so a newly-introduced kind can absorb whatever
+// history already exists instead of announcing months of it at once.
 function autoMilestones(p) {
   const out = [];
-  const add = (key, title, value) => out.push({ key, title, value });
-  [10, 25, 50, 75, 99].forEach(L => { if (p.level >= L) add('lvl:' + L, 'Reached Level ' + L, L); });
-  if (p.rank && p.rank.name) add('rank:' + p.rank.name, 'Became a ' + p.rank.name, null);
-  [30, 100, 365].forEach(N => { if (p.dayStreak >= N) add('streak:' + N, N + '-day streak', N); });
-  const bosses = (settings && settings.bossDefeated) ? Object.keys(settings.bossDefeated).length : 0;
-  for (let m = 10; m <= bosses; m += 10) add('boss:' + m, 'Defeated ' + m + ' bosses', m);
+  // `at` is the week the milestone belongs to, which is not always the week
+  // you are standing in when it gets banked. Left undefined it falls back to
+  // today, which is right for a level and wrong for a December season.
+  const add = (kind, key, title, value, meta, at) => out.push({ kind, key, title, value, meta, at });
+  [10, 25, 50, 75, 99].forEach(L => { if (p.level >= L) add('lvl', 'lvl:' + L, 'Reached Level ' + L, L); });
+  if (p.rank && p.rank.name) add('rank', 'rank:' + p.rank.name, 'Became a ' + p.rank.name, null);
+  [30, 100, 365].forEach(N => { if (p.dayStreak >= N) add('streak', 'streak:' + N, N + '-day streak', N); });
+
+  const felled = (settings && settings.bossDefeated) || {};
+  const bosses = Object.keys(felled).length;
+  for (let m = 10; m <= bosses; m += 10) add('bosscount', 'boss:' + m, 'Defeated ' + m + ' bosses', m);
+
+  // Every fight, not every tenth. settings.bossDefeated has held the name of
+  // each one against its week all along; it just never became anything you
+  // could look at. The name is stored as data because bosses are looked up by
+  // name string, so a renamed BOSSES array must not rewrite your history.
+  Object.keys(felled).sort().forEach((wk) => {
+    const name = felled[wk];
+    if (!name || !isValidWeekKeyish(wk)) return;
+    add('bossfell', 'bossfell:' + wk, 'Felled ' + name, null, { boss: String(name), week: wk }, wk);
+  });
+
+  // A finished season. A month is lived, and until now it left no artifact at
+  // all — the one thing in the app you spend four weeks on and cannot keep.
+  finishedSeasons().forEach((sn) => {
+    add('season', 'season:' + sn.monthKey, `${sn.face} — ${sn.label}`, sn.xp, {
+      season: sn.face, month: sn.monthKey, xp: sn.xp,
+      weeksActive: sn.weeksActive, bestWeek: sn.bestWeek, topAttr: sn.topAttr || '',
+    }, sn.weekKey);
+  });
   return out;
 }
+function isValidWeekKeyish(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s)); }
+
+// Months that are over and had work in them, newest first. Derived from the
+// weeks actually stored rather than from a calendar, so an empty month never
+// becomes a record of nothing.
+function finishedSeasons() {
+  if (!(window.Game && Game.seasonSummary)) return [];
+  const now = new Date();
+  const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const months = new Set();
+  Object.keys((typeof database !== 'undefined' && database && database.weeks) || {}).forEach((wk) => {
+    const d = ymdToDate(wk);
+    if (d) months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  });
+  const out = [];
+  [...months].sort().forEach((mKey) => {
+    if (mKey >= curKey) return;                     // the season you are in is not finished
+    const parts = mKey.split('-');
+    const start = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+    let sum = null;
+    try { sum = Game.seasonSummary(start); } catch (e) { return; }
+    if (!sum || !sum.xp) return;                    // a month with no work is not a season
+    const face = (typeof seasonFace === 'function') ? seasonFace(start) : null;
+    // The week the month opens in, so the record files under its own season
+    // rather than under whatever week it happened to be banked in. week_key
+    // is validated as YYYY-MM-DD server-side, so a bare month will not do.
+    let wkOfMonth = mKey + '-01';
+    try { const st = getStartOfWeek(new Date(start)); if (st && st.getMonth() === start.getMonth()) wkOfMonth = iso(st); } catch (e) {}
+    out.push({
+      monthKey: mKey, label: sum.label, xp: sum.xp, weekKey: wkOfMonth,
+      weeksActive: sum.weeksActive, bestWeek: sum.bestWeek, topAttr: sum.topAttr,
+      face: face ? face.name : sum.label,
+    });
+  });
+  return out;
+}
+// Kinds introduced after a user already has history. The first time each of
+// these appears, whatever already happened is marked seen and NOT announced —
+// otherwise turning the feature on would fire a year of bosses in one burst.
+// Scoped to the new kinds only, so a level or a rank that was genuinely pending
+// still banks on the same pass.
+const RECORD_KINDS_BACKFILL = ['bossfell', 'season'];
+
+const RECORD_CATEGORY = { bossfell: 'boss', season: 'season' };
+
 async function checkAutoRecords(p) {
   if (typeof settings === 'undefined' || !settings || !p) return;
   const first = !settings.seenRecords;
   const seen = settings.seenRecords || [];
   const seenSet = new Set(seen);
-  const fresh = autoMilestones(p).filter(m => !seenSet.has(m.key));
-  if (!fresh.length) { if (first) { settings.seenRecords = seen; if (typeof persistSettingsSoon === 'function') persistSettingsSoon(); } return; }
-  fresh.forEach(m => seen.push(m.key));
-  settings.seenRecords = seen;
-  if (typeof persistSettingsSoon === 'function') persistSettingsSoon();
+  const all = autoMilestones(p);
+
+  // The backfill may only be claimed once there is history to absorb.
+  // Game.render() can land before the first fetch resolves, and setting the
+  // flag against an empty database would spend the one quiet pass on nothing —
+  // then announce a year of bosses on the render after it.
+  const hasHistory = Object.keys((typeof database !== 'undefined' && database && database.weeks) || {}).length > 0;
+  let claimed = false;
+  if (!first && !settings.recordBackfillV2 && hasHistory) {
+    all.forEach((m) => {
+      if (RECORD_KINDS_BACKFILL.includes(m.kind) && !seenSet.has(m.key)) { seen.push(m.key); seenSet.add(m.key); }
+    });
+    settings.recordBackfillV2 = true;
+    claimed = true;
+  }
+
+  const fresh = all.filter(m => !seenSet.has(m.key));
+  const dirty = claimed || fresh.length > 0 || (first && !settings.seenRecords);
+  if (fresh.length) fresh.forEach(m => seen.push(m.key));
+  if (dirty || first) {
+    settings.seenRecords = seen;
+    if (first && hasHistory) settings.recordBackfillV2 = true;
+    if (typeof persistSettingsSoon === 'function') persistSettingsSoon();
+  }
   if (first) return; // silent backfill — record nothing historical
+
   for (const m of fresh) {
+    // Anything absorbed by the backfill above is already in seenSet, so this
+    // only ever runs for something that just happened.
     await saveRecord({
-      title: m.title, category: 'milestone', completed_at: new Date().toISOString(),
-      week_key: weekKey(), value: m.value, source: 'auto', ext_key: m.key,
+      title: m.title,
+      category: RECORD_CATEGORY[m.kind] || 'milestone',
+      completed_at: new Date().toISOString(),
+      // A record about a past week belongs to that week, not to whatever week
+      // you happened to be in when it was banked.
+      week_key: m.at || (m.meta && m.meta.week) || weekKey(),
+      value: m.value, source: 'auto', ext_key: m.key,
+      meta: m.meta ? JSON.stringify(m.meta) : undefined,
     });
     if (window.FX && FX.record) FX.record(m.title);
   }
