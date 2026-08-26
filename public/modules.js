@@ -753,17 +753,72 @@
   // browser, the reminder sender and the Discord agent can all ask the same
   // question and get the same answer. Choosing next week's challenger is NOT
   // here: that reads history and writes settings, which is the app's job.
+  // Each boss carries a `sigil`: SVG path data in the same 24x24 stroke family as
+  // every other icon in the app. Not emoji — those render as a different product
+  // on every platform, cannot take the heat palette, and were the last thing in
+  // the interface still doing it. `emoji` is kept alongside for the share card,
+  // which rasterises to PNG for other people's phones and has no stylesheet.
+  //
+  // ORDER IS HISTORY. bossForWeek() is BOSSES[hash % BOSSES.length]; see
+  // BOSSES_V1 below before adding, removing or reordering anything here.
   const BOSSES = [
-    { name: "Inertia", emoji: "🪨", weak: "training", taunt: "You won't even start. Prove me wrong." },
-    { name: "The Procrastinator", emoji: "🦥", weak: "discipline", taunt: "Tomorrow, right? That's what you always say." },
-    { name: "Brain Fog", emoji: "🌫️", weak: "study", taunt: "Why study? You'll just forget it." },
-    { name: "The Glutton", emoji: "🍔", weak: "protein", taunt: "One more cheat day won't hurt…" },
-    { name: "The Drifter", emoji: "🌀", weak: "project", taunt: "Busywork feels like progress, doesn't it?" },
-    { name: "Lord Snooze", emoji: "😴", weak: "discipline", taunt: "Five more minutes. Every single morning." },
-    { name: "Doomscroll Hydra", emoji: "🐍", weak: "study", taunt: "Just one more scroll…" },
-    { name: "The Couch Wraith", emoji: "👻", weak: "training", taunt: "Skip the workout. Stay cozy." },
+    { name: "Inertia", emoji: "🪨", sigil: "M5 16.5 8.5 6.5h7L19 16.5zM5 16.5h14M9 6.8l1.6 9.7M15 6.8l-1.6 9.7",
+      weak: "training", taunt: "You won't even start. Prove me wrong." },
+    { name: "The Procrastinator", emoji: "🦥", sigil: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7.5V12l3.2 2M7 4.2 4.4 6.6M17 4.2l2.6 2.4",
+      weak: "discipline", taunt: "Tomorrow, right? That's what you always say." },
+    { name: "Brain Fog", emoji: "🌫️", sigil: "M4 9h11a3 3 0 1 0-2.9-3.8M3 13h15M6 17h12a3 3 0 0 0 0-4",
+      weak: "study", taunt: "Why study? You'll just forget it." },
+    { name: "The Glutton", emoji: "🍔", sigil: "M4 12a8 4 0 0 1 16 0zM4 12h16M3.5 15.5h17M5 19h14a2 2 0 0 0 1.6-3.2M4.4 15.8A2 2 0 0 0 5 19",
+      weak: "protein", taunt: "One more cheat day won't hurt…" },
+    { name: "The Drifter", emoji: "🌀", sigil: "M12 12a3 3 0 1 0 1.6 5.5A6.5 6.5 0 0 0 12 5a9.5 9.5 0 0 0-8.2 14",
+      weak: "project", taunt: "Busywork feels like progress, doesn't it?" },
+    { name: "Lord Snooze", emoji: "😴", sigil: "M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.6 6.6 0 0 0 10.7 10.7zM14 4h4l-4 4h4",
+      weak: "discipline", taunt: "Five more minutes. Every single morning." },
+    { name: "Doomscroll Hydra", emoji: "🐍", sigil: "M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM9 8h6M9 12h6M9 16h3",
+      weak: "study", taunt: "Just one more scroll…" },
+    { name: "The Couch Wraith", emoji: "👻", sigil: "M4 11V9a2 2 0 0 1 4 0v2M16 11V9a2 2 0 0 1 4 0v2M3 11h18v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM6 18v2M18 18v2",
+      weak: "training", taunt: "Skip the workout. Stay cozy." },
+
+    // --- added after the first eight. Safe to append: past weeks are pinned by
+    // pinBossHistoryOnce(), which resolves against BOSSES_V1. Append only —
+    // inserting above this line shifts the modulus for anything not yet pinned.
+    { name: "The Perfectionist", emoji: "📐", sigil: "M4 20 20 4M4 20h5M4 20v-5M20 4h-5M20 4v5M9.5 14.5l-2 2M14.5 9.5l-2 2",
+      weak: "project", taunt: "If it can't be perfect, why start it at all?" },
+    { name: "The Grazer", emoji: "🍪", sigil: "M12 3.5a8.5 8.5 0 1 0 8.5 8.5A4 4 0 0 1 16 8a4 4 0 0 1-4-4.5zM9 11h.01M13.5 14h.01M15.5 10h.01",
+      weak: "protein", taunt: "It's only a little. It doesn't count." },
+    { name: "The Half-Finisher", emoji: "🧩", sigil: "M4 5h7v14H4zM13.5 5H20M13.5 12H20M13.5 19H18",
+      weak: "project", taunt: "Ninety percent is basically done." },
+    { name: "The Night Owl", emoji: "🦉", sigil: "M4 18c0-4 3.6-7 8-7s8 3 8 7M8.5 8.5a1.5 1.5 0 1 0 0-.01M15.5 8.5a1.5 1.5 0 1 0 0-.01M12 12v3M6 5l2 2.5M18 5l-2 2.5",
+      weak: "discipline", taunt: "The best hours are the ones you'll pay for tomorrow." },
+    { name: "The Comparison", emoji: "🪞", sigil: "M9 3v18M15 3v18M4.5 3h15v18h-15zM6.6 7.5l.9.9M6.6 12l.9.9",
+      weak: "study", taunt: "Someone else already did it better." },
+    { name: "The Excuse Engine", emoji: "⚙️", sigil: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2.5v3M12 18.5v3M4.2 7l2.6 1.5M17.2 15.5l2.6 1.5M4.2 17l2.6-1.5M17.2 8.5l2.6-1.5",
+      weak: "discipline", taunt: "There's always a reason. I'll find you one." },
+    { name: "The Deadweight", emoji: "🏋️", sigil: "M3 9v6M6 7v10M18 7v10M21 9v6M6 12h12",
+      weak: "training", taunt: "Rest day. Again. You've earned it, surely." },
+    { name: "The Ledger Ghost", emoji: "📉", sigil: "M4 4v16h16M7.5 15l3.5-4 3 2.5L19 8M19 8h-3.5M19 8v3.5",
+      weak: "protein", taunt: "Don't look at the numbers. You know roughly." },
   ];
   const BOSS_ATTR = { discipline: "Discipline", training: "Body", study: "Mind", protein: "Vitality", project: "Craft" };
+
+  // The original eight, in their original order, frozen.
+  //
+  // bossForWeek() is BOSSES[hash % BOSSES.length]. That means every boss added
+  // to the roster above silently reassigns every past week that has no stored
+  // pick and no banked name — which is exactly the weeks you FOUGHT AND LOST,
+  // since only a win banks a name. The bestiary's "escaped you xN" is counted
+  // by re-resolving those weeks, so growing the roster would rewrite a history
+  // you cannot get back.
+  //
+  // pinBossHistoryOnce() in app.js walks the stored weeks once and writes what
+  // each actually faced into settings.bossPick, resolved against THIS list
+  // rather than the live one. After that pass history is pinned by name and the
+  // roster can grow freely, now and every time after.
+  const BOSSES_V1 = [
+    "Inertia", "The Procrastinator", "Brain Fog", "The Glutton",
+    "The Drifter", "Lord Snooze", "Doomscroll Hydra", "The Couch Wraith",
+  ];
+  function bossV1ForWeek(key) { return BOSSES_V1[bossKeyHash(key) % BOSSES_V1.length]; }
 
   function bossKeyHash(key) {
     let h = 0;
@@ -872,7 +927,7 @@
   return {
     XP_BY_CAT, ATTR_OF_CAT, CAT_OF_ATTR, ATTR_LIST, ATTR_COLOR,
     PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
-    BOSSES, BOSS_ATTR, bossKeyHash, bossForWeek, resolveBoss, bossDamage,
+    BOSSES, BOSS_ATTR, BOSSES_V1, bossKeyHash, bossForWeek, bossV1ForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
     SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, strikesFor, strikesForQuest, urgencyOf, strikesWithUrgency, planLoad, parseQuickTask, DAY_WORDS,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,

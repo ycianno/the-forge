@@ -3469,3 +3469,40 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 }
 .sv-rung-sub { font-size: var(--t-2xs); color: var(--muted-2); }
 .sidebar > .sv-rung:empty { display: none; padding: 0; border: none; }
+
+/* ===========================================================================
+ * BOSS SIGILS
+ * The bosses were the last emoji in the interface. Emoji render as a different
+ * product on every platform, cannot take the palette, and sat next to a stroke
+ * icon set everything else had already moved to. These are 24x24 stroke paths
+ * in that same family, so a boss finally looks like it belongs to the app it
+ * is in — and can be told apart in the bestiary by shape rather than by hue.
+ * The containers were sized for a glyph, so each one gets a box instead.
+ * ======================================================================== */
+.bst-emoji, .hud-boss .hud-emoji, .boss-emoji, .sv-boss-mark {
+  display: inline-grid; place-items: center; flex-shrink: 0; color: var(--heat-3);
+}
+.bst-emoji { width: 30px; height: 30px; }
+.bst-emoji .ic { width: 26px; height: 26px; }
+.bst-row.slain .bst-emoji { color: var(--heat-4); }
+.bst-row.nemesis .bst-emoji { color: var(--heat-2); }
+/* Never met: cold iron. grayscale() did nothing to a stroke that takes its
+   colour from a token, so the state has to come from the token. */
+.bst-row.unmet .bst-emoji { color: var(--muted-2); filter: none; opacity: .55; }
+
+.boss-emoji { width: 52px; height: 52px; font-size: 0; filter: drop-shadow(0 3px 10px rgba(0,0,0,.55)); }
+.boss-emoji .ic { width: 44px; height: 44px; }
+.boss-card.defeated .boss-emoji { color: var(--muted-2); filter: none; opacity: .6; }
+@media (max-width: 620px) { .boss-emoji { width: 42px; height: 42px; } .boss-emoji .ic { width: 36px; height: 36px; } }
+
+.hud-boss .hud-emoji { width: 18px; height: 18px; font-size: 0; }
+.hud-boss .hud-emoji .ic { width: 17px; height: 17px; }
+.sv-boss-mark { width: 16px; height: 16px; }
+.sv-boss-mark .ic { width: 15px; height: 15px; }
+
+/* The stroke family is drawn with no fill; without this a closed path like the
+   couch or the burger fills solid and reads as a blob. */
+.bst-emoji .ic, .boss-emoji .ic, .hud-boss .hud-emoji .ic, .sv-boss-mark .ic {
+  fill: none; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}

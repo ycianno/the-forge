@@ -5071,7 +5071,7 @@ function renderHud() {
     const hp = Math.max(0, 100 - d.dmg);
     cells.push(`
       <button class="hud-cell hud-boss" type="button" data-view="week" title="${escapeHtml(d.boss.taunt || d.boss.name)}">
-        <span class="hud-emoji" aria-hidden="true">${d.boss.emoji}</span>
+        <span class="hud-emoji" aria-hidden="true">${bossSigilSvg(d.boss)}</span>
         <span class="hud-stack">
           <span class="hud-line"><span class="hud-k">${escapeHtml(d.boss.name)}</span><span class="hud-sub">${hp}% HP</span></span>
           <span class="hud-bar"><i style="width:${hp}%"></i></span>
@@ -5134,7 +5134,7 @@ function renderSidebarFoot() {
   const d = computeBossDamage();
   foot.innerHTML = d.hasQuests
     ? `<button class="sv-boss" type="button" data-view="week" title="${escapeHtml(d.boss.taunt)}">
-         <span class="sv-boss-top"><span>${d.boss.emoji}</span><b>${escapeHtml(d.boss.name)}</b></span>
+         <span class="sv-boss-top"><span class="sv-boss-mark">${bossSigilSvg(d.boss)}</span><b>${escapeHtml(d.boss.name)}</b></span>
          <span class="sv-boss-hp"><i style="width:${Math.max(0, 100 - d.dmg)}%"></i></span>
          <span class="sv-boss-sub">${Math.max(0, 100 - d.dmg)}% HP left</span>
        </button>`
@@ -5851,8 +5851,50 @@ function adaptiveBossPick(weekStart) {
 // the fallback chain so browsing history cannot reassign old fights, and a week
 // already picked is never re-rolled mid-week.
 let _bossPickToPersist = null;
+// Pin what every past week actually faced, once, before the roster can grow.
+//
+// See BOSSES_V1 in modules.js for why. In short: only a WIN banks a boss name,
+// so a week you lost resolves through a hash whose modulus is the roster size —
+// and the bestiary counts "escaped you xN" by re-resolving those weeks. Adding
+// a ninth boss without this pass would rewrite a history that cannot be
+// recovered, quietly, with no error.
+//
+// Runs on weeks that already have data and no pick of their own. The current
+// week is left to ensureBossPick(), which does adaptive selection properly.
+function pinBossHistoryOnce() {
+  if (typeof settings === 'undefined' || !settings) return;
+  if (settings.bossPinV1) return;
+  if (!window.Forge || !Forge.bossV1ForWeek) return;
+  const weeks = Object.keys((typeof database !== 'undefined' && database && database.weeks) || {});
+  const thisWeek = iso(getStartOfWeek(new Date()));
+  // "Some weeks exist" is not "history has loaded". The app creates the current
+  // week itself on boot, so a database holding exactly that one week looks
+  // populated and is not — spend the one-shot pass on it and the real history
+  // arrives afterwards, unpinned, with the flag already burnt. Gate on a PAST
+  // week specifically. A genuinely new user simply has nothing to pin yet and
+  // the pass costs a Set lookup until they do.
+  const past = weeks.filter((k) => k < thisWeek);
+  if (!past.length) return;
+  const picks = settings.bossPick || (settings.bossPick = {});
+  const banked = settings.bossDefeated || {};
+  let pinned = 0;
+  past.forEach((key) => {
+    if (picks[key]) return;                       // already pinned
+    // A win banked the name at the time; trust that over any derivation.
+    picks[key] = banked[key] || Forge.bossV1ForWeek(key);
+    pinned++;
+  });
+  settings.bossPinV1 = true;
+  if (typeof persistSettingsSoon === 'function') persistSettingsSoon();
+  if (pinned) console.info(`Pinned ${pinned} past week(s) to the boss they actually faced.`);
+}
+
 function ensureBossPick(weekStart) {
   if (!settings) return;
+  // Cheap after the first pass (one flag check), and it has to happen before
+  // anything resolves a past week — the Week card can land on one long before
+  // the Bestiary is ever opened.
+  pinBossHistoryOnce();
   const key = iso(weekStart);
   if (_bossPickToPersist && !booting) {
     const k = _bossPickToPersist;
@@ -6185,7 +6227,8 @@ function renderBoss() {
   const defeated = dmg >= grade;
   const attrName = BOSS_ATTR[boss.weak] || boss.weak;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set("bossEmoji", boss.emoji);
+  const emo = document.getElementById("bossEmoji");
+  if (emo) emo.innerHTML = bossSigilSvg(boss);
   set("bossName", boss.name);
   set("bossStatus", defeated ? "DEFEATED" : Math.max(0, grade - dmg) + "% to defeat");
   set("bossTaunt", defeated ? "Defeated. Next week, a new challenger." : boss.taunt);
@@ -6339,8 +6382,18 @@ function renderBoss() {
 // honestly, and the current week is excluded — it has not been lost yet.
 let _bestiaryCache = null;
 function invalidateBestiary() { _bestiaryCache = null; }
+// A boss's face. Stroke SVG in the same family as every other icon, so it
+// takes the heat palette and looks like the same product on every platform.
+// Falls back to the emoji only if a boss somehow has no sigil.
+function bossSigilSvg(boss) {
+  if (!boss) return "";
+  if (!boss.sigil) return escapeHtml(boss.emoji || "");
+  return `<svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="${escapeHtml(boss.sigil)}"/></svg>`;
+}
+
 function bossHistory() {
   if (_bestiaryCache) return _bestiaryCache;
+  pinBossHistoryOnce();   // history is pinned before it is ever counted
   const thisWeek = iso(getStartOfWeek(new Date()));
   const banked = (settings && settings.bossDefeated) ? settings.bossDefeated : {};
   const tally = {};
@@ -6396,7 +6449,7 @@ function renderBestiary() {
       ? `slain ×${r.slain}` + (r.escaped ? ` · escaped ×${r.escaped}` : '')
       : (r.escaped > 0 ? `escaped you ×${r.escaped}` : 'not yet faced');
     return `<div class="bst-row ${state}">
-      <span class="bst-emoji">${r.boss.emoji}</span>
+      <span class="bst-emoji">${bossSigilSvg(r.boss)}</span>
       <span class="bst-body">
         <span class="bst-name">${escapeHtml(r.boss.name)}</span>
         <span class="bst-weak">weak to ${escapeHtml(BOSS_ATTR[r.boss.weak] || r.boss.weak)}</span>
