@@ -227,6 +227,23 @@ The view marker lives in `bossSeenMem` with a copy in settings. It was in
 settings alone first and a settings reload wiped it mid-flight — **a marker
 describing what this session has shown you must not depend on a round-trip.**
 
+> **Adding a boss rewrites the past unless you know this.** `bossForWeek()` is
+> `BOSSES[hash % BOSSES.length]` — the **modulus is the roster size**, so every
+> boss appended reassigns the boss for every past week that resolves through the
+> hash, which is exactly the weeks you fought and *lost* (only a win banks a
+> name). The bestiary counts "escaped you ×N" by re-resolving those weeks.
+> Sampling a year when the roster went 8 → 16, **23 weeks in 48 changed hands.**
+>
+> `BOSSES_V1` in `modules.js` freezes the original eight *in their original
+> order* — it is a historical record, not a roster, and editing or reordering it
+> is the same as editing someone's history. `pinBossHistoryOnce()` in `app.js`
+> walks the stored weeks once and writes what each actually faced into
+> `settings.bossPick` (a banked win first, `bossV1ForWeek()` second). After that
+> pass history is pinned by name and the roster can grow freely. Appending is
+> safe; inserting, reordering or renaming is not. `test/boss-roster.js` is the
+> gate, and it also asserts every V1 name still exists in `BOSSES` — a pinned
+> week stores a *name*, so removing one orphans every week pinned to it.
+
 Effigy, radar and attribute cards are three views of one set of numbers and are
 cross-linked through `highlightAttr()` — touching any one lights the other two.
 

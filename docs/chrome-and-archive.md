@@ -93,10 +93,15 @@ score, so it gets no heat until the bar is moving.
 
 ### 2.5 The chrome is the last place emoji survived
 
-`🔥` (streak), `🛡️` (freeze), `😴`/`⚔️` (boss) are still in the frame, after the
-identity pass moved everything else onto the `IP` stroke-icon set. The chrome is
-the most-seen surface in the app and is now the only place that looks like a
-different product.
+`🔥` (streak), `🛡️` (freeze), `😴`/`⚔️` (boss) were the last emoji in the app,
+after the identity pass moved everything else onto the stroke-icon set — on the
+surface that is on screen in every room.
+
+**Landed.** The streak and the grace day became stroke icons. The bosses went
+further: each carries its own `sigil` in the same 24×24 family, so the bestiary
+reads by shape rather than hue and an unmet boss can be cold iron. That last
+part fixed a bug the emoji hid — `.bst-row.unmet` used `filter: grayscale(1)`,
+which does nothing to a glyph and nothing to a stroke coloured by a token.
 
 ---
 
