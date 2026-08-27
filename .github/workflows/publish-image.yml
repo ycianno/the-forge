@@ -40,6 +40,35 @@ jobs:
       - name: Regression test
         run: npm test
 
+      # THE GATE. This workflow used to run the unit tests and then publish, and
+      # the unit tests all execute against the source tree — so they said nothing
+      # about whether the built image could start. On 2026-08-27 the container
+      # died on boot with MODULE_NOT_FOUND (the Dockerfile never copied a module
+      # server.js required), docker-build.yml caught it, and this workflow pushed
+      # that image to :latest regardless, because the two are independent jobs on
+      # the same trigger.
+      #
+      # Nothing consumes :latest automatically, so nothing broke. That was luck.
+      # A single-arch image is built and booted here BEFORE anything is pushed,
+      # so a container that cannot start can no longer be published.
+      - name: Build image for the gate
+        run: docker build -t the-forge:gate .
+
+      - name: Gate — the image must actually boot and serve
+        run: |
+          docker run -d --name forge-gate -e APP_PASSWORD=ci -p 3007:3007 the-forge:gate
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3007/login.html >/dev/null; then
+              echo "image boots and serves — safe to publish"
+              docker rm -f forge-gate >/dev/null 2>&1 || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "REFUSING TO PUBLISH: the image did not come up"
+          docker logs forge-gate
+          exit 1
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
