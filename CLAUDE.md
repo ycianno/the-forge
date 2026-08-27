@@ -343,9 +343,21 @@ in it but the tick lands in whichever week blob you were standing in, so
 done-ness is asked of `completedCheckIds()` — every week at once — or a task
 completed in a later week rolls forever. `test/quest-carry.js` holds that.
 
-Still open, and not to be decided alone: the **rank curve** — Forgemaster sits at 9,677,006 XP and is unreachable, which
-is more conspicuous now the ladder is drawn in two places. Left alone by
-explicit decision.
+The **rank curve** is placed, not compounded away. `xpForLevel` is
+`100 * 1.18^(level-1)`, and 18% compounded put the old Master at fourteen years
+of steady use and Forgemaster at three hundred and ninety-six — a ladder that
+Character and the sidebar both draw in full, whose top half nobody could reach.
+The thresholds moved to 1 / 8 / 16 / 24 / 30 / 36, landing at roughly three
+weeks, three months, a year, 2.7 years and 7.4 years. **The names did not move**,
+because records bank as `rank:<name>` and the billet's six materials key off the
+same strings. Everything pinned to the old ceiling moved with it — the
+Forgemaster mythic, Living Legend, the ascension rungs and the level records —
+and `test/rank-ladder.js` fails if any of them drift apart again.
+
+There is a **second copy of the ladder** in `dashboard-summary.js` at the repo
+root, because the external dashboard cannot require `game.js` (it reaches for
+`document`). `test/dashboard-summary.js` pins the copy against the original by
+reading game.js as text, and it is the reason the two have only disagreed once.
 
 There is an optional Discord companion in `agent/` (local Ollama, off by
 default) and a reminder sync path in `sync-reminders.js` / `send-reminders.js`.

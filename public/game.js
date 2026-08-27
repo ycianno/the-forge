@@ -55,13 +55,26 @@
   // ----- Rank tiers --------------------------------------------------------
   // Forge-themed ladder — deliberately NOT metals, so it never collides with
   // the Bronze/Silver/Gold/Platinum trophy grades.
+  // The ladder, placed against the curve rather than against a round number.
+  //
+  // xpForLevel is 100 * 1.18^(level-1) — every level costs 18% more than the
+  // one below it, and 18% compounded is brutal past the middle. At a realistic
+  // ~67 XP/day the old table put Master at FOURTEEN YEARS and Forgemaster at
+  // three hundred and ninety-six; one level at 59 cost 1.48M XP on its own,
+  // which is sixty years for a single rung. The top half of the ladder was
+  // decoration, and Character and the sidebar both draw that ladder in full.
+  //
+  // These land at roughly: 3 weeks, 3 months, 1 year, 2.7 years, 7.4 years. The
+  // names are untouched on purpose — rank records bank as `rank:<name>` and the
+  // billet's six materials key off the same strings, so moving a threshold is
+  // safe where renaming one would orphan both.
   const RANKS = [
     { min: 1,  name: "Initiate" },
     { min: 8,  name: "Apprentice" },
     { min: 16, name: "Journeyman" },
-    { min: 26, name: "Artisan" },
-    { min: 40, name: "Master" },
-    { min: 60, name: "Forgemaster" },
+    { min: 24, name: "Artisan" },
+    { min: 30, name: "Master" },
+    { min: 36, name: "Forgemaster" },
   ];
   function rankFor(level) {
     let r = RANKS[0], idx = 0;
@@ -822,9 +835,13 @@
     };
 
     // Ascension (level) — named through 50, then ∞ every +10
-    const lvlNames = { 2: "Initiate", 5: "Apprentice", 10: "Journeyman", 15: "Artisan", 20: "Veteran", 30: "Elite", 40: "Master", 50: "Grandmaster" };
-    rungs([2, 5, 10, 15, 20, 30, 40, 50], p.level, 10, 2).forEach(L => {
-      const nm = lvlNames[L] || ("Ascension " + roman(Math.floor((L - 50) / 10) + 1));
+    // Named rungs re-spaced onto the reachable part of the curve: the old list
+    // ran 2..50, and 50 is seventy-six years. Past the top named rung they
+    // continue every +6 rather than +10, so the chain keeps going without
+    // immediately leaving the planet again.
+    const lvlNames = { 2: "Initiate", 5: "Apprentice", 10: "Journeyman", 15: "Artisan", 20: "Veteran", 26: "Elite", 32: "Master", 38: "Grandmaster" };
+    rungs([2, 5, 10, 15, 20, 26, 32, 38], p.level, 6, 2).forEach(L => {
+      const nm = lvlNames[L] || ("Ascension " + roman(Math.floor((L - 38) / 6) + 1));
       add("lvl-" + L, nm, "Reach level " + L, gradeByVal(L, 5, 15, 30), "ascension", IP.asc, p.level >= L, p.level, L);
     });
 
@@ -949,8 +966,11 @@
     add("pww", "Perfect Workout Week", "Check all 7 workouts in a week", "rare", "consistency", IP.body, perfWorkoutWeek);
 
     // Mythic capstones — the rarest feats.
-    add("myth-forge", "Forgemaster", "Reach level 60", "mythic", "ascension", IP.gem, p.level >= 60, p.level, 60);
-    add("myth-legend", "Living Legend", "Reach level 75, or max every attribute", "mythic", "ascension", IP.gem, p.level >= 75 || p.attrs.every(a => a.level >= 20), p.level, 75);
+    // Both were pinned to the old ceiling: level 60 is where Forgemaster used to
+    // sit, and 75 was 4,700 years away. They follow the ladder now, or the app
+    // hands you the rank and then refuses you the insignia for it.
+    add("myth-forge", "Forgemaster", "Reach level 36", "mythic", "ascension", IP.gem, p.level >= 36, p.level, 36);
+    add("myth-legend", "Living Legend", "Reach level 44, or max every attribute", "mythic", "ascension", IP.gem, p.level >= 44 || p.attrs.every(a => a.level >= 20), p.level, 44);
     add("myth-year", "Unbroken Year", "Reach a 365-day streak", "mythic", "consistency", IP.flame, p.dayStreak >= 365, p.dayStreak, 365);
     add("myth-poly", "True Polymath", "Embody the Polymath class", "mythic", "class", IP.star, !!embodied.polymath);
 

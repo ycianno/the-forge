@@ -1661,7 +1661,9 @@ function autoMilestones(p) {
   // you are standing in when it gets banked. Left undefined it falls back to
   // today, which is right for a level and wrong for a December season.
   const add = (kind, key, title, value, meta, at) => out.push({ kind, key, title, value, meta, at });
-  [10, 25, 50, 75, 99].forEach(L => { if (p.level >= L) add('lvl', 'lvl:' + L, 'Reached Level ' + L, L); });
+  // 50, 75 and 99 were 76 years, 4,700 years and 251,000 years away — records
+  // for milestones no one could reach. Re-placed onto the reachable curve.
+  [10, 20, 30, 36].forEach(L => { if (p.level >= L) add('lvl', 'lvl:' + L, 'Reached Level ' + L, L); });
   if (p.rank && p.rank.name) add('rank', 'rank:' + p.rank.name, 'Became a ' + p.rank.name, null);
   [30, 100, 365].forEach(N => { if (p.dayStreak >= N) add('streak', 'streak:' + N, N + '-day streak', N); });
 
