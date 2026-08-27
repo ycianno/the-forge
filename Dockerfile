@@ -22,7 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends gosu \
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
-COPY server.js send-reminders.js ./
+# Every top-level module server.js requires must be listed here. It required
+# ./dashboard-summary and that file was not copied, so the container booted to
+# MODULE_NOT_FOUND and died — the app was completely dead in Docker while the
+# test suite stayed green, because the suite runs against the source tree and
+# never against the image. The smoke test in docker-build.yml is what caught it.
+COPY server.js send-reminders.js dashboard-summary.js ./
 COPY public ./public
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
