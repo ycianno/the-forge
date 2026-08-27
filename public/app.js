@@ -2239,17 +2239,75 @@ function renderAnvilHud(tasks) {
   const bar = document.getElementById("anvilBar");
   if (bar) bar.style.width = (tasks.length ? Math.round(done / tasks.length * 100) : 0) + "%";
   renderAnvilStrike(null);
-  // What the day is about to ask of you. A piece whose hour has passed is the
-  // one thing on this screen worth interrupting for.
-  const now = isCurrentWeek() ? nowMinutes() : null;
-  const late = now == null ? 0 : tasks.filter((t) => !t.done && Forge.urgencyOf(t.due, now) === "late").length;
-  const hot = now == null ? 0 : tasks.filter((t) => !t.done && Forge.urgencyOf(t.due, now) === "hot").length;
+  renderAnvilHeat(tasks);
+}
+
+// What the day is about to ask of you.
+//
+// This was a tally — "2 due within the hour" — which is a fact you cannot act
+// on: it does not say which two, or how long you have. It says the next thing
+// and counts down to it now, which is the only reading of this chip that ever
+// changes what you do next. A piece whose hour has already passed still wins
+// outright; that is the one thing on this screen worth interrupting for.
+//
+// Kept out of renderAnvilHud on purpose so the clock can tick it every twenty
+// seconds without also resetting the clean-run chip next to it.
+function renderAnvilHeat(tasks) {
   const chip = document.getElementById("anvilHeat");
-  if (chip) {
-    if (late) { chip.textContent = `${late} past its hour`; chip.dataset.heat = "late"; chip.hidden = false; }
-    else if (hot) { chip.textContent = `${hot} due within the hour`; chip.dataset.heat = "hot"; chip.hidden = false; }
-    else { chip.hidden = true; }
+  if (!chip) return;
+  const now = isCurrentWeek() ? nowMinutes() : null;
+  if (now == null) { chip.hidden = true; return; }
+  const open = tasks.filter((t) => !t.done);
+  const late = open.filter((t) => Forge.urgencyOf(t.due, now) === "late");
+  if (late.length) {
+    chip.textContent = late.length === 1
+      ? `${late[0].title} · past its hour`
+      : `${late.length} past their hour`;
+    chip.dataset.heat = "late"; chip.hidden = false;
+    return;
   }
+  // Ninety minutes is the horizon: further out than that and a countdown is
+  // just a clock, which the top bar already has.
+  const next = open
+    .filter((t) => t.due != null && t.due - now <= 90)
+    .sort((a, b) => a.due - b.due)[0];
+  if (!next) { chip.hidden = true; return; }
+  const left = Math.max(0, Math.round(next.due - now));
+  chip.textContent = `${next.title} · ${left <= 1 ? "now" : `in ${left} min`}`;
+  chip.dataset.heat = Forge.urgencyOf(next.due, now) === "hot" ? "hot" : "warm";
+  chip.hidden = false;
+}
+
+// The forge's own heartbeat.
+//
+// Everything about urgency was already built — the engine has known since the
+// anvil shipped that a task within fifteen minutes of its hour costs one blow
+// rather than four — and none of it ever fired on its own, because `setNow`
+// was only ever reached from a render. You could sit on Today with a task going
+// overdue in front of you and watch the rack do absolutely nothing. The board
+// underneath has had a live now-marker on a sixty-second timer this whole time;
+// the forge above it had no clock at all.
+//
+// Twenty seconds, because the countdown is in minutes and a minute-long timer
+// makes the chip lag the truth by up to a minute at exactly the moment it
+// matters most. It runs while Today is on screen — folded forge included, since
+// the chip outlives the canvas — and is torn down with the room.
+let anvilClock = null;
+function stopAnvilClock() { if (anvilClock) { clearInterval(anvilClock); anvilClock = null; } }
+function startAnvilClock() { if (!anvilClock) anvilClock = setInterval(tickAnvilClock, 20000); }
+function tickAnvilClock() {
+  const room = document.getElementById("anvilRoom");
+  if (!room || room.hidden || currentView !== "today") { stopAnvilClock(); return; }
+  const tasks = anvilTasks();
+  renderAnvilHeat(tasks);
+  if (!window.ForgeStage || !ForgeStage.isRunning()) return;
+  ForgeStage.setNow(isCurrentWeek() ? nowMinutes() : null);
+  ForgeStage.setProgress(tasks.filter((t) => t.done).length, tasks.length);
+  // Re-prices what is already on the rack and flares anything the hour just
+  // reached. Deliberately not sync() — that re-lays out the rack, and a rack
+  // that shuffles under the cursor every twenty seconds is worse than a rack
+  // that lies about a blow.
+  ForgeStage.reprice();
 }
 
 // Called on every render of Today. Cheap when the mode is `list` — the stage is
@@ -2259,6 +2317,7 @@ function syncAnvil(opts) {
   if (!room || !window.ForgeStage) return;
   const inToday = currentView === "today" && !document.body.classList.contains("in-focus");
   room.hidden = !inToday;
+  if (inToday) startAnvilClock(); else stopAnvilClock();
   const folded = anvilCollapsed();
   room.classList.toggle("is-folded", folded);
   // The HUD is the day's headline and stays even when the forge is folded away.
@@ -2276,6 +2335,9 @@ function syncAnvil(opts) {
   // not light every piece on it as overdue.
   ForgeStage.setNow(isCurrentWeek() ? nowMinutes() : null);
   ForgeStage.sync(tasksNow, opts);
+  // The fire is the day's own progress bar — banked when you start, roaring by
+  // the time the rack is empty.
+  ForgeStage.setProgress(tasksNow.filter((t) => t.done).length, tasksNow.length);
   const prof = (window.Game && Game.computeProfile) ? Game.computeProfile() : null;
   ForgeStage.setStreak(prof ? prof.dayStreak : 0);
   if (!ForgeStage.isRunning()) ForgeStage.start();
@@ -2289,8 +2351,11 @@ function renderAnvilStrike(info) {
   const el = document.getElementById("anvilClean");
   if (!el) return;
   const run = info ? info.cleanRun : 0;
-  if (!info || run < 2) { el.hidden = true; return; }
-  el.textContent = `${run} clean`;
+  // A perfect blow is rarer than a clean run and outranks it in the one slot
+  // they share. Below two clean there is nothing to say and the chip goes away.
+  if (!info || (!info.perfect && run < 2)) { el.hidden = true; return; }
+  el.textContent = info.perfect ? "perfect · ×2" : `${run} clean`;
+  el.dataset.hit = info.perfect ? "perfect" : "clean";
   el.hidden = false;
   el.classList.remove("is-hit");
   void el.offsetWidth;
@@ -5242,7 +5307,7 @@ function routeTo(view, opts) {
     write.call(history, null, "", `#${next}`);
   }
   if (next === "today") { initTodayModes(); syncAnvil({ snap: true }); }
-  else if (window.ForgeStage) ForgeStage.stop();
+  else { stopAnvilClock(); if (window.ForgeStage) ForgeStage.stop(); }
   // Arming has to be followed by a paint: routeTo() does not run updateLive(),
   // so without this the queue existed and the card never said so.
   if (next === "week") { armBossFight(); renderBoss(); renderWeekPulse(); }

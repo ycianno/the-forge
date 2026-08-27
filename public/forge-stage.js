@@ -55,6 +55,24 @@
     if (!window.Forge || !window.Forge.strikesWithUrgency) return base;
     return window.Forge.strikesWithUrgency(base, urgencyOf(t.due));
   }
+  // Where the day is, from the same clock the rack reads: 0 through the night,
+  // 1 through the middle of the day, ramping over dawn and dusk. Browsing a past
+  // week hands us no clock at all, and a shop with no hour gets a neutral one
+  // rather than a permanent midnight.
+  function daylightOf(m) {
+    if (m == null) return 0.62;
+    var h = m / 60;
+    if (h <= 5 || h >= 21) return 0;
+    if (h < 8) return (h - 5) / 3;
+    if (h > 18) return (21 - h) / 3;
+    return 1;
+  }
+  // How much of the day's work is behind you. The fire is banked when you start
+  // and roaring by the time the rack is empty — the room's slowest, largest
+  // animation, and the only one that takes all day to play.
+  function progress() {
+    return stage.total ? Math.min(1, stage.done / stage.total) : 0;
+  }
   // Heavier pieces take longer to come up to temperature — the wait is part of
   // the weight, not a fixed toll on every task.
   function heatRateFor(need) { return 2.2 - (need - 1) * 0.32; }
@@ -69,6 +87,8 @@
     hammer: 0,          // 0 rest → 1 mid-swing; drives the whole strike anim
     hovering: null, waiting: 0, shelfExtra: 0,
     cleanRun: 0, lastStrikeAt: 0, combo: 0,
+    done: 0, total: 0,               // the day's arc: what the fire answers to
+    daylight: 0.62, golden: 0,       // where the hour is, eased toward the truth
     QUENCH: { x: 0, y: 0 },
     FIRE: { x: 0, y: 0, r: 74 },
     ANVIL: { x: 0, y: 0 },
@@ -206,11 +226,14 @@
           state: t.done ? "shelf" : "rack", heat: 0,
           x: 0, y: 0, tx: 0, ty: 0, w: 96, h: 15, wob: 0, shelfSlot: -1,
           urg: urgencyOf(t.due), bob: Math.random() * 6.28, clean: 0, quench: 0,
+          // The estimate rides on the piece so the clock can re-price it later
+          // without re-reading the day. `flare` is the moment its hour arrives.
+          minutes: t.minutes, flare: 0, perfect: 0,
         };
         stage.pieces.push(p);
         return;
       }
-      p.label = t.title; p.xp = t.xp; p.due = t.due;
+      p.label = t.title; p.xp = t.xp; p.due = t.due; p.minutes = t.minutes;
       p.urg = urgencyOf(t.due);
       // The clock keeps moving while the page is open, so a piece's cost is
       // re-read every pass — but never below what you have already put into it.
@@ -229,6 +252,50 @@
     tasks.forEach(function (t, i) { order[t.id] = i; });
     stage.pieces.sort(function (a, b) { return order[a.id] - order[b.id]; });
     layoutRack(snap);
+  }
+
+  // The clock, arriving on its own.
+  //
+  // Everything about urgency was already here — the engine knew that a task
+  // within fifteen minutes of its hour is one blow rather than four — and none
+  // of it ever fired, because `setNow` was only ever called from a render. You
+  // could sit and watch the forge with a task going overdue in front of you and
+  // the rack would not so much as warm. The shop only ever moved when you did.
+  //
+  // This is the cheap half of `sync`: it re-reads the clock against pieces that
+  // are already here and never touches the layout, so it can run every twenty
+  // seconds without the rack twitching under the cursor.
+  //
+  // A piece getting cheaper is an EVENT, not a number that quietly changes. The
+  // file's own note about the rack caption says a number that moves on its own
+  // is a bug until it is explained; the explanation is that it flares, throws
+  // sparks and rings.
+  function reprice() {
+    stage.pieces.forEach(function (p) {
+      if (p.state !== "rack" && p.state !== "fire") return;
+      p.urg = urgencyOf(p.due);
+      var base = strikesFor(p.minutes);
+      var want = (window.Forge && window.Forge.strikesWithUrgency)
+        ? window.Forge.strikesWithUrgency(base, p.urg) : base;
+      // Never below what you have already put into it, and never below one.
+      var need = Math.max(want, p.hit || 0, 1);
+      if (need < p.need) ignite(p, need);
+      p.need = need;
+    });
+  }
+
+  // The hour arriving on a piece. Loud enough to catch out of the corner of an
+  // eye, quiet enough that a day full of timed tasks is not a fireworks show —
+  // it fires once per piece, on the pass where the cost actually drops.
+  function ignite(p, need) {
+    bell();
+    if (p.offRack || p.state === "fire") return;   // off the edge of the rack: no theatre
+    p.flare = 1;
+    burst(p.x, p.y - 4, 16, 1.05);
+    if (!reduceMotion) {
+      stage.rings.push({ x: p.x, y: p.y, r: 5, life: 0.5, life0: 0.5, w: 2 });
+    }
+    nums(p.x, p.y - 30, need === 1 ? "THE HOUR · 1 BLOW" : need + " BLOWS", HEAT[4], 12);
   }
 
   // ----- input -------------------------------------------------------------
@@ -316,10 +383,10 @@
     if (actx.state === "suspended") actx.resume();
     return actx;
   }
-  function strikeSound(power, clean) {
+  function strikeSound(power, clean, perfect) {
     var c = ac(); if (!c) return;
     var t = c.currentTime;
-    var gain = clean ? 1 : 0.6;
+    var gain = perfect ? 1.35 : clean ? 1 : 0.6;
     // Noise transient through a bandpass — this is what makes it read as metal.
     var len = Math.floor(c.sampleRate * 0.05);
     var buf = c.createBuffer(1, len, c.sampleRate);
@@ -327,12 +394,14 @@
     for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
     var src = c.createBufferSource(); src.buffer = buf;
     var bp = c.createBiquadFilter(); bp.type = "bandpass";
-    bp.frequency.value = 2600 + power * 900; bp.Q.value = 1.1;
+    bp.frequency.value = (perfect ? 3400 : 2600) + power * 900; bp.Q.value = 1.1;
     var ng = c.createGain(); ng.gain.setValueAtTime(0.16 * gain, t);
     ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
     src.connect(bp).connect(ng).connect(c.destination); src.start(t);
-    // Inharmonic partials — a struck bar, not a tuned string.
-    [1, 2.76, 5.4].forEach(function (r, k) {
+    // Inharmonic partials — a struck bar, not a tuned string. A perfect blow
+    // adds a high one: the difference between hitting metal and hitting metal
+    // that was ready for it is audible before it is legible.
+    (perfect ? [1, 2.76, 5.4, 8.9] : [1, 2.76, 5.4]).forEach(function (r, k) {
       var o = c.createOscillator(), g = c.createGain();
       o.type = "sine"; o.frequency.value = (170 + power * 40) * r;
       g.gain.setValueAtTime(0.0001, t);
@@ -360,6 +429,20 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
     src.connect(bp).connect(g).connect(c.destination); src.start(t);
   }
+  // The hour landing on a piece. Two partials a fifth apart, struck and left to
+  // ring — a shop bell, not an alarm. Nothing in this app is allowed to nag.
+  function bell() {
+    var c = ac(); if (!c) return;
+    var t = c.currentTime;
+    [330, 494].forEach(function (f, k) {
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = "triangle"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.045 / (k + 1), t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1 - k * 0.35);
+      o.connect(g).connect(c.destination); o.start(t); o.stop(t + 1.2);
+    });
+  }
   function thunk() {
     var c = ac(); if (!c) return;
     var t = c.currentTime, o = c.createOscillator(), g = c.createGain();
@@ -382,32 +465,44 @@
     // failure, because a mechanic that can waste your tap is a mechanic that
     // makes you afraid of the screen.
     var clean = p.heat > 0.55;
-    p.hit++;
+    // White metal moves twice as far. The rule is the engine's, not this
+    // renderer's, for the same reason the cost of a task is — it is the
+    // economy of the room and it belongs somewhere pure and tested.
+    var worth = (window.Forge && window.Forge.hitValue) ? window.Forge.hitValue(p.heat) : (p.heat >= 0.9 ? 2 : 1);
+    var perfect = worth > 1;
+    p.hit = Math.min(p.need, p.hit + worth);
+    if (perfect) p.perfect = 1;
     if (clean) { p.clean++; stage.cleanRun++; } else { stage.cleanRun = 0; }
     // Struck again inside a second and a half: the rhythm of actual smithing.
     stage.combo = (now - stage.lastStrikeAt < 1500) ? stage.combo + 1 : 1;
     stage.lastStrikeAt = now;
 
     var last = p.hit >= p.need;
-    strikeSound(p.hit / p.need, clean);
-    if (navigator.vibrate) { try { navigator.vibrate(last ? [0, 30, 40, 20] : (clean ? 18 : 10)); } catch (e) {} }
+    strikeSound(p.hit / p.need, clean, perfect);
+    if (navigator.vibrate) { try { navigator.vibrate(last ? [0, 30, 40, 20] : (perfect ? [0, 14, 10, 22] : clean ? 18 : 10)); } catch (e) {} }
     stage.hammer = 1;
     if (!reduceMotion) {
-      stage.freeze = now + (last ? 90 : 55);
-      stage.shake = (last ? 11 : 6) * (clean ? 1.25 : 0.75);
+      stage.freeze = now + (last ? 90 : perfect ? 70 : 55);
+      stage.shake = (last ? 11 : 6) * (perfect ? 1.6 : clean ? 1.25 : 0.75);
       p.wob = 1;
       var hx = stage.ANVIL.x, hy = stage.ANVIL.y - 44 * stage.SCALE;
-      burst(hx, hy, (last ? 30 : 18) * (clean ? 1.6 : 0.7), last ? 1.7 : 1.2);
-      stage.rings.push({ x: hx, y: hy, r: 8, life: 0.42, life0: 0.42, w: clean ? 3 : 1.6 });
-      if (clean && stage.combo >= 3) {
+      burst(hx, hy, (last ? 30 : 18) * (perfect ? 2.1 : clean ? 1.6 : 0.7), last ? 1.7 : perfect ? 1.5 : 1.2);
+      stage.rings.push({ x: hx, y: hy, r: 8, life: 0.42, life0: 0.42, w: perfect ? 4.5 : clean ? 3 : 1.6 });
+      // A perfect blow says so; otherwise a run of clean ones does. Two labels
+      // stacked on one hit is noise, and the rarer thing wins.
+      if (perfect) nums(hx, hy - 26, "PERFECT", HEAT[5], 15);
+      else if (clean && stage.combo >= 3) {
         nums(hx, hy - 26, stage.combo + "× RHYTHM", HEAT[5], 13);
       }
     }
-    p.heat = Math.max(0.25, p.heat - (clean ? 0.14 : 0.2));   // each blow costs heat
+    // Each blow costs heat, and a perfect one costs least — which is what makes
+    // two of them in a row possible at all. Anvil heat only ever falls, so the
+    // whole bonus lives inside the second or so the piece stays white.
+    p.heat = Math.max(0.25, p.heat - (perfect ? 0.06 : clean ? 0.14 : 0.2));
     // Tell the host about every blow, not just the last one. A run of clean
     // strikes is the only skill in this room and it was invisible.
     if (stage.api && stage.api.onStrike) {
-      stage.api.onStrike({ clean: clean, combo: stage.combo, cleanRun: stage.cleanRun, last: last });
+      stage.api.onStrike({ clean: clean, perfect: perfect, combo: stage.combo, cleanRun: stage.cleanRun, last: last });
     }
     if (!last) return;
 
@@ -444,12 +539,22 @@
   // ----- simulation --------------------------------------------------------
   function step(dt) {
     var now = performance.now();
-    stage.fireGlow += (0.55 + Math.sin(now / 380) * 0.10 + Math.sin(now / 137) * 0.05 - stage.fireGlow) * 0.12;
+    // Eased rather than set, because the clock ticks in twenty-second steps and
+    // a shop that changes its light in one frame reads as a bug, not as dusk.
+    var d = daylightOf(stage.now);
+    stage.daylight += (d - stage.daylight) * Math.min(1, dt * 0.8);
+    stage.golden = (d > 0 && d < 1) ? 1 - Math.abs(d - 0.5) * 2 : 0;
+    // The fire is the day's own progress bar. Banked at 0/8 and white at 8/8.
+    var frac = progress();
+    var bank = 0.34 + frac * 0.46;
+    stage.fireGlow += (bank + Math.sin(now / 380) * 0.10 + Math.sin(now / 137) * 0.05 - stage.fireGlow) * 0.12;
 
     stage.pieces.forEach(function (p) {
       p.x += (p.tx - p.x) * Math.min(1, dt * 7);
       p.y += (p.ty - p.y) * Math.min(1, dt * 7);
       p.wob *= 0.86;
+      p.flare = Math.max(0, p.flare - dt * 1.3);
+      p.perfect = Math.max(0, p.perfect - dt * 2.2);
 
       if (p.state === "toFire" && Math.abs(p.x - p.tx) < 3) p.state = "fire";
       if (p.state === "fire") {
@@ -492,7 +597,7 @@
     });
 
     // Ambient embers off the fire. The shop is never completely still.
-    if (!reduceMotion && Math.random() < dt * (4 + stage.streak * 0.15)) {
+    if (!reduceMotion && Math.random() < dt * (2.4 + frac * 6 + stage.streak * 0.15)) {
       stage.embers.push({
         x: stage.FIRE.x + (Math.random() - 0.5) * stage.FIRE.r * 1.5,
         y: stage.FIRE.y + 6,
@@ -565,6 +670,31 @@
     return t.replace(/\s+$/, "") + "…";
   }
 
+  // The hour, as light. Night puts a cool cast over the top of the frame and
+  // leaves the floor to the fire; dawn and dusk lay a thin warm band across it.
+  // It costs nothing extra — the clock is already being read every twenty
+  // seconds for the rack — and it is the difference between a screen that looks
+  // the same at six in the morning and at eleven at night, and a shop.
+  function drawSky() {
+    var ctx = stage.ctx, night = 1 - stage.daylight;
+    if (night > 0.02) {
+      var g = ctx.createLinearGradient(0, 0, 0, stage.H);
+      g.addColorStop(0, "rgba(30,41,59," + (0.30 * night).toFixed(3) + ")");
+      g.addColorStop(0.62, "rgba(56,44,40," + (0.14 * night).toFixed(3) + ")");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, stage.W, stage.H);
+    }
+    if (stage.golden > 0.02) {
+      var w = ctx.createLinearGradient(0, 0, 0, stage.H);
+      w.addColorStop(0, "rgba(251,146,60,0)");
+      w.addColorStop(0.55, "rgba(251,146,60," + (0.055 * stage.golden).toFixed(3) + ")");
+      w.addColorStop(1, "rgba(251,146,60,0)");
+      ctx.fillStyle = w;
+      ctx.fillRect(0, 0, stage.W, stage.H);
+    }
+  }
+
   function drawFire() {
     var ctx = stage.ctx, F = stage.FIRE;
     var g = ctx.createRadialGradient(F.x, F.y, 6, F.x, F.y, F.r * 2.4);
@@ -582,7 +712,9 @@
       var cx = F.x + Math.cos(a) * (10 + (i % 5) * 13) * k;
       var cy = F.y + 8 * k + Math.sin(a) * 7;
       var t = 0.35 + 0.65 * Math.abs(Math.sin(performance.now() / (700 + i * 90) + i));
-      ctx.fillStyle = HEAT[1 + Math.round(t * 3)];
+      // A worked day leaves brighter coals. The ramp's top is reserved for a
+      // cleared one, so the fire is never at full white until the rack is empty.
+      ctx.fillStyle = HEAT[Math.min(5, 1 + Math.round(t * (2.4 + progress() * 1.4)))];
       ctx.globalAlpha = 0.5 + t * 0.5;
       ctx.fillRect(cx - 4, cy - 3, 8, 6);
     }
@@ -620,12 +752,26 @@
     ctx.save();
     ctx.translate(p.x, p.y);
     if (p.wob > 0.01) ctx.rotate((Math.random() - 0.5) * p.wob * 0.06);
-    if (hot) { ctx.shadowColor = heatColor(p.heat); ctx.shadowBlur = 10 + p.heat * 34; }
+    // Two things brighten a piece beyond its own heat: its hour arriving, and
+    // the blow that just landed perfectly on it. Both are moments rather than
+    // states, so both are drawn as a decaying halo and neither touches p.heat —
+    // the metal's own temperature stays the honest thing it always was.
+    var lift = Math.max(p.flare || 0, p.perfect || 0);
+    if (hot || lift > 0.01) {
+      ctx.shadowColor = lift > 0.01 ? HEAT[5] : heatColor(p.heat);
+      ctx.shadowBlur = 10 + p.heat * 34 + lift * 40;
+    }
     ctx.fillStyle = hot ? heatColor(p.heat) : (p.state === "shelf" ? "#33333d" : "#2a2a33");
     var shaped = p.need ? p.hit / p.need : 0;
     var w = p.w * (1 + shaped * 0.16), h = p.h * (1 - shaped * 0.3);
     roundRect(ctx, -w / 2, -h / 2, w, h, 3); ctx.fill();
     ctx.shadowBlur = 0;
+    if (lift > 0.01) {
+      ctx.globalAlpha = lift;
+      ctx.strokeStyle = HEAT[5]; ctx.lineWidth = 1.5;
+      roundRect(ctx, -w / 2 - 2.5, -h / 2 - 2.5, w + 5, h + 5, 4); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.fillStyle = "rgba(255,255,255,0.14)";
     ctx.fillRect(-w / 2, -h / 2, w, 1.5);
     ctx.restore();
@@ -650,23 +796,36 @@
           onAnv ? 13 : 10.5);
     if (onAnv) {
       var left = p.need - p.hit;
-      label(left + (left === 1 ? " STRIKE LEFT" : " STRIKES LEFT"), p.x, ty + 18, HEAT[4], 10);
+      var ready = (window.Forge && window.Forge.hitValue ? window.Forge.hitValue(p.heat) : 1) > 1;
+      // While the metal is white the next blow is worth two, so say so — the
+      // window is about a second wide and an unannounced bonus is not a skill,
+      // it is a coincidence you eventually notice.
+      label(ready && left > 1
+              ? left + " LEFT · STRIKE NOW FOR 2"
+              : left + (left === 1 ? " STRIKE LEFT" : " STRIKES LEFT"),
+            p.x, ty + 18, ready ? HEAT[5] : HEAT[4], 10);
     } else if (p.state === "rack") {
       // Say the cost on the rack, so "this one is one blow" is something you
       // can see before you commit to it — and say *why* when the clock is the
       // reason, because a number that changes on its own is a bug until it is
       // explained.
       // A rack slot is about eighty pixels wide, so the caption has to be as
-      // short as the thing it says. The *reason* the cost dropped is in the
-      // HUD chip above the stage — down here it only has to say the cost.
-      var cap = p.urg === "late" ? "! 1 BLOW"
-              : p.urg === "hot" ? "NOW · 1 BLOW"
-              : stage.hovering === p ? p.need + (p.need === 1 ? " BLOW" : " BLOWS") + " · +" + p.xp
-              : null;
-      if (cap) {
-        label(fit(cap, stage.RACK_STEP - 16, 9), p.x, ty + 14,
-              p.urg === "late" ? HEAT[4] : p.urg === "hot" ? HEAT[3] : "rgba(255,255,255,0.5)", 9);
-      }
+      // short as the thing it says.
+      //
+      // The cost used to be HOVER-ONLY unless the piece was already hot, which
+      // meant that on a phone — where there is no cursor — most of the rack
+      // simply never said what anything was worth. Every piece states its cost
+      // now; the clock only changes the wording and the colour.
+      var blows = p.need + (p.need === 1 ? " BLOW" : " BLOWS");
+      var cap, col;
+      if (p.urg === "late")      { cap = "! " + blows;       col = HEAT[4]; }
+      else if (p.urg === "hot")  { cap = "NOW · " + blows;   col = HEAT[3]; }
+      else if (p.urg === "warm") { cap = "SOON · " + blows;  col = HEAT[2]; }
+      else                       { cap = blows;              col = "rgba(255,255,255,0.34)"; }
+      // Under the cursor it also says what it pays, which is the one thing
+      // there is never room for otherwise.
+      if (stage.hovering === p) { cap = blows + " · +" + p.xp; col = "rgba(255,255,255,0.62)"; }
+      label(fit(cap, stage.RACK_STEP - 16, 9), p.x, ty + 14, col, 9);
     }
     if (p.state === "fire") label("HEATING…", p.x, ty + 18, HEAT[3], 10);
   }
@@ -699,6 +858,11 @@
     var pivotX = stage.ANVIL.x + 62 * k;
     var pivotY = stage.ANVIL.y - 96 * k;
     var angle = (-0.95 + 1.25 * (1 - lift)) ;          // radians, up → down
+    // A run of clean blows is drawn on the hammer itself. The run was already
+    // being counted and already being reported to the host, and the whole of
+    // its reward was four characters of text in a corner of the HUD — this is
+    // the same number, said in the place you are actually looking.
+    var run = Math.min(1, stage.cleanRun / 6);
     ctx.save();
     ctx.translate(pivotX, pivotY);
     ctx.rotate(angle);
@@ -707,10 +871,15 @@
     ctx.strokeStyle = "#6b4f34"; ctx.lineWidth = 6; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-6, 62); ctx.stroke();
     // head
+    var hw = 34 + run * 9, hh = 16 + run * 4;
+    if (run > 0.01) { ctx.shadowColor = HEAT[3]; ctx.shadowBlur = 16 * run; }
     ctx.fillStyle = "#3a3a46";
-    roundRect(ctx, -22, 58, 34, 16, 3); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.16)";
-    ctx.fillRect(-22, 58, 34, 2);
+    roundRect(ctx, -22 - run * 4, 58, hw, hh, 3); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = run > 0.01 ? HEAT[4] : "rgba(255,255,255,0.16)";
+    ctx.globalAlpha = run > 0.01 ? 0.25 + run * 0.55 : 1;
+    ctx.fillRect(-22 - run * 4, 58, hw, 2);
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -752,6 +921,7 @@
     ctx.fillStyle = fg;
     ctx.fillRect(0, stage.ANVIL.y - 40 * stage.SCALE, stage.W, stage.H - stage.ANVIL.y + 40);
 
+    drawSky();
     drawFire();
     drawShelf();
     drawQuench();
@@ -904,6 +1074,11 @@
     stage.raf = 0;
   }
   function setStreak(n) { stage.streak = Number(n) || 0; }
+  // What the fire answers to. The day's arc is the slowest animation in here.
+  function setProgress(done, total) {
+    stage.done = Number(done) || 0;
+    stage.total = Number(total) || 0;
+  }
   // Minutes past midnight, or null for any day that is not today. Null is what
   // stops a week you are browsing from lighting up as overdue.
   function setNow(m) { stage.now = (m == null ? null : Number(m)); }
@@ -921,6 +1096,7 @@
     },
     mount: mount, start: start, stop: stop, sync: sync,
     resize: resize, setStreak: setStreak, setNow: setNow, popXp: popXp,
+    setProgress: setProgress, reprice: reprice,
     strikesFor: strikesFor,
     isRunning: function () { return stage.running; },
   };

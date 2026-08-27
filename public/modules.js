@@ -198,6 +198,27 @@
     if (urgency === "warm") return Math.max(1, n - 1);
     return n;
   }
+  // What a single blow is worth, from how hot the metal was when it landed.
+  //
+  // The forge measured your clean strikes from the day it shipped and then did
+  // nothing with the count: it printed "3 clean" in a corner and that was the
+  // whole reward. This is the count finally spending into something. Metal
+  // struck while it is still white moves twice as far, so a four-blow task
+  // finishes in two taps if you work it fast and in four if you let it dull.
+  //
+  // It is a bonus and never a penalty, which is the same rule the rest of this
+  // screen follows: a dull strike still lands, so no tap is ever wasted and
+  // nothing here can make you afraid of your own hammer. The floor is one.
+  //
+  // The window is deliberately tight. Anvil heat only falls — a piece cannot
+  // be reheated once it is off the fire — so the bonus is spent inside the
+  // second or so a piece stays white, and the ceiling on a four-blow task is
+  // two taps rather than one.
+  const HIT_PERFECT = 0.9;
+  function hitValue(heat) {
+    const h = Number(heat);
+    return Number.isFinite(h) && h >= HIT_PERFECT ? 2 : 1;
+  }
   // What a week's plan actually asks of you, per day. Drives the plan-health
   // readout, which exists because a plan can quietly grow past the point where
   // any day is winnable and nothing in the app used to say so.
@@ -929,7 +950,7 @@
     PURSUIT_PALETTE, NEUTRAL_ACCENT, TARGET_SPEC, targetOf, setTargetOn, accentFor, paletteFor, STUDY_HOUR_XP, PROJECT_HOUR_XP, REVIEW_XP, PRESETS, BUILTIN_ORDER,
     BOSSES, BOSS_ATTR, BOSSES_V1, bossKeyHash, bossForWeek, bossV1ForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
-    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, strikesFor, strikesForQuest, urgencyOf, strikesWithUrgency, planLoad, parseQuickTask, DAY_WORDS,
+    SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, strikesFor, strikesForQuest, urgencyOf, strikesWithUrgency, hitValue, HIT_PERFECT, planLoad, parseQuickTask, DAY_WORDS,
     slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });
