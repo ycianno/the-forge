@@ -1046,6 +1046,7 @@ async function loadDatabase() {
     catch { database = { version: 2, weeks: {} }; }
   }
   invalidateBestiary();   // a sync can replace whole weeks under the replay
+  invalidateOneOffDone();
 }
 
 async function loadSettings() {
@@ -3164,11 +3165,59 @@ function questMinutes(q) {
   if (!(h >= 0 && h <= 23 && m >= 0 && m <= 59)) return null;
   return h * 60 + m;
 }
+// A missed one-off follows you; a missed ritual does not.
+//
+// The asymmetry is the whole point. "Renew the passport" does not stop
+// mattering because Tuesday went past, so it should still be in front of you.
+// A missed Monday workout is NOT owed on Tuesday — a backlog that chases you is
+// how a habit tracker turns into a debt collector, which is the one thing this
+// app has spent its whole design avoiding.
+//
+// The catch that makes this harder than it looks: a one-off's check id has no
+// date in it, but the tick lands in whichever WEEK BLOB you were standing in
+// when you ticked it. Roll one forward, complete it today, and the week it was
+// originally scheduled in still holds no check — so asking that one week "is it
+// done?" answers no forever and the task rolls for eternity. Done-ness has to
+// be asked of every week at once.
+let _oneOffDoneCache = null;
+function invalidateOneOffDone() { _oneOffDoneCache = null; }
+function completedCheckIds() {
+  if (_oneOffDoneCache) return _oneOffDoneCache;
+  const done = new Set();
+  const weeks = (typeof database !== "undefined" && database && database.weeks) || {};
+  for (const k in weeks) {
+    const checks = (weeks[k] && weeks[k].checks) || {};
+    for (const id in checks) if (checks[id]) done.add(id);
+  }
+  _oneOffDoneCache = done;
+  return done;
+}
+// How many days late a one-off is on the day being drawn. 0 means on time, and
+// rituals are never late — they simply have a different box tomorrow.
+function shortDateLabel(ymd) {
+  const d = ymdToDate(ymd);
+  if (!d) return String(ymd || "");
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+function questLateBy(q, date) {
+  if (!q || q.scheduleType === "weekly" || !q.scheduledDate) return 0;
+  const key = iso(date);
+  if (q.scheduledDate >= key) return 0;
+  const from = ymdToDate(q.scheduledDate), to = ymdToDate(key);
+  if (!from || !to) return 0;
+  return Math.max(0, Math.round((to - from) / 86400000));
+}
+
 function questsForDate(date) {
   const key = iso(date);
   const dayIndex = date.getDay();
+  // Only TODAY collects what was missed. Browsing back to a past Wednesday must
+  // show what that Wednesday actually asked of you, not today's backlog.
+  const isToday = key === iso(new Date());
+  const carried = (q) => isToday && q.scheduledDate && q.scheduledDate < key &&
+    !completedCheckIds().has(questCheckId(q));
   return getUnifiedQuests()
-    .filter((q) => !q.archived && ((q.scheduleType === "weekly" && (q.repeatDays || []).includes(dayIndex)) || (q.scheduleType !== "weekly" && q.scheduledDate === key)))
+    .filter((q) => !q.archived && ((q.scheduleType === "weekly" && (q.repeatDays || []).includes(dayIndex)) || (q.scheduleType !== "weekly" && (q.scheduledDate === key || carried(q)))))
     .sort((a, b) => {
       const ta = questMinutes(a), tb = questMinutes(b);
       if (ta !== tb) return ta == null ? 1 : tb == null ? -1 : ta - tb;
@@ -3871,9 +3920,16 @@ function questRowHtml(q, date, dayIndex) {
   const onceBadge = !isRitual && !ONE_KIND_PER_GROUP
     ? `<span class="task-kind-badge is-once" role="img" aria-label="One-off task" title="One-off — happens once, not part of a weekly routine"><svg viewBox="0 0 24 24" class="ic"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>`
     : "";
+  // A carried task must look carried. Showing it plain would quietly rewrite
+  // when you meant to do it, which is the failure this whole change exists to
+  // fix — the old behaviour did not lie, it just hid the task entirely.
+  const lateDays = questLateBy(q, date);
+  const lateBadge = lateDays
+    ? `<span class="q-late" title="Planned for ${escapeHtml(shortDateLabel(q.scheduledDate))} — carried forward">${lateDays}d late</span>`
+    : "";
   const strikes = Forge.strikesForQuest(q);
   const taskMeta = `<span class="task-meta">${attrBadge}${onceBadge}</span>`;
-  return `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}" data-kind="${isRitual ? "ritual" : "quest"}" data-strikes="${strikes}"${min == null ? "" : ` data-min="${min}"`} title="${escapeHtml(rowTitle)}" style="--ac:${questAccent(q, attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save>${timeCell}${pursuitIcon}<span class="q-text">${escapeHtml(q.title)}</span>${taskMeta}<span class="q-xp">+${xp}</span><button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></label>`;
+  return `<label class="check quest linked-unified" data-quest-id="${escapeHtml(q.id)}" data-kind="${isRitual ? "ritual" : "quest"}"${lateDays ? ' data-late="1"' : ""} data-strikes="${strikes}"${min == null ? "" : ` data-min="${min}"`} title="${escapeHtml(rowTitle)}" style="--ac:${questAccent(q, attr)}"><input id="${questCheckId(q, date)}" type="checkbox" data-cat="${escapeHtml(cat)}" data-day="${dayIndex}" data-save>${timeCell}${pursuitIcon}<span class="q-text">${escapeHtml(q.title)}</span>${lateBadge}${taskMeta}<span class="q-xp">+${xp}</span><button class="q-inline-edit quest-edit" type="button" aria-label="Edit ${escapeHtml(q.title)}" title="Edit task"><svg viewBox="0 0 24 24" class="ic"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button></label>`;
 }
 // Today groups by kind, so the badge that distinguishes them is redundant there.
 let ONE_KIND_PER_GROUP = false;
@@ -4029,6 +4085,7 @@ function renderStructure() {
 // element being typed into.
 function updateLive() {
   invalidateBestiary();
+  invalidateOneOffDone();
   renderSectionHeroes();   // before loadWeekFields, so new hero inputs get their values
   loadWeekFields();
   updateProgress();
@@ -4134,6 +4191,10 @@ function saveWeekField(el) {
   if (!el.id) return;
   if (el.type === "checkbox") {
     wk.checks[el.id] = el.checked;
+    // The carry-forward set is derived from every check in every week, so any
+    // tick invalidates it. Miss this and a one-off you just finished reappears
+    // tomorrow as "late".
+    invalidateOneOffDone();
     document.querySelectorAll(`input[type="checkbox"][id="${el.id}"]`).forEach((mirror) => { if (mirror !== el) mirror.checked = el.checked; });
   }
   else wk.fields[el.id] = el.value;

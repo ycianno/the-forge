@@ -329,10 +329,21 @@ Turning that on is deliberately quiet — see `RECORD_KINDS_BACKFILL` and the
 exists because the first version posted twenty-six records where three were
 right.
 
-Still open, and not to be decided alone: the **quests/rituals split** (habi
-separated a thing you do once from a thing you do daily; the Forge still merges
-them, and splitting touches `questCheckId`, the riskiest thing in the app), and
-the **rank curve** — Forgemaster sits at 9,677,006 XP and is unreachable, which
+**Quests and rituals are already separate**, and an earlier note in this file
+claiming otherwise was wrong. `scheduleType` is `"once"` or `"weekly"`, and
+`questCheckId` derives a different id shape for each: a one-off has ONE id
+forever, a ritual has one per weekday. `kindGroups()` splits Today into the two
+lists. Nothing further is owed here.
+
+What did need fixing was what happens when you miss one. A one-off now follows
+you to today, marked with how late it is; a ritual never does, because a missed
+Monday is not owed on Tuesday and a backlog that chases you is how this stops
+being something you want to open. The subtlety: a one-off's check id has no date
+in it but the tick lands in whichever week blob you were standing in, so
+done-ness is asked of `completedCheckIds()` — every week at once — or a task
+completed in a later week rolls forever. `test/quest-carry.js` holds that.
+
+Still open, and not to be decided alone: the **rank curve** — Forgemaster sits at 9,677,006 XP and is unreachable, which
 is more conspicuous now the ladder is drawn in two places. Left alone by
 explicit decision.
 

@@ -3506,3 +3506,20 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
   fill: none; stroke: currentColor; stroke-width: 1.6;
   stroke-linecap: round; stroke-linejoin: round;
 }
+
+/* A CARRIED TASK.
+   Warm enough to notice, cool enough not to nag: a one-off that followed you
+   here is information, not an accusation. Deliberately not on the heat ramp —
+   heat in this app means earned, and being late is not an achievement. */
+.q-late {
+  flex-shrink: 0; margin-left: 6px; padding: 2px 7px;
+  border-radius: var(--r-chip);
+  font-size: var(--t-2xs); font-weight: 800; letter-spacing: .06em;
+  color: var(--steel-1, #b9b5b0);
+  background: rgba(148, 163, 184, 0.13);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  white-space: nowrap;
+}
+.check.quest[data-late] { border-left-color: rgba(148, 163, 184, .45); }
+.check.quest[data-late] input:checked ~ .q-late { opacity: .45; }
+@media (max-width: 520px) { .q-late { padding: 2px 5px; margin-left: 4px; } }

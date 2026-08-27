@@ -164,9 +164,12 @@ interaction *is* rather than where it lives.
   Left alone by explicit decision (2026-08-22). **Now more visible, not less:**
   the ladder draws all six rungs at once, so the unreachable one is on screen
   every time you open Character.
-- **Quests versus rituals.** habi separated them; the Forge merged them.
-  Splitting is the better model but touches the quest data shape — the riskiest
-  thing in the app. Deserves its own phase.
+- ~~**Quests versus rituals.**~~ **Wrong — the Forge never merged them.**
+  `scheduleType` is `"once"` or `"weekly"` and `questCheckId` already derives a
+  different id shape for each; `kindGroups()` already splits Today into two
+  lists. This document read the README's "one agenda" line as "one model". The
+  real gap was narrower and is now fixed: a missed one-off follows you forward
+  marked late, a missed ritual does not.
 - **Six rooms or five.** This plan folds Cabinet into Character. If the trophy
   wall deserves its own door, the mobile tab bar needs a sixth slot. **Landed as
   five**, with Cabinet a second pane of Character. The tab bar is already at six
