@@ -6,6 +6,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const webpush = require('web-push');
 const { sendReminders } = require('./send-reminders');
+const { buildDashboardSummary } = require('./dashboard-summary');
 
 // Load a local .env file if present (zero-dependency). Real environment
 // variables always win; this just makes a bare-metal `npm start` pick up the
@@ -676,6 +677,26 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 // API Endpoints
+
+// A read-only roll-up of everything an external panel needs to show progress:
+// level, rank, attributes, streaks, this week's boss, trophy counts and
+// today's agenda — each quest carrying the check id you PATCH to tick it.
+//
+// It exists so a wall display or a bot does not have to pull /api/database and
+// grow its own copy of the level curve. See dashboard-summary.js.
+app.get('/api/dashboard', (req, res) => {
+  try {
+    const { weeks } = readWeeksSnapshot();
+    res.json(buildDashboardSummary({
+      weeks,
+      settings: getAppSettings(),
+      achievements: readAchievementsSnapshot(),
+    }));
+  } catch (err) {
+    res.status(500).json({ error: 'Could not build dashboard summary.' });
+  }
+});
+
 app.get('/api/database', (req, res) => {
   const { weeks, invalidWeeks } = readWeeksSnapshot();
   const payload = { version: 2, weeks };
