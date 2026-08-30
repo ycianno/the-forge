@@ -134,7 +134,7 @@ interaction *is* rather than where it lives.
 
 - **Open:** strike count must come from task weight (`estMinutes` already exists), or twenty tasks a day becomes a chore
 - **Keep:** a fast path — a plain tick for someone in a hurry. The anvil must be the good way, never the only way.
-- **Landed:** the prototype named above is gone — it shipped unloaded for months after the anvil replaced it, and `public/stage.html` + `public/stage.js` are readable at commit `7c626c1` if the sketch is ever wanted again. Weight lives in `Forge.strikesFor()` — under 25 minutes is one blow (the cost of a tick), 75+ is four, capped. It is in the engine rather than the renderer precisely because it is the economy of the screen, and `test/anvil-weight.js` holds it there. The fast path is an Anvil/List toggle remembered in `settings.todayMode`; in anvil mode the board stays in the document, because driving its checkbox is how the stage completes anything.
+- **Landed:** the prototype named above is gone — it shipped unloaded for months after the anvil replaced it, and `public/stage.html` + `public/stage.js` are readable at commit `7c626c1` if the sketch is ever wanted again. Weight lives in `Forge.strikesFor()` — under 25 minutes is one blow (the cost of a tick), 75+ is four, capped. It is in the engine rather than the renderer precisely because it is the economy of the screen, and `test/anvil-weight.js` holds it there. The fast path was an Anvil/List toggle remembered in `settings.todayMode`; **that toggle is gone** — a later pass made Today one screen with the forge strip above the day's rows, so the plain tick is simply always there and `settings.todayMode` no longer exists. The anvil still completes a task by driving the board's own checkbox, which is why the rows stay in the document.
 
 ---
 
@@ -143,9 +143,13 @@ interaction *is* rather than where it lives.
 - **Check ids are derived, never stored.** Any change to how `taskId` or
   `questCheckId` builds an id stops every historical week counting, with no
   error. `test/engine-regression.js` is the gate.
-- **Bosses are looked up by name string** (`modules.js:715`). Renaming the
-  `BOSSES` array orphans every recorded win. Forge names go in a **display map
-  in `app.js`**; ids in `modules.js` stay.
+- **Bosses are looked up by name string** (`BOSSES` at `modules.js:785`, the
+  lookup at `:858`). Renaming orphans every recorded win — but the sharper trap
+  is that `bossForWeek()` is `BOSSES[hash % BOSSES.length]`, so **appending
+  reassigns the boss for every past week that still resolves through the hash**.
+  `BOSSES_V1` freezes the original eight and `pinBossHistoryOnce()` writes what
+  each stored week actually faced before the roster is allowed to grow.
+  `test/boss-roster.js` is the gate. CLAUDE.md carries the full account.
 - **Module names are display-only overlays.** `applyOverlays()` keeps a user's
   rename; changing a default is safe, changing an `id` is not.
 - **The cache ritual.** Every phase ends with `?v=` bumps in `index.html` and a
@@ -159,11 +163,14 @@ interaction *is* rather than where it lives.
 
 ## 4. Open questions — do not decide these alone
 
-- **The rank curve.** Forgemaster sits at 9,677,006 XP, 27× Master, unreachable.
-  Phase 4 makes the ladder the spine of a room while its top rung is decorative.
-  Left alone by explicit decision (2026-08-22). **Now more visible, not less:**
-  the ladder draws all six rungs at once, so the unreachable one is on screen
-  every time you open Character.
+- ~~**The rank curve.**~~ **Answered — the ladder is climbable now.** It read:
+  Forgemaster at 9,677,006 XP, 27× Master, unreachable, while Phase 4 made the
+  ladder the spine of a room and drew all six rungs at once. The thresholds
+  moved to 1 / 8 / 16 / 24 / 30 / 36 — roughly three weeks, three months, a
+  year, 2.7 years and 7.4 years. The **names did not move**, because records
+  bank as `rank:<name>` and the billet's six materials key off the same strings.
+  `test/rank-ladder.js` fails if the ladder and anything pinned to it drift
+  apart again.
 - ~~**Quests versus rituals.**~~ **Wrong — the Forge never merged them.**
   `scheduleType` is `"once"` or `"weekly"` and `questCheckId` already derives a
   different id shape for each; `kindGroups()` already splits Today into two
@@ -184,6 +191,8 @@ interaction *is* rather than where it lives.
   real usage.
 - **What the anvil does not yet do.** It completes tasks and nothing else: you
   cannot add, edit, reorder or un-complete from the stage, and the day's
-  challenges (`questsHub`) are hidden in anvil mode rather than represented on
-  it. All of that is one tap away in List, which is the point, but if the anvil
-  is going to be the default it should eventually carry more of the day.
+  challenges (`questsHub`) sit beside it rather than on it. Since Today became
+  one screen there is no List to tap over to — the rows are simply below the
+  strip — so "one tap away" is now "already on screen", and the open part is
+  narrower: whether the anvil should ever gain add, edit, reorder and undo, or
+  stay the thing that only finishes work.
