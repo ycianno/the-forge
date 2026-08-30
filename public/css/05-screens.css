@@ -16,17 +16,6 @@
   color: var(--muted);
   margin-top: 3px;
 }
-.rank-pips { display: inline-flex; gap: 4px; margin-left: 4px; }
-.rank-pip {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  transition: all 0.3s ease;
-}
-.rank-pip.on {
-  background: var(--accent-primary);
-  box-shadow: 0 0 8px var(--score-glow);
-}
-
 /* --- identity: level orb + name + xp bar --- */
 .char-identity { display: flex; align-items: center; gap: 22px; }
 /* ===========================================================================
@@ -423,7 +412,6 @@
 }
 .rank-insignia.sm { width: 18px; height: 18px; }
 .rank-insignia.sm .ic { width: 18px; height: 18px; }
-.char-subline .rank-pips { margin-left: 2px; }
 
 /* XP to the next level, as heat running round the edge of the billet.
  * There used to be TWO `.lvl-orb::after` rules — this conic one and a
@@ -1482,6 +1470,30 @@
   .cab-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
   .cab-tabs .settings-tab { min-width: 0; }
 }
+/* IN THE ROOM, THESE ARE A LEVEL DOWN. As a dialog the cabinet's tabs were the
+   only tabs on screen. Inside Character they sit directly under Sheet /
+   Cabinet / Embers wearing the identical filled pill, so the room opened with
+   two equal tab bars stacked and no way to tell which one you were choosing
+   between. Same control, quieter: no tray, an underline for the active pane. */
+#charPaneCabinet .cab-tabs {
+  background: none; border: none; border-bottom: 1px solid var(--line);
+  border-radius: 0; padding: 0; gap: var(--s-2);
+  justify-content: flex-start;
+}
+#charPaneCabinet .cab-tabs .settings-tab {
+  flex: 0 1 auto; padding: 8px 4px; border-radius: 0;
+  font-size: var(--t-xs);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+#charPaneCabinet .cab-tabs .settings-tab:hover { background: none; color: var(--text); }
+#charPaneCabinet .cab-tabs .settings-tab.active {
+  background: none; box-shadow: none;
+  color: var(--text); border-bottom-color: var(--heat-4);
+}
+@media (max-width: 560px) {
+  #charPaneCabinet .cab-tabs { border-bottom: none; }
+  #charPaneCabinet .cab-tabs .settings-tab { padding: 8px 2px; }
+}
 .cab-tab-n {
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: 0.02em;
   opacity: 0.6; margin-left: 4px; white-space: nowrap;
@@ -2449,7 +2461,14 @@ input[type="time"], input[type="date"] { color-scheme: dark; }
 .em-row.is-empty .em-row-v { color: var(--muted-2); }
 
 .em-shelf-k { margin: var(--s-6) 0 var(--s-3); font-size: var(--t-2xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.em-shelf { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s-3); }
+/* Flex rather than grid so the last row grows to fill: auto-fit leaves the
+   trailing item sitting alone beside a gap the width of three cards, which is
+   the same ragged trailing row the attribute grid had. */
+.em-shelf { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+/* A basis under a fifth of the shelf so all five finishes sit on one row on a
+   desktop, and every narrower row still grows to the full width instead of
+   ending in a gap. */
+.em-finish { flex: 1 1 170px; min-width: 0; }
 .em-finish {
   display: flex; flex-direction: column; gap: var(--s-3);
   padding: var(--s-4); border-radius: var(--r-md);
@@ -2802,6 +2821,12 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 }
 /* In a column of its own the effigy can be as tall as the two things beside it. */
 #charPaneSheet .ef-stage { height: clamp(320px, 46vh, 520px); }
+/* One heading size for the whole sheet. "Shape" came in from the hero wearing
+   .panel-title at 19px and sat next to four 15px headings, so the sheet had two
+   heading levels for five things that are all the same level. */
+#charPaneSheet .panel-title { font-size: var(--t-md); letter-spacing: 0; }
+#charPaneSheet .panel-head { align-items: baseline; justify-content: flex-start; gap: var(--s-3); flex-wrap: wrap; }
+#charPaneSheet .panel-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
 
 @media (max-width: 900px) {
   /* One column, and the order changes: the effigy is the thing you came to
@@ -2920,7 +2945,12 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
    what they are, so a course of stone appearing is never a mystery. */
 .ef-age { display: flex; flex-wrap: wrap; gap: 4px var(--s-4); margin-top: var(--s-2); }
 .ef-age span { font-size: var(--t-2xs); font-weight: 600; color: var(--muted); }
-.ef-age b { font-family: 'Outfit', sans-serif; font-weight: 900; color: var(--muted); margin-right: 3px; }
+/* Each mark names the part of the figure it made, so the line reads as a key
+   to the drawing rather than as one more row of numbers. */
+.ef-mark i {
+  font-style: normal; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted-2); margin-right: 6px;
+}
 
 @media (max-width: 640px) {
   .ef-stage { height: clamp(230px, 34vh, 320px); }
@@ -2935,32 +2965,29 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 }
 .rl-head { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-4); }
 
-/* THE SHELF, SMALL. Four counts and a door. Deliberately not the Cabinet's tier
-   cards with their progress rings — that copy lived here once and was cut for
-   being the same thing twice. The failure the cut introduced was subtler: with
-   nothing at all on the sheet, there was no sign the shelf existed. */
+/* THE CABINET, AS A DOOR. Four counts, one per pane behind it. This used to
+   draw Bronze / Silver / Gold / Platinum, which is the Cabinet tab's own first
+   screen at a smaller size — the shelf twice in one room. Indexing the panes
+   says what is behind the door instead of previewing one shelf of it, and the
+   four tiles are neutral on purpose: they are labels, not trophies. */
 .sheet-trophies { padding-top: var(--s-5); }
-.sheet-trophies .rl-head { margin-bottom: var(--s-3); justify-content: space-between; }
-.st-more {
-  display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
-  padding: 4px 9px; font-size: var(--t-2xs); font-weight: 700;
-  background: transparent; border-color: transparent; color: var(--muted);
+.sheet-trophies .rl-head { margin-bottom: var(--s-3); }
+.sheet-trophies .rl-sub { margin-right: auto; }
+.st-more { display: inline-flex; align-items: center; color: var(--muted-2); flex: 0 0 auto; }
+.st-more .ic { width: 13px; height: 13px; }
+.st-doors { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-2); }
+.st-door {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: var(--s-3); border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: rgba(255,255,255,.03);
+  text-align: left; cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
 }
-.st-more:hover { color: var(--text); background: rgba(255,255,255,.05); }
-.st-more .ic { width: 12px; height: 12px; }
-.st-tiers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-2); }
-.st-t {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: var(--s-3) var(--s-2); border-radius: var(--r-sm);
-  border: 1px solid color-mix(in srgb, var(--tc) 26%, transparent);
-  background: color-mix(in srgb, var(--tc) 8%, transparent);
-}
-.st-t b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); line-height: 1; color: var(--tc); font-variant-numeric: tabular-nums; }
-.st-t span { font-size: var(--t-2xs); font-weight: 700; color: var(--muted); }
-/* An empty tier is a thing you have not done yet, not a thing that is broken. */
-.st-t.is-none { border-color: var(--line); background: rgba(255,255,255,.02); }
-.st-t.is-none b { color: var(--muted-2); }
-.st-sum { margin: var(--s-3) 0 0; font-size: var(--t-2xs); font-weight: 600; color: var(--muted); }
+.st-door:hover { border-color: color-mix(in srgb, var(--heat-4) 45%, transparent); background: rgba(255,255,255,.06); transform: none; box-shadow: none; }
+.st-door b { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-lg); line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.st-door span { font-size: var(--t-2xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+/* Nothing banked yet is a thing you have not done, not a thing that is broken. */
+.st-door.is-none b { color: var(--muted-2); }
 .rl-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md); }
 .rl-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
 .rl-steps {
@@ -3002,14 +3029,23 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
 .as-head { display: flex; align-items: baseline; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-4); }
 .as-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-md); }
 .as-sub { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
-.as-rows { display: grid; gap: var(--s-3); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+/* One row per attribute. Five cards on a three-wide grid left a hole the size
+   of a card, and the reading you want — which of the five is behind — is a
+   vertical comparison that a ragged grid cannot support. */
+.as-rows { display: flex; flex-direction: column; gap: var(--s-2); }
 .as-row {
+  display: grid;
+  grid-template-columns: minmax(0, 168px) 62px minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  column-gap: var(--s-4); row-gap: var(--s-2);
   padding: var(--s-3) var(--s-4);
   border: 1px solid var(--line); border-radius: var(--r-sm);
   background: rgba(0,0,0,0.22);
   border-left: 3px solid var(--ac, var(--muted-2));
   min-width: 0;
 }
+.as-id { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.as-prog { min-width: 0; }
 .as-row.is-behind { background: color-mix(in srgb, var(--ac) 8%, rgba(0,0,0,0.22)); }
 /* Lit from the shape above, or from its own hover — the same state either way,
    so the join between picture and table is never something you do in your head. */
@@ -3020,19 +3056,20 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
   transform: translateY(-2px);
 }
 @media (prefers-reduced-motion: reduce) { .as-row.is-lit { transform: none; } }
-.as-row-head { display: flex; align-items: center; gap: var(--s-2); }
-.as-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); flex: 1 1 auto; min-width: 0; }
-.as-lvl { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-sm); color: var(--ac); flex: 0 0 auto; }
+.as-name { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: var(--t-sm); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-lvl { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: var(--t-sm); color: var(--ac); font-variant-numeric: tabular-nums; }
 .as-flag {
   flex: 0 0 auto;
   font-size: var(--t-2xs); font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   padding: 2px 6px; border-radius: var(--r-pill);
   color: var(--heat-4); background: color-mix(in srgb, var(--heat-4) 16%, transparent);
 }
-.as-bar { height: 6px; margin: 9px 0 6px; border-radius: var(--r-pill); background: rgba(255,255,255,0.07); overflow: hidden; }
+.as-bar { height: 6px; margin: 0 0 6px; border-radius: var(--r-pill); background: rgba(255,255,255,0.07); overflow: hidden; }
 .as-fill { display: block; height: 100%; border-radius: inherit; }
 .as-meta { display: flex; justify-content: space-between; gap: var(--s-2); font-size: var(--t-2xs); font-weight: 600; color: var(--muted); }
-.as-feeds { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+/* Beside the bar rather than under it: in a row, a rule across the full width
+   would cut the row in half instead of separating anything. */
+.as-feeds { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .as-feeds-k { font-size: var(--t-2xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
 .as-feed {
   display: inline-flex; align-items: center; gap: 4px;
@@ -3050,7 +3087,13 @@ body.in-focus .topbar .nav-icon { opacity: .5; }
      of each row, so it only spans within a row. */
   .rl-step:nth-child(3n)::before { right: 50%; }
   .rl-step:nth-child(3n+1)::before { left: 5px; }
-  .as-rows { grid-template-columns: minmax(0, 1fr); }
+  /* Four doors across a phone leaves each label touching its own border, and
+     BESTIARY is the widest of them. Two by two, the same way the cabinet's own
+     four tabs already fold. */
+  .st-doors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .as-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .as-prog { grid-column: 1 / -1; }
+  .as-feeds { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
 /* ===========================================================================

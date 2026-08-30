@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/02-base.css?v=7" />
   <link rel="stylesheet" href="css/03-components.css?v=12" />
   <link rel="stylesheet" href="css/04-responsive.css?v=6" />
-  <link rel="stylesheet" href="css/05-screens.css?v=79" />
+  <link rel="stylesheet" href="css/05-screens.css?v=83" />
   <link rel="stylesheet" href="css/06-mobile.css?v=11" />
 </head>
 <body>
@@ -113,7 +113,6 @@
             <div class="char-subline">
               <span class="class-chip" id="classChip" title="Hero Class"></span>
               <span id="charSubline">—</span>
-              <span class="rank-pips" id="rankPips"></span>
             </div>
             <div class="xp-block">
               <div class="xp-bar"><div class="xp-bar-fill" id="xpBarFill"></div></div>
@@ -134,8 +133,8 @@
 
         <div class="char-stats">
           <div class="cstat"><span class="cstat-v" id="lifetimeXp">0</span><span class="cstat-k">Lifetime XP</span></div>
-          <div class="cstat"><span class="cstat-v" id="weeklyXp">+0</span><span class="cstat-k">This Week</span></div>
-          <div class="cstat"><span class="cstat-v" id="dayStreak">0</span><span class="cstat-k">🔥 Day Streak</span></div>
+          <div class="cstat"><span class="cstat-v" id="weeklyXp">+0</span><span class="cstat-k">XP This Week</span></div>
+          <div class="cstat"><span class="cstat-v" id="dayStreak">0</span><span class="cstat-k">Day Streak</span></div>
         </div>
 
         <div class="mission-banner">
@@ -456,7 +455,7 @@
         </div>
         <div class="onboard-field">
           <label for="onboardCallsign">Your maker's mark</label>
-          <input type="text" id="onboardCallsign" maxlength="28" placeholder="Unsigned" autocomplete="off" />
+          <input type="text" id="onboardCallsign" maxlength="28" placeholder="Player One" autocomplete="off" />
         </div>
         <div class="onboard-field">
           <label>Choose your path</label>
@@ -543,7 +542,7 @@
         <div class="settings-panel" id="settingsProfile" data-panel="profile" style="display:none;">
           <p class="settings-intro">Your hero identity and reminders.</p>
           <label class="label">Maker's mark</label>
-          <input type="text" id="cfgCallsign" placeholder="Unsigned" maxlength="28">
+          <input type="text" id="cfgCallsign" placeholder="Player One" maxlength="28">
 
           <label class="label" style="margin-top:18px;">Reminders (phone push)</label>
           <label class="check" style="margin:0 0 4px;"><input type="checkbox" id="cfgRemindEnable"><span>Enable push reminders on this device</span></label>
@@ -912,12 +911,12 @@
   </main>
 
   <script src="modules.js?v=26"></script>
-  <script src="game.js?v=38"></script>
+  <script src="game.js?v=41"></script>
   <script src="fx-stage.js?v=2"></script>
   <script src="forge-stage.js?v=20"></script>
   <script src="effigy.js?v=7"></script>
   <script src="fx.js?v=15"></script>
-  <script src="app.js?v=153"></script>
+  <script src="app.js?v=154"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

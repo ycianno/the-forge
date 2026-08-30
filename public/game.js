@@ -469,10 +469,13 @@
     const p = computeProfile();
 
     setText("lvlNum", p.level);
-    // Merged identity: the class chip is the title; rank now shows only as Tier
-    // + pips (the rank word, e.g. "Initiate", is dropped so it no longer doubles
-    // up with the base class name). p.rank.name still drives the orb frame below.
-    setText("charSubline", "· Tier " + p.rank.tier);
+    // Merged identity: the class chip is the title and the rank word follows it.
+    // The rank used to show here as "Tier III" plus a row of pips, which made
+    // the sheet say the same tier three times — pips, that text, and the
+    // ladder's own subline underneath. The ladder draws the whole climb, so it
+    // keeps the tier and the distance to the next rung; this line says who you
+    // are. p.rank.name still drives the orb frame below.
+    setText("charSubline", "· " + p.rank.name);
     host.dataset.rank = p.rank.name.toLowerCase();   // drives rank-tiered orb frame + aura
     renderClassChip(p);
     if (!editingCallsign) renderCallsign();
@@ -495,10 +498,10 @@
     const fill = document.getElementById("xpBarFill");
     if (fill) fill.style.width = Math.round((p.xpIntoLevel / p.xpForNext) * 100) + "%";
 
-    // Rank pips
-    const pipWrap = document.getElementById("rankPips");
-    if (pipWrap) pipWrap.innerHTML = Array.from({ length: 6 }, (_, i) =>
-      `<span class="rank-pip ${i < p.rank.pips ? "on" : ""}"></span>`).join("");
+    // The rank pips are gone with the strip that held them — six dots that
+    // encoded a position the ladder below draws with the rung names on it.
+    // p.rank.pips survives for the sidebar crest, which has room for nothing
+    // else.
 
     // The radar is shape-at-a-glance and nothing more. The legend that used to
     // sit under it — level, curve and lifetime pool per attribute — is now the
@@ -558,7 +561,7 @@
   // ----- Editable callsign -------------------------------------------------
   let editingCallsign = false;
   function callsignName() {
-    return (typeof settings !== "undefined" && settings && settings.callsign) ? settings.callsign : "Unsigned";
+    return (typeof settings !== "undefined" && settings && settings.callsign) ? settings.callsign : "Player One";
   }
   function renderCallsign() {
     const wrap = document.getElementById("callsign");
@@ -579,7 +582,12 @@
     const commit = (save) => {
       editingCallsign = false;
       if (save && typeof settings !== "undefined" && settings) {
-        settings.callsign = inp.value.trim() || "Operator";
+        // Clearing the field unsets the callsign rather than storing a name of
+        // its own — "Operator" here was a third answer to "who are you when you
+        // have not said", after "Unsigned" on the sheet and "Player One"
+        // everywhere else. An empty string is falsy, so callsignName() gives
+        // the one fallback the rest of the app already uses.
+        settings.callsign = inp.value.trim();
         if (typeof persistSettingsSoon === "function") persistSettingsSoon();
       }
       renderCallsign();

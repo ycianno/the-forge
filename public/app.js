@@ -2451,6 +2451,11 @@ function renderAttrSheet(prof) {
   const levels = attrs.map((a) => a.level);
   const lo = Math.min(...levels), hi = Math.max(...levels);
   const spread = hi - lo >= 2;
+  // Five cards on a three-wide grid is four cards and a hole, and the hole was
+  // the largest empty rectangle on the page. Five is not a grid number — it is
+  // a list — so each attribute is one full-width row, read left to right: who,
+  // what level, how far, fed by what. The comparison you actually want to make
+  // between five attributes is vertical, and now it lines up.
   el.innerHTML = `
     <div class="as-head">
       <span class="as-title">The five attributes</span>
@@ -2463,16 +2468,18 @@ function renderAttrSheet(prof) {
         : `<span class="as-feed as-feed-none">no pursuit routes here</span>`;
       const behind = spread && a.level === lo ? `<span class="as-flag">behind</span>` : "";
       return `<div class="as-row${behind ? " is-behind" : ""}" data-attr="${escapeHtml(a.key)}" style="--ac:${a.color}">
-        <div class="as-row-head">
+        <div class="as-id">
           <span class="attr-dot" style="background:${a.color}"></span>
           <span class="as-name">${escapeHtml(a.label || a.key)}</span>
           ${behind}
-          <span class="as-lvl">Lv ${a.level}</span>
         </div>
-        <div class="as-bar"><span class="as-fill" style="width:${a.pct}%;background:${a.color}"></span></div>
-        <div class="as-meta">
-          <span>${Number(a.into).toLocaleString()} / ${Number(a.need).toLocaleString()} XP to Lv ${a.level + 1}</span>
-          <span>${Number(a.xp).toLocaleString()} lifetime</span>
+        <span class="as-lvl">Lv ${a.level}</span>
+        <div class="as-prog">
+          <div class="as-bar"><span class="as-fill" style="width:${a.pct}%;background:${a.color}"></span></div>
+          <div class="as-meta">
+            <span>${Number(a.into).toLocaleString()} / ${Number(a.need).toLocaleString()} XP to Lv ${a.level + 1}</span>
+            <span>${Number(a.xp).toLocaleString()} lifetime</span>
+          </div>
         </div>
         <div class="as-feeds"><span class="as-feeds-k">Fed by</span>${chips}</div>
       </div>`;
@@ -2489,40 +2496,61 @@ function renderCharacter() {
   initShapeLink();
 }
 
-// The shelf, in one line. The Sheet used to carry a full copy of the Cabinet's
-// four tier cards and it was cut for being the same thing twice — but cutting
-// it left the sheet with no sign that the shelf exists at all, which is its own
-// kind of wrong. This is counts and a door: enough to know there is something
-// to go and look at, not enough to be a second opinion about it.
-const TROPHY_TIERS = [
-  { k: "bronze",   label: "Bronze",   c: "#c98a52" },
-  { k: "silver",   label: "Silver",   c: "#c7ccd4" },
-  { k: "gold",     label: "Gold",     c: "#f0b429" },
-  { k: "platinum", label: "Platinum", c: "#8fd3e8" },
+// A DOOR TO THE CABINET, not a second look through it.
+// This block drew Bronze / Silver / Gold / Platinum with their counts — which
+// is exactly, to the tier and the number, the first thing the Cabinet tab draws
+// one click away. Two copies of one shelf on two halves of one room is the
+// duplication that made this page read as padded.
+// It indexes the Cabinet instead: one count per pane, so what it tells you is
+// what is behind the door rather than a smaller sample of one shelf. Every
+// count is a button that opens its own pane.
+const CABINET_DOORS = [
+  { pane: "trophies",  label: "Trophies"  },
+  { pane: "insignias", label: "Insignias" },
+  { pane: "records",   label: "Records"   },
+  { pane: "bestiary",  label: "Bestiary"  },
 ];
+function cabinetCounts() {
+  const T = (settings && settings.trophies) || {};
+  const tro = ["bronze", "silver", "gold", "platinum"]
+    .reduce((n, g) => n + (T[g] ? Object.keys(T[g]).length : 0), 0);
+  // The bestiary counts distinct bosses put down out of the roster, matching
+  // the badge on its own tab. It walks every week, so a failure here must not
+  // take the sheet down with it.
+  let beast = "0";
+  try { const h = bossHistory(); beast = `${h.distinct}/${h.total}`; } catch (e) {}
+  return {
+    trophies: String(tro),
+    insignias: String(Object.keys((settings && settings.insignias) || {}).length),
+    records: String((achievements || []).length),
+    bestiary: beast,
+  };
+}
 function renderSheetTrophies(prof) {
   const host = document.getElementById("sheetTrophies");
   if (!host) return;
-  const T = (settings && settings.trophies) || {};
-  const insignias = Object.keys((settings && settings.insignias) || {}).length;
-  const cells = TROPHY_TIERS.map((t) => {
-    const n = T[t.k] ? Object.keys(T[t.k]).length : 0;
-    return `<span class="st-t${n ? "" : " is-none"}" style="--tc:${t.c}" title="${t.label}">
-      <b>${n}</b><span>${t.label}</span>
-    </span>`;
+  const counts = cabinetCounts();
+  const cells = CABINET_DOORS.map((d) => {
+    const v = counts[d.pane];
+    const none = v === "0" || v.indexOf("0/") === 0;
+    return `<button class="st-door${none ? " is-none" : ""}" type="button" data-char-tab-jump="cabinet" data-cab-jump="${d.pane}">
+      <b>${escapeHtml(v)}</b><span>${d.label}</span>
+    </button>`;
   }).join("");
-  const total = TROPHY_TIERS.reduce((a, t) => a + (T[t.k] ? Object.keys(T[t.k]).length : 0), 0);
   host.innerHTML = `
     <div class="rl-head">
-      <span class="rl-title">The shelf</span>
-      <button class="st-more" type="button" data-char-tab-jump="cabinet">Open the Cabinet<svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
+      <span class="rl-title">The cabinet</span>
+      <span class="rl-sub">Everything you have kept</span>
+      <span class="st-more" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></span>
     </div>
-    <div class="st-tiers">${cells}</div>
-    <p class="st-sum">${total} troph${total === 1 ? "y" : "ies"} banked · ${insignias} insignia${insignias === 1 ? "" : "s"} earned</p>`;
+    <div class="st-doors">${cells}</div>`;
   if (!host._wired) {
     host._wired = true;
     host.addEventListener("click", (e) => {
-      if (e.target.closest("[data-char-tab-jump]")) showCharTab("cabinet");
+      const btn = e.target.closest("[data-char-tab-jump]");
+      if (!btn) return;
+      showCharTab("cabinet");
+      if (btn.dataset.cabJump) showCabinetTab(btn.dataset.cabJump);
     });
   }
 }
@@ -2559,18 +2587,31 @@ function effigyHistory(prof) {
 
 // The marks on the statue, said in words. The figure shows them; this says what
 // they are, so nobody has to guess why a course of stone appeared.
+//
+// It used to be a bare run of numbers — "62 active weeks · 33 insignias ·
+// 4-day streak" — which is the same shape as the stat strip at the top of the
+// sheet and the same streak the sidebar is already tracking, so it read as the
+// page repeating itself. It is not a stat row; it is a key to a drawing. Each
+// mark now names the part of the figure it made, which is the one thing on
+// this screen that nothing else says.
+const EFFIGY_MARKS = [
+  { part: "Plinth",   get: (h) => h.weeks,     word: (n) => `${n} active week${n === 1 ? "" : "s"}` },
+  { part: "Blade",    get: (h) => h.bosses,    word: (n) => `${n} boss${n === 1 ? "" : "es"} put down` },
+  { part: "Cuirass",  get: (h) => h.insignias, word: (n) => `${n} insignia${n === 1 ? "" : "s"}` },
+  { part: "Base",     get: (h) => h.tro,       word: (n) => `${n} troph${n === 1 ? "y" : "ies"} set` },
+  // The cloak is last because it is the only one of these that can be lost.
+  { part: "Cloak",    get: (h) => (h.streak >= 2 ? h.streak : 0), word: (n) => `${n}-day run` },
+];
 function renderEffigyAge(prof) {
   const el = document.getElementById("effigyAge");
   if (!el) return;
   const h = effigyHistory(prof);
-  const bits = [];
-  bits.push(`<span><b>${h.weeks}</b> active week${h.weeks === 1 ? "" : "s"}</span>`);
-  if (h.bosses) bits.push(`<span><b>${h.bosses}</b> boss${h.bosses === 1 ? "" : "es"} put down</span>`);
-  if (h.insignias) bits.push(`<span><b>${h.insignias}</b> insignia${h.insignias === 1 ? "" : "s"}</span>`);
-  if (h.streak >= 2) bits.push(`<span><b>${h.streak}</b>-day streak</span>`);
-  const tro = ["bronze", "silver", "gold", "platinum"].reduce((n, g) => n + (h.trophies[g] || 0), 0);
-  if (tro) bits.push(`<span><b>${tro}</b> troph${tro === 1 ? "y" : "ies"}</span>`);
-  el.innerHTML = bits.join("");
+  h.tro = ["bronze", "silver", "gold", "platinum"].reduce((n, g) => n + (h.trophies[g] || 0), 0);
+  el.innerHTML = EFFIGY_MARKS.map((m) => {
+    const n = m.get(h);
+    if (!n) return "";
+    return `<span class="ef-mark"><i>${m.part}</i>${escapeHtml(m.word(n))}</span>`;
+  }).join("");
 }
 
 // A piece crossing a rank band. The effigy handles the flare; this says what
