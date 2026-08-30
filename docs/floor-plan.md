@@ -134,7 +134,7 @@ interaction *is* rather than where it lives.
 
 - **Open:** strike count must come from task weight (`estMinutes` already exists), or twenty tasks a day becomes a chore
 - **Keep:** a fast path — a plain tick for someone in a hurry. The anvil must be the good way, never the only way.
-- **Landed:** weight lives in `Forge.strikesFor()` — under 25 minutes is one blow (the cost of a tick), 75+ is four, capped. It is in the engine rather than the renderer precisely because it is the economy of the screen, and `test/anvil-weight.js` holds it there. The fast path is an Anvil/List toggle remembered in `settings.todayMode`; in anvil mode the board stays in the document, because driving its checkbox is how the stage completes anything.
+- **Landed:** the prototype named above is gone — it shipped unloaded for months after the anvil replaced it, and `public/stage.html` + `public/stage.js` are readable at commit `7c626c1` if the sketch is ever wanted again. Weight lives in `Forge.strikesFor()` — under 25 minutes is one blow (the cost of a tick), 75+ is four, capped. It is in the engine rather than the renderer precisely because it is the economy of the screen, and `test/anvil-weight.js` holds it there. The fast path is an Anvil/List toggle remembered in `settings.todayMode`; in anvil mode the board stays in the document, because driving its checkbox is how the stage completes anything.
 
 ---
 

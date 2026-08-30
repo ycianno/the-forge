@@ -6,7 +6,8 @@
  * piece and goes on the shelf. Heating is starting, striking is doing, and the
  * shelf is what you made today.
  *
- * Grown from the prototype in stage.html/stage.js, with the three things that
+ * Grown from the prototype in stage.html/stage.js — removed once this landed,
+ * and readable in full at commit 7c626c1 — with the three things that
  * separate a demo from a tool:
  *
  *   1. It is driven by the real day. `sync()` reconciles pieces against the
