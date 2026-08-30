@@ -1276,6 +1276,53 @@
 .sync-instructions code { font-family: monospace; font-size: var(--t-xs); }
 
 /* ===========================================================================
+ * THE QUEST LOG — one row per pursuit
+ * ---------------------------------------------------------------------------
+ * The section has always described itself as "one row per pursuit" and then
+ * drawn a four-wide grid of cards. How many pursuits exist is the user's
+ * choice, so the last row was ragged at every count that is not a multiple of
+ * four — six left a hole two cards wide. Rows read the way the sentence above
+ * them promises, and they carry the same shape as the five attributes on the
+ * character sheet, so the two lists of "how is each of these doing" match.
+ * ======================================================================== */
+/* Every rule here is anchored to #scoreboardGrid on purpose. `.metric-jump` in
+   06-mobile.css sets `display: block`, and 06 loads after 05 — at equal
+   specificity the tile rules win and a bare `.metric-row { display: grid }`
+   silently does nothing. The id is the cheapest way to outrank it without
+   editing a file whose job is the small-screen pass. */
+#scoreboardGrid { display: flex; flex-direction: column; gap: var(--s-2); }
+#scoreboardGrid .metric-row {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) 62px minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  text-align: left;
+  border-left: 3px solid var(--ac, var(--muted-2));
+  border-radius: var(--r-sm);
+}
+#scoreboardGrid .metric-title {
+  min-width: 0; font-size: var(--t-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* The number is a reading, not a badge sat in a corner — it lines up down the
+   column so six pursuits can be compared without reading each row. */
+#scoreboardGrid .metric-number {
+  justify-self: start; font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+#scoreboardGrid .metric-prog { min-width: 0; display: block; }
+#scoreboardGrid .bar { display: block; margin-bottom: 5px; }
+#scoreboardGrid .hint { display: block; margin: 0; }
+
+@media (max-width: 768px) {
+  /* Name and number stay on one line; the bar and its note take the next. */
+  #scoreboardGrid .metric-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--s-2); }
+  #scoreboardGrid .metric-number { justify-self: end; }
+  #scoreboardGrid .metric-prog { grid-column: 1 / -1; }
+}
+
+/* ===========================================================================
  * SCOREBOARD COHESION — color-code metrics to the attribute palette
  * ======================================================================== */
 .metric-number {

@@ -3937,16 +3937,23 @@ function pursuitMetric(m) {
 function scoreboardMetrics() {
   return getModules().filter((m) => m.enabled !== false).map(pursuitMetric);
 }
+// One row each, which is what the section has always said it is. It drew a
+// four-column grid of cards instead, and the number of pursuits is whatever the
+// user has — six of them is four cards and a hole the width of two, five is a
+// hole the width of three. A count you do not control is a list, not a grid.
+// Every id here is load-bearing: setMetric() writes #bar-<id> and #metric-<id>,
+// and updateProgress() writes #sub-<id>.
 function renderScoreboard() {
   const wrap = document.getElementById("scoreboardGrid");
   if (!wrap) return;
   wrap.innerHTML = scoreboardMetrics().map((x) =>
-    `<button class="metric metric-jump" type="button" data-jump="${escapeHtml(x.id)}" style="--ac:${x.color}" title="Open ${escapeHtml(x.title)}">
-      <div class="top">
-        <div><div class="metric-title"><span class="metric-ico" aria-hidden="true">${moduleIconSvg(x.icon)}</span>${escapeHtml(x.title)}</div><p class="hint" id="sub-${escapeHtml(x.id)}">${escapeHtml(x.sub)}</p></div>
-        <span class="metric-number" id="metric-${escapeHtml(x.id)}">${x.pct}%</span>
-      </div>
-      <div class="bar"><div class="bar-fill" id="bar-${escapeHtml(x.id)}"></div></div>
+    `<button class="metric metric-jump metric-row" type="button" data-jump="${escapeHtml(x.id)}" style="--ac:${x.color}" title="Open ${escapeHtml(x.title)}">
+      <span class="metric-title"><span class="metric-ico" aria-hidden="true">${moduleIconSvg(x.icon)}</span>${escapeHtml(x.title)}</span>
+      <span class="metric-number" id="metric-${escapeHtml(x.id)}">${x.pct}%</span>
+      <span class="metric-prog">
+        <span class="bar"><span class="bar-fill" id="bar-${escapeHtml(x.id)}"></span></span>
+        <span class="hint" id="sub-${escapeHtml(x.id)}">${escapeHtml(x.sub)}</span>
+      </span>
     </button>`
   ).join("");
 }
