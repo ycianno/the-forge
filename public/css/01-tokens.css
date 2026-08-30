@@ -529,3 +529,23 @@
   --pill-blue-text: #67e8f9; --pill-blue-bg: rgba(34,211,238,0.1); --pill-blue-border: rgba(34,211,238,0.2);
   --primary-shadow: rgba(45, 212, 191, 0.4); --primary-shadow-hover: rgba(45, 212, 191, 0.7);
 }
+
+/* Carbon — graphite mono / minimal */
+[data-theme="carbon"] {
+  --bg: #0a0a0b; --bg-2: #16171b;
+  --glass: rgba(22, 23, 27, 0.78); --glass-2: rgba(31, 32, 37, 0.66); --glass-3: rgba(255, 255, 255, 0.04);
+  --line: rgba(255, 255, 255, 0.10); --line-strong: rgba(255, 255, 255, 0.2);
+  --blue: #94a3b8; --blue-2: #64748b; --green: #94a3b8; --violet: #cbd5e1;
+  --accent-primary: #8a97a8; --accent-secondary: #5b6675; --accent-success: #94a3b8;
+  --body-gradient-1: rgba(148, 163, 184, 0.10); --body-gradient-2: rgba(100, 116, 139, 0.08); --body-gradient-3: rgba(203, 213, 225, 0.06);
+  --body-bg-top: #0a0a0b; --body-bg-mid: #0d0e10; --body-bg-bot: #0a0a0b;
+  --gradient-brand: linear-gradient(135deg, #8a97a8, #5b6675);
+  --gradient-success-bg: rgba(148, 163, 184, 0.15); --gradient-success-text: #cbd5e1;
+  --orb-color: #94a3b8; --orb-glow: 0 0 22px rgba(148, 163, 184, 0.4); --orb-ring: rgba(148, 163, 184, 0.5);
+  --score-glow: rgba(148, 163, 184, 0.35); --score-ring-inset: rgba(148, 163, 184, 0.12); --hero-glow: rgba(148, 163, 184, 0.1);
+  --eyebrow-bg: rgba(148, 163, 184, 0.1); --eyebrow-border: rgba(148, 163, 184, 0.25); --eyebrow-text: #e2e8f0;
+  --h1-gradient: linear-gradient(to right, #fff, #cbd5e1);
+  --pill-green-text: #cbd5e1; --pill-green-bg: rgba(148,163,184,0.1); --pill-green-border: rgba(148,163,184,0.2);
+  --pill-blue-text: #cbd5e1; --pill-blue-bg: rgba(148,163,184,0.1); --pill-blue-border: rgba(148,163,184,0.2);
+  --primary-shadow: rgba(148, 163, 184, 0.35); --primary-shadow-hover: rgba(148, 163, 184, 0.6);
+}
