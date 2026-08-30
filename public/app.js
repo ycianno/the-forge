@@ -5381,8 +5381,13 @@ function routeTo(view, opts) {
 // A board you tick fifteen times a day should be operable without a mouse.
 // Single keys, no chords, and nothing fires while you are typing — the capture
 // box would otherwise eat every shortcut in the alphabet.
+// The number row is derived from VIEWS rather than written out, and so is the
+// line describing it. Hardcoding both is how they came apart: this list still
+// read "Today · Week · Pursuits · Cabinet", the four rooms of a previous
+// architecture, so 3 and 4 had quietly become Month and Character while the
+// help insisted otherwise — and Pursuits, the fifth room, had no key at all.
 const KEY_HELP = [
-  ["1 – 4", "Today · Week · Pursuits · Cabinet"],
+  [`1 – ${VIEWS.length}`, VIEWS.map((v) => v.label).join(" · ")],
   ["j / k", "Move down / up the day"],
   ["Space", "Tick the focused task"],
   ["e", "Edit the focused task"],
@@ -5434,8 +5439,6 @@ function initKeyboard() {
 
     const rows = keyRows();
     switch (e.key) {
-      case "1": case "2": case "3": case "4":
-        e.preventDefault(); keyRow = -1; routeTo(VIEW_IDS[Number(e.key) - 1]); break;
       case "t": e.preventDefault(); keyRow = -1; routeTo("today"); break;
       case "j": e.preventDefault(); moveKeyCursor(1); break;
       case "k": e.preventDefault(); moveKeyCursor(-1); break;
@@ -5461,7 +5464,15 @@ function initKeyboard() {
         break;
       }
       case "?": e.preventDefault(); showKeyHelp(); break;
-      default: break;
+      // Rooms by number. Reading the count off VIEW_IDS means a sixth room gets
+      // its key for free instead of being unreachable until someone notices.
+      default: {
+        const n = Number(e.key);
+        if (e.key.length === 1 && n >= 1 && n <= VIEW_IDS.length) {
+          e.preventDefault(); keyRow = -1; routeTo(VIEW_IDS[n - 1]);
+        }
+        break;
+      }
     }
   });
 }

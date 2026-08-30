@@ -33,10 +33,10 @@ It's opinionated and built for one person: you. Self-host it, set a password, an
 | | |
 |---|---|
 | 🎮 **Game engine** | Lifetime XP, leveling curve, Initiate→Forgemaster ranks, and 5 independently-leveling attributes (Discipline, Body, Mind, Vitality, Craft) — all derived from the checks you already make. |
-| 🗓️ **Four screens** | **Today** is today and nothing else. **Week** holds your character sheet and the whole board. **Pursuits** is every area you're levelling. **Cabinet** is what you've won. Each is a real URL, so the back button works. |
+| 🗓️ **Five rooms** | Ordered by how far you are looking. **Today** is today and nothing else, with the forge strip — the anvil — above the day's rows. **Week** holds the week bar, the pulse, the boss you land blows on, and the board. **Month** is the record: calendar, trends, goals, year. **Character** is who you are becoming — the sheet with the effigy, the rank ladder and the five attributes, plus the Cabinet and Embers. **Pursuits** is the structure behind all of it. Each is a real URL, so the back button works. |
 | ✅ **Daily quests** | One agenda for one-time tasks and weekly routines from every pursuit, grouped into morning / afternoon / evening with a live "now" line. The same task shares one completion and one XP award in every view. |
 | ⚡ **Quick capture** | One line at the top of Today. `gym 6pm 1h`, `read 20min daily`, `Upper body every mon wed fri 18:00 45m` all become real tasks — and it shows you what it understood before you commit, with "as written" one click away. |
-| ⌨️ **Keyboard** | `1`–`4` for screens, `j`/`k` through the day, `space` to tick, `e` to edit, `n` to capture, `?` for the list. Plus undo on every check. |
+| ⌨️ **Keyboard** | `1`–`5` for the five rooms, `j`/`k` through the day, `space` to tick, `e` to edit, `n` to capture, `t` back to Today, `?` for the list. Plus undo on every check. |
 | 🔥 **Streaks & freeze** | Daily and weekly streaks with milestone rewards (7 / 30 / 100 / 365 days) and a configurable "freeze" grace day so one bad day doesn't reset everything. |
 | 🏆 **Trophy Cabinet** | A dedicated showcase: trophy grades, a filterable wall of auto-unlocking **insignias** (Ascension, Attributes, Consistency, Boss, Study, Volume) across rarities, and manually-logged **Records** for real-world wins (certifications, PRs, goals). |
 | 👹 **Weekly boss** | A deterministic boss each week whose HP drains as you complete your week — with double damage to its weak attribute. Defeat it for an insignia and a victory celebration. |
@@ -44,7 +44,7 @@ It's opinionated and built for one person: you. Self-host it, set a password, an
 | 📊 **Analytics** | Weekly completion & XP trends, by-weekday breakdowns, and your most-skipped quests. |
 | 🧭 **Unified pursuits** | A pursuit's plan is made of the same scheduled tasks shown in Daily Quests. Assign them to Training, Provisions, Scholarship goals, Workshop projects, War Council, or a custom pursuit; the pursuit supplies its attribute automatically. |
 | 📅 **Goal tracking** | Certification and project cards with outcomes, status, deadlines, weekly pacing, and ordered task plans that flow directly into Daily Quests. |
-| 🎨 **10 themes** | A full palette of distinct dark themes (True Black, Crimson, Deep Forest, Synthwave, Nord, Carbon, and more), plus per-pursuit icons and accent colours, and a Sunday- or Monday-start week. |
+| 🎨 **11 themes** | A full palette of distinct dark themes (True Black, Crimson, Deep Forest, Synthwave, Nord, Carbon, and more), plus per-pursuit icons and accent colours, and a Sunday- or Monday-start week. |
 | 📱 **PWA + push** | Installable on iOS/Android, works offline, and sends morning and evening reminders with **no cron to set up** — the server runs them itself. The evening nudge says something only this app can say: *"3 quests left. The Couch Wraith is on 100% HP — one Body quest takes off 24%."* |
 | 🪪 **Shareable card** | Export your level, rank, and attributes as a PNG to share — and load **sample data** in one click so a fresh install looks alive. |
 | 🤖 **Optional Discord agent** | "Hermes" — a local-AI companion (via [Ollama](https://ollama.com)) that reads your progress and nudges you on Discord. See [`agent/`](agent/). |
@@ -58,16 +58,16 @@ It's opinionated and built for one person: you. Self-host it, set a password, an
   <br/><em>Today — the only screen you need on a normal day.</em>
   <br/><br/>
   <img src="docs/screenshots/week.png" width="88%" alt="The Week screen: level orb, rank, XP, day streak, trophies and the attribute radar" />
-  <br/><em>Week — your character sheet, the whole board, and the year's activity.</em>
+  <br/><em>Week — the week bar, the boss fight, the Quest Log and the whole board.</em>
   <br/><br/>
   <img src="docs/screenshots/pursuits.png" width="88%" alt="The Pursuits screen: Training's weekly regimen day-track above its plan of scheduled sessions" />
   <br/><em>Pursuits — every area you're levelling, each with its own widget.</em>
   <br/><br/>
   <img src="docs/screenshots/cabinet.png" width="88%" alt="The Cabinet: trophy tiers, insignia count, records and bestiary" />
-  <br/><em>Cabinet — trophies, 123 insignias, records and the bosses you've put down.</em>
+  <br/><em>The Cabinet — trophies, insignias, records and the bosses you've put down. It is a pane of Character, not a screen of its own.</em>
   <br/><br/>
   <img src="docs/screenshots/mobile.png" width="34%" alt="The Forge on a phone, showing Today and the bottom tab bar" />
-  <br/><em>…and the same four screens on a phone.</em>
+  <br/><em>…and the same five rooms on a phone.</em>
 </div>
 
 ## Install
