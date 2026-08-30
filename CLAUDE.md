@@ -53,22 +53,22 @@ in that style, including the byte-length cap.
 ### Client — load order is the API
 
 ```
-modules.js → game.js → fx-stage.js → forge-stage.js → fx.js → app.js → extras.js
+modules.js → game.js → fx-stage.js → forge-stage.js → effigy.js → fx.js → app.js → extras.js
 ```
 
 Each attaches globals for the next. Getting this wrong yields
 `X is not defined` at boot, not a helpful error.
 
-- **`modules.js` (816 lines) — `window.Forge`. The engine.**
+- **`modules.js` (~960 lines) — `window.Forge`. The engine.**
   Pure, DOM-free, and `require()`-able from Node, which is what makes it
   testable. Single source of truth for check-id derivation, weekly completion %,
   XP, and attribution to the five attributes. **Nothing here writes to storage.**
   Treat this file as the crown jewel: it is the only part of the app that is
   genuinely hard to reconstruct.
-- **`game.js` (1525 lines) — `window.Game`.** The RPG layer: levels, ranks,
+- **`game.js` (~1,590 lines) — `window.Game`.** The RPG layer: levels, ranks,
   attributes, radar, boss, seasons. Resolves `app.js` globals *lazily at call
   time*, because it loads first. Also owns `window.ICONS`.
-- **`fx.js` (426 lines).** Particles, combo meter, sounds, celebration.
+- **`fx.js` (~460 lines).** Particles, combo meter, sounds, celebration.
 - **`forge-stage.js` — `window.ForgeStage`. The anvil.**
   The canvas that Today's forge mode draws on. Knows nothing about tasks,
   storage or XP: the host hands it a list and a `complete(id)` callback, and it
@@ -76,8 +76,12 @@ Each attaches globals for the next. Getting this wrong yields
   `anvilComplete()` in `app.js`, so XP, sound, undo and persistence stay one
   code path. How many blows a task costs is **not** here — it is
   `Forge.strikesFor()` in `modules.js`, guarded by `test/anvil-weight.js`.
-- **`app.js` (4952 lines).** State + all rendering. Navigable by its `// =====`
-  section banners — grep those before reading linearly.
+- **`effigy.js` (~690 lines) — `window.Effigy`. The effigy.**
+  The Character sheet's canvas. Same contract as the anvil and described in
+  full under *The two canvases* below.
+- **`app.js` (~7,700 lines).** State + all rendering. Navigable by its `// =====`
+  section banners — grep those before reading linearly. The counts above are
+  approximate and rot; trust the banners, not the number.
 - **`extras.js` (404 lines).** Late additions bolted onto the above.
 
 ### Data model — one object per week
@@ -188,7 +192,7 @@ two of them:
 | **Today** | right now | the forge strip (**the anvil**), then the day's rows split into **quests** (one-off) and **rituals** (weekly), then the challenges |
 | **Week** | seven days | the week bar, the week pulse, the boss fight card, the Quest Log, the board, The Bench |
 | **Month** | months and years | one shared header + four panes: Calendar (+ year heat map, inline day detail), Trends, Goals, Year |
-| **Character** | who you are becoming | two panes: the Sheet (identity, **the effigy**, shape, rank ladder, the five attributes) and the Cabinet |
+| **Character** | who you are becoming | three panes: the Sheet (identity, **the effigy**, shape, rank ladder, an index of the Cabinet, the five attributes), the Cabinet, and Embers |
 | **Pursuits** | the structure | the plan head, then every pursuit section |
 
 ### The two canvases
@@ -282,6 +286,15 @@ changing a line. Retired hashes are aliased in `VIEW_ALIASES`, so an old
 - **The Forge theme remaps `--green` and `--blue` into the heat range.** A
   semantic four-colour scale comes out as four ambers. Use the `--heat-*` ramp
   for anything that has to be told apart.
+- **`06-mobile.css` loads last and is not only about mobile.** It holds whole
+  component rules — `.metric-jump` sets `display: block` there — so a rule of
+  equal specificity written in `05-screens.css` loses to it. The Quest Log's
+  `display: grid` was overridden this way while its `grid-template-columns`
+  applied, which renders as a flat stack with the grid silently inert and no
+  warning anywhere. Anchor to an id (`#scoreboardGrid .metric-row`) rather than
+  editing 06 for something that is not a small-screen concern. This is the same
+  lesson as `[hidden]` above and has the same corollary: **verify pixels**. A
+  computed `grid-template-columns` that looks right proves nothing on its own.
 
 ### The chrome
 
