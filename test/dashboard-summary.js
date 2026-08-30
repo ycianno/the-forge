@@ -81,6 +81,17 @@ assert.equal(out.today.quests[0].checkId, doneId);
 assert.equal(out.today.quests[0].done, true);
 assert.equal(out.today.quests[1].done, false);
 
+// Every quest carries what ticking it is worth, from the engine's own table.
+assert.equal(out.today.quests.find((q) => q.id === 'a').xp, Forge.XP_BY_CAT.training);
+assert.equal(out.today.quests.find((q) => q.id === 'b').xp, Forge.XP_BY_CAT.study);
+assert.equal(out.today.quests.find((q) => q.id === 'c').xp, Forge.XP_BY_CAT.discipline);
+
+// The rung above, for the "next rank" panel.
+assert.equal(out.profile.rank.next.name, 'Apprentice');
+assert.equal(out.profile.rank.next.level, 8);
+assert.equal(out.profile.rank.next.levelsAway, 7, 'level 1 is seven levels off Apprentice');
+assert.equal(summary.rankFor(bands[bands.length - 1].min).next, null, 'the top rung has no next');
+
 // One completed training quest is worth its category's XP, on Body.
 assert.equal(out.profile.lifetimeXp, Forge.XP_BY_CAT.training);
 assert.equal(out.profile.attrs.find((a) => a.key === 'Body').xp, Forge.XP_BY_CAT.training);

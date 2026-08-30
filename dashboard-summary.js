@@ -55,7 +55,22 @@ function rankFor(level) {
   const next = RANKS[idx + 1];
   const span = next ? next.min - r.min : 24;
   const tierNum = Math.min(3, 1 + Math.floor(((level - r.min) / span) * 3));
-  return { name: r.name, tier: ['I', 'II', 'III'][tierNum - 1] || 'I', pips: idx + 1 };
+  return {
+    name: r.name,
+    tier: ['I', 'II', 'III'][tierNum - 1] || 'I',
+    pips: idx + 1,
+    of: RANKS.length,
+    // The rung above, and how far off it is — what the app's "NEXT RUNG"
+    // panel shows. Null at the top of the ladder.
+    next: next
+      ? {
+          name: next.name,
+          level: next.min,
+          levelsAway: next.min - level,
+          pct: Math.round(((level - r.min) / span) * 100)
+        }
+      : null
+  };
 }
 
 function xpForLevel(level, gameBase) {
@@ -147,15 +162,19 @@ function agendaFor(date, weeks, settings) {
 
   const quests = rows.map((row) => {
     const attr = row.q.attr || Forge.ATTR_OF_CAT[row.q.category] || 'Discipline';
+    const category = row.q.category || Forge.CAT_OF_ATTR[attr] || 'discipline';
     return {
       id: row.q.id,
       checkId: row.id,
       title: row.q.title || row.q.name || 'Quest',
       attr,
+      // What ticking it is worth. Read from the engine's own table so the
+      // panel never has to carry a copy of the XP economy.
+      xp: Forge.XP_BY_CAT[category] || Forge.XP_BY_CAT.other,
       // accentFor honours a per-quest colour when it belongs to that
       // attribute's family, and falls back to the family's base shade.
       color: Forge.accentFor({ attr }, row.q.color) || Forge.ATTR_COLOR[attr],
-      category: row.q.category || Forge.CAT_OF_ATTR[attr] || 'discipline',
+      category,
       minutes: Forge.questMinutesOf(row.q),
       at: row.q.dueTime || null,
       done: !!checks[row.id],
