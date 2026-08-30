@@ -297,9 +297,12 @@ html { scroll-padding-top: 84px; }
   .pi-color { width: 30px; height: 30px; }
 }
 
-/* ===== QUEST LOG TILES =====
-   One tile per pursuit, generated from the module list. Each is a button that
-   jumps to the pursuit it reports on, and carries that pursuit's accent. */
+/* ===== QUEST LOG ROWS =====
+   One row per pursuit, generated from the module list. Each is a button that
+   jumps to the pursuit it reports on, and carries that pursuit's accent.
+   These were tiles on a four-wide grid until the row count stopped dividing
+   into four; the row layout itself lives in 05-screens.css, anchored to
+   #scoreboardGrid because the `display: block` below would otherwise win. */
 .metric-jump {
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
   cursor: pointer; border-radius: var(--r-md);

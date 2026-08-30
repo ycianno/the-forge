@@ -1312,7 +1312,7 @@
   font-variant-numeric: tabular-nums;
 }
 #scoreboardGrid .metric-prog { min-width: 0; display: block; }
-#scoreboardGrid .bar { display: block; margin-bottom: 5px; }
+#scoreboardGrid .bar { display: block; margin-bottom: var(--s-1); }
 #scoreboardGrid .hint { display: block; margin: 0; }
 
 @media (max-width: 768px) {
