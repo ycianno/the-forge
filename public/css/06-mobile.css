@@ -22,16 +22,25 @@ html { scroll-padding-top: 84px; }
   /* Stop the rubber-band overscroll from revealing the browser chrome behind. */
   body { overscroll-behavior-y: contain; }
 
-  /* Land in-page jumps cleanly below the sticky header. */
-  section.hero, #boss, details.section-card { scroll-margin-top: 84px; }
+  /* Nothing sticks to the top of a phone any more (see the context bar below),
+     so an in-page jump lands at the top edge, not 84px under a bar that is not
+     there. */
+  html { scroll-padding-top: 12px; }
+  section.hero, #boss, details.section-card { scroll-margin-top: 12px; }
 
-  /* --- Keep this-week context within thumb reach while scrolling --- */
+  /* --- The week and the day, said once ---
+     This bar used to stick to the top of every room, so 74px of a phone's
+     height — with the tab bar, 17% of the screen — went to repeating the week
+     range while you scrolled. Today's forge strip already names the day and
+     its count, and Week opens on the week's own score and range, so in those
+     two rooms the bar is a second copy and stands down. Elsewhere it stays as
+     a header that scrolls away with the page. */
   .mobile-context {
-    position: sticky;
-    top: env(safe-area-inset-top, 0px);
-    z-index: 900;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+    position: relative;
+    z-index: 1;
   }
+  body[data-room="today"] .mobile-context,
+  body[data-room="week"] .mobile-context { display: none; }
 
   /* --- Bottom tab bar: larger targets, active indicator, press feedback --- */
   .tab-btn {

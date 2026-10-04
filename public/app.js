@@ -2077,8 +2077,14 @@ function renderPursuitTree() {
   }).join("");
 
   const lit = mods.filter((m) => (counts[m.source || m.id] || 0) > 0).length;
+  // A bare tree is the first thing a fresh start shows here, and "0 of 4
+  // alive" only counts the bareness. Until one limb has grown, the foot says
+  // what grows one instead.
+  const foot = lit
+    ? `${lit} of ${mods.length} alive · hold a limb to see what the next rung costs`
+    : "Nothing has grown yet. Any work in a pursuit this week cuts its first notch.";
   host.innerHTML = `<div class="tr-row">${limbs}</div>
-    <p class="tr-foot">${lit} of ${mods.length} alive · hold a limb to see what the next rung costs</p>`;
+    <p class="tr-foot">${foot}</p>`;
 }
 
 function renderPlanHead() {
@@ -4342,6 +4348,62 @@ function setMetric(id, value) {
   if (metric) metric.textContent = safe + "%";
 }
 
+// The week's one-line verdict. It used to grade the whole week's total, so on a
+// Monday morning — nothing done because nothing was due yet — it said
+// "Structure is weak", and the first thing a week ever told you was that you
+// were failing it. It reads the pace now, the same "asked so far" the pulse
+// draws: what the days you have actually lived asked for, and how much of it
+// got done.
+function weekVerdict() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let done = 0, total = 0;
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(selectedWeekStart, i);
+    if (date > today) break;
+    const info = dayPctInfo(date);
+    if (info) { done += info.done; total += info.total; }
+  }
+  if (!total) return selectedWeekStart > today ? "Not started yet." : "A fresh week. Nothing is owed yet.";
+  if (!done) return "Nothing logged yet. One ritual gets it moving.";
+  const pace = Math.round(done / total * 100);
+  if (pace >= 85) return "Strong week. Maintain pressure.";
+  if (pace >= 60) return "On pace. Tighten execution.";
+  return "Behind pace. Protect the basics first.";
+}
+
+// Coming back after time away. The streak has already reset and every ring
+// reads zero, which is true and is also exactly the screen that makes you
+// close the app again. One line on Today says the gap out loud and that today
+// counts the same as any day — and only until the first tick, because after
+// that you are not coming back any more, you are here.
+function renderWelcomeBack() {
+  const room = viewEl("today");
+  const anvil = document.getElementById("anvilRoom");
+  if (!room || !anvil || anvil.parentNode !== room) return;
+  let note = document.getElementById("welcomeBack");
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const now = dayPctInfo(today);
+  let gap = 0;
+  if (!(now && now.done)) {
+    for (let back = 1; back <= 90; back++) {
+      const info = dayPctInfo(addDays(today, -back));
+      if (info && info.done) { gap = back; break; }
+    }
+  }
+  if (gap < 3) { if (note) note.hidden = true; return; }
+  if (!note) {
+    note = document.createElement("p");
+    note.id = "welcomeBack";
+    note.className = "welcome-back";
+    note.setAttribute("role", "status");
+  }
+  // Between the forge and the day's rows: under the strip that says what the
+  // day is, above the first thing to do about it.
+  if (note.previousElementSibling !== anvil) room.insertBefore(note, anvil.nextSibling);
+  note.hidden = false;
+  note.innerHTML = `<strong>Welcome back.</strong> Your last tick was ${gap} days ago. Today counts the same as any other day. Start with one.`;
+}
+
 function updateProgress() {
   const workoutMin = pursuitTarget("workout", 5);
   const proteinMin = pursuitTarget("diet", 7);
@@ -4364,7 +4426,7 @@ function updateProgress() {
   const overall = percent(done, total);
   document.getElementById("scoreValue").textContent = overall + "%";
   document.getElementById("scoreRing").style.background = `conic-gradient(var(--accent-success) ${overall * 3.6}deg, rgba(255,255,255,0.075) 0deg)`;
-  document.getElementById("statusLine").textContent = overall >= 85 ? "Strong week. Maintain pressure." : overall >= 60 ? "Structure is active. Tighten execution." : "Structure is weak. Protect the basics first.";
+  document.getElementById("statusLine").textContent = weekVerdict();
 
   // Update mobile score ring
   const mobileRing = document.getElementById("mobileScoreRing");
@@ -4430,6 +4492,7 @@ function updateProgress() {
   renderXpChips();
   syncLinkedProxies();
   syncCounterDisplays();
+  renderWelcomeBack();
 }
 
 // ===== CALENDAR (month view) =====
@@ -5329,6 +5392,12 @@ function routeTo(view, opts) {
   const next = VIEW_IDS.includes(asked) ? asked : "today";
   const changed = next !== currentView;
   currentView = next;
+  // The room on the body, so chrome that lives outside the views (the phone's
+  // context bar) can stand down in the rooms that already say what it says.
+  // Not `data-view`: every `[data-view]` is a nav button to the click delegate
+  // in initViews(), and on <body> every click outside a room — a checkbox in a
+  // modal — would resolve to it and be swallowed as a route.
+  document.body.dataset.room = next;
   const daily = document.getElementById("daily");
   if (daily) {
     const home = viewEl(viewOfSection("daily"));
