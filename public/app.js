@@ -4238,8 +4238,7 @@ function updateLiveSoon() {
 // Views do the work this used to: a pursuit is not on the Today screen at all,
 // so it no longer has to be collapsed out of the way there.
 function applyMobileSmartLayout() {
-  const daily = document.getElementById('daily');
-  if (daily) daily.open = true;
+  syncDailyOpen();
   if (!isMobile()) return;
   ['workout', 'diet', 'study', 'projects', 'review'].forEach((id) => {
     const el = document.getElementById(id);
@@ -5387,6 +5386,18 @@ function renderSidebarFoot() {
 // entry from the four-screen shell should land where the thing actually went,
 // not silently on Today.
 const VIEW_ALIASES = { cabinet: "character", calendar: "month", reports: "month" };
+
+// The board is the same node in both rooms, and in Today it is the room — its
+// header is hidden there, so it must always be open. In Week it is the day's
+// rows a second time, under a pulse that already says how each day went, so it
+// arrives folded and opens when you ask: its own header, or a day in the pulse.
+// Whatever you chose holds until you leave the room, through every re-render.
+let weekBoardOpen = false;
+function syncDailyOpen() {
+  const daily = document.getElementById("daily");
+  if (daily) daily.open = currentView === "week" ? weekBoardOpen : true;
+}
+
 function routeTo(view, opts) {
   const asked = VIEW_ALIASES[view] || view;
   const next = VIEW_IDS.includes(asked) ? asked : "today";
@@ -5407,7 +5418,8 @@ function routeTo(view, opts) {
       const after = home.querySelector(":scope > #review") || home.querySelector(":scope > #questsHub");
       home.insertBefore(daily, after || null);
     }
-    daily.open = true;
+    if (changed && next === "week") weekBoardOpen = false;
+    syncDailyOpen();
   }
   VIEWS.forEach((v) => {
     const el = viewEl(v.id);
@@ -7322,6 +7334,7 @@ function bindEvents() {
     const d = e.target;
     if (d && d.tagName === "DETAILS" && d.classList.contains("section-card")) {
       d.dataset.userOpened = d.open ? "1" : "0";
+      if (d.id === "daily" && currentView === "week") weekBoardOpen = d.open;
       if (d.parentNode === viewEl("pursuits")) rememberOpenSection();
     }
   }, true);
@@ -7447,6 +7460,8 @@ function bindEvents() {
     const cell = e.target.closest("[data-day-jump]");
     if (!cell || cell.classList.contains("future")) return;
     const di = Number(cell.dataset.dayJump);
+    // Asking for a day is asking for the board, folded or not.
+    weekBoardOpen = true; syncDailyOpen();
     if (fullWeekKey !== weekKey()) {
       setFocusedDay(di);
       renderDays(); loadWeekFields(); updateProgress(); renderWeekPulse();
