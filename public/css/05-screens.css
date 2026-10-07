@@ -284,7 +284,9 @@
   .cstat { padding: 10px 6px; }
   .cstat-v { font-size: var(--t-lg); }
   .char-actions { gap: 8px; flex-wrap: wrap; }
-  .week-range-tag { width: 100%; flex-basis: 100%; text-align: center; order: 5; overflow: visible; }
+  /* Week owns its date now that its mobile context bar is hidden. Keep the
+     range beside the week controls, wrapping on the narrowest phones. */
+  .week-range-tag { width: 100%; flex-basis: 100%; text-align: center; order: 5; overflow: visible; white-space: normal; }
   .attr-radar-svg { max-width: 200px; }
 }
 
@@ -1403,11 +1405,6 @@
 
 /* day-cleared celebration reuses .fx-overlay/.fx-card (green accent inline) */
 .fx-overlay.day-clear.show { background: rgba(2, 12, 6, 0.45); }
-
-@media (max-width: 768px) {
-  /* the date line is already shown in the mobile context bar — drop the dupe */
-  .week-range-tag { display: none; }
-}
 
 /* ===========================================================================
  * DAILY CONTRIBUTION HEATMAP (in the hero card)
