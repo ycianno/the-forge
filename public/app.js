@@ -1,5 +1,6 @@
 const APP_DB_KEY = "lifeControlCenter.v2.database";
 const APP_SETTINGS_KEY = "lifeControlCenter.v2.settings";
+const APP_ACHIEVEMENTS_KEY = "lifeControlCenter.v2.achievements";
 const APP_PENDING_KEY = "lifeControlCenter.v2.pendingWrites";
 const APP_PRE_MIGRATION_KEY = "lifeControlCenter.v2.preMigrationBackup";
 const LEGACY_KEY = "nonNegotiablesDashboardV1";
@@ -11,6 +12,11 @@ let achievements = [];
 const writeChains = new Map();
 let activeWrites = 0;
 let pendingRetryTimer = null;
+let capturedWeeks = {};
+let capturedSettings = {};
+let savingEnabled = false;
+let databaseLoaded = false;
+let settingsLoaded = false;
 
 // The module engine (modules.js) is the single source of truth for ids, score
 // and XP. Built fresh from the current settings each call so in-place edits to
@@ -250,53 +256,13 @@ function renderCustomSections() {
 
 // ===== SECTIONS (MODULES) EDITOR =====
 let modPersistTimer = null;
-// Coalescing writer for settings. /api/settings replaces the whole document, so
-// several callers each writing directly means several full rewrites of quests,
-// pursuits, goals and trophies. Anything that can fire more than once per render
-// — award checks especially, which run on every Game.render() — must come
-// through here so one render produces at most one write.
+// Coalesce rapid changes, but keep every edit in the same durable queue.
 function persistSettingsSoon() {
   clearTimeout(modPersistTimer);
   modPersistTimer = setTimeout(persistSettings, 350);
 }
-// Partial settings write. The caller has already mutated `settings`; this only
-// tells the server which paths to copy across, so an edit here cannot discard an
-// edit made on another device to a different key — and a rename stops shipping
-// every quest, pursuit, goal and trophy back to the server.
-//
-// Only for paths that address plain objects. Anything structural — quests,
-// customModules, goals, the arrays inside them — still goes through
-// persistSettings(), which replaces the document wholesale.
-let pendingPatch = null;
-let patchTimer = null;
-function patchSettingsSoon(paths) {
-  pendingPatch = Object.assign(pendingPatch || {}, paths);
-  clearTimeout(patchTimer);
-  patchTimer = setTimeout(flushSettingsPatch, 350);
-}
-async function flushSettingsPatch() {
-  if (booting || !pendingPatch) return false;
-  const set = pendingPatch;
-  pendingPatch = null;
-  localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
-  const ok = await serialWrite("settings", async () => {
-    activeWrites++; setSaveState("saving");
-    try {
-      await postJson("/api/settings", { set }, "PATCH");
-      return true;
-    } catch (e) {
-      console.warn("Settings patch failed, falling back to a full write", e);
-      return false;
-    } finally {
-      activeWrites--;
-      if (!activeWrites && !Object.keys(readPendingWrites().weeks || {}).length && !readPendingWrites().settings) setSaveState("saved");
-    }
-  });
-  // The fallback has to start OUTSIDE the chain entry above: persistSettings()
-  // takes the same serialWrite("settings") lock, so calling it from inside the
-  // catch would make that entry wait on itself and the write would never land.
-  if (!ok) return persistSettings();
-  return true;
+function patchSettingsSoon() {
+  persistSettingsSoon();
 }
 // Per-pursuit weekly target — reads/writes the right place for each pursuit type.
 // null → this pursuit has no single numeric weekly target (review/checklist/notes/daily).
@@ -1014,10 +980,18 @@ function dayNames() { return Object.keys(defaultDailyBlueprint); }
 async function loadDatabase() {
   try {
     const res = await fetch('/api/database');
-    database = await res.json();
+    if (!res.ok) throw new Error(`Database returned ${res.status}`);
+    const data = await res.json();
+    if (!data || !data.weeks || Array.isArray(data.weeks) || typeof data.weeks !== "object") throw new Error("Invalid database response");
+    database = data;
+    databaseLoaded = true;
   } catch (e) {
     console.error("Failed to load database from server, trying localStorage", e);
-    try { database = JSON.parse(localStorage.getItem(APP_DB_KEY)) || { version: 2, weeks: {} }; }
+    databaseLoaded = false;
+    try {
+      const data = readCache(APP_DB_KEY);
+      database = data && data.weeks && typeof data.weeks === "object" && !Array.isArray(data.weeks) ? data : { version: 2, weeks: {} };
+    }
     catch { database = { version: 2, weeks: {} }; }
   }
   invalidateBestiary();   // a sync can replace whole weeks under the replay
@@ -1027,23 +1001,32 @@ async function loadDatabase() {
 async function loadSettings() {
   try {
     const res = await fetch('/api/settings');
-    settings = await res.json();
+    if (!res.ok) throw new Error(`Settings returned ${res.status}`);
+    const data = await res.json();
+    if (!data || Array.isArray(data) || typeof data !== "object" || "error" in data) throw new Error("Invalid settings response");
+    settings = data;
+    settingsLoaded = true;
   } catch (e) {
     console.error("Failed to load settings from server, trying localStorage", e);
-    try {
-      const data = JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)) || {};
-      settings = { version: 3, dayTemplates: data.dayTemplates || null };
-    } catch { settings = { version: 3, dayTemplates: null }; }
+    settingsLoaded = false;
+    const data = readCache(APP_SETTINGS_KEY);
+    settings = data && typeof data === "object" && !Array.isArray(data)
+      ? data : { version: 3, dayTemplates: null };
   }
 }
 
 async function loadAchievements() {
   try {
     const res = await fetch('/api/achievements');
-    achievements = await res.json();
+    if (!res.ok) throw new Error(`Records returned ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error("Invalid records response");
+    achievements = data;
+    try { localStorage.setItem(APP_ACHIEVEMENTS_KEY, JSON.stringify(achievements)); } catch (e) {}
   } catch (e) {
     console.error("Failed to load achievements", e);
-    achievements = [];
+    const cached = readCache(APP_ACHIEVEMENTS_KEY);
+    achievements = Array.isArray(cached) ? cached : [];
   }
 }
 
@@ -1116,20 +1099,93 @@ async function persistDatabase() {
   return persistWeekByKey(weekKey());
 }
 
-// Persist a specific week. Unified quests can be scheduled into a different
-// week than the one currently open, so their initial unchecked state (and any
-// moved completion) must be written to that exact week.
+// Capture only edits since the last local save. Untouched false placeholders
+// must never uncheck work completed on another device.
+function weekChanges(before = {}, after = {}) {
+  const patch = { checks: {}, fields: {}, removeChecks: {}, removeFields: {} };
+  for (const group of ["checks", "fields"]) {
+    const old = before[group] || {}, next = after[group] || {};
+    const removed = group === "checks" ? "removeChecks" : "removeFields";
+    for (const id of new Set([...Object.keys(old), ...Object.keys(next)])) {
+      if (old[id] === next[id]) continue;
+      if (!(id in next)) patch[removed][id] = old[id];
+      else if (!(group === "checks" && !(id in old) && next[id] === false)) patch[group][id] = next[id];
+    }
+  }
+  return patch;
+}
+function combineWeekChanges(first, second) {
+  const result = structuredCloneSafe(first);
+  for (const [group, removed] of [["checks", "removeChecks"], ["fields", "removeFields"]]) {
+    result[group] = result[group] || {};
+    result[removed] = result[removed] || {};
+    for (const [id, value] of Object.entries(second[group] || {})) {
+      result[group][id] = value; delete result[removed][id];
+    }
+    for (const [id, value] of Object.entries(second[removed] || {})) {
+      result[removed][id] = value; delete result[group][id];
+    }
+  }
+  return result;
+}
+function applyWeekChanges(week, patch) {
+  const result = structuredCloneSafe(week || {});
+  for (const [group, removed] of [["checks", "removeChecks"], ["fields", "removeFields"]]) {
+    result[group] = Object.assign({}, result[group], patch[group]);
+    for (const [id, value] of Object.entries(patch[removed] || {})) {
+      if (result[group][id] === value) delete result[group][id];
+    }
+  }
+  return result;
+}
+function hasWeekChanges(patch) {
+  return ["checks", "fields", "removeChecks", "removeFields"].some(k => Object.keys(patch[k] || {}).length);
+}
+function pendingWeekPatch(entry) {
+  // Older releases queued whole weeks without a base. Keep their explicit
+  // values on this one-time upgrade; all new writes carry only changed keys.
+  return entry && entry.format === 2 ? entry.patch : { checks: entry?.checks || {}, fields: entry?.fields || {} };
+}
 async function persistWeekByKey(key) {
   const weekData = database.weeks[key];
-  if (!weekData || booting) return false;
-  const snapshot = structuredCloneSafe(weekData);
-  localStorage.setItem(APP_DB_KEY, JSON.stringify(database));
-  queueWrite(key, snapshot);
+  if (!weekData || booting || !savingEnabled) return false;
+  const changes = weekChanges(capturedWeeks[key], weekData);
+  const pending = readPendingWrites();
+  const previous = pending.weeks?.[key];
+  const patch = combineWeekChanges(previous ? pendingWeekPatch(previous) : {}, changes);
+  capturedWeeks[key] = structuredCloneSafe(weekData);
+  if (hasWeekChanges(patch)) queueWrite(key, { format: 2, patch });
+  cacheState();
+  return sendPendingWeek(key);
+}
+async function sendPendingWeek(key) {
   return serialWrite(`week:${key}`, async () => {
+    const entry = readPendingWrites().weeks?.[key];
+    if (!entry) return true;
+    const patch = pendingWeekPatch(entry);
     activeWrites++; setSaveState("saving");
     try {
-      await postJson(`/api/week/${key}`, snapshot);
-      clearQueuedWrite(key, snapshot);
+      const res = await postJson(`/api/week/${key}`, patch, "PATCH");
+      const body = await res.json();
+      if (!body.week || !body.week.checks || !body.week.fields) throw new Error("Invalid save response");
+      // An acknowledgement may arrive after another edit. Clear only the
+      // acknowledged keys, then overlay both queued and not-yet-saved edits.
+      const queued = readPendingWrites();
+      const remaining = structuredCloneSafe(pendingWeekPatch(queued.weeks?.[key] || {}));
+      for (const group of ["checks", "fields", "removeChecks", "removeFields"]) {
+        for (const [id, value] of Object.entries(patch[group] || {})) {
+          if (remaining[group]?.[id] === value) delete remaining[group][id];
+        }
+      }
+      if (hasWeekChanges(remaining)) queued.weeks[key] = { format: 2, patch: remaining };
+      else delete queued.weeks[key];
+      writePendingWrites(queued);
+      const unsaved = weekChanges(capturedWeeks[key], database.weeks[key]);
+      capturedWeeks[key] = applyWeekChanges(body.week, remaining);
+      database.weeks[key] = applyWeekChanges(capturedWeeks[key], unsaved);
+      invalidateBestiary(); invalidateOneOffDone();
+      cacheState();
+      if (key === weekKey()) updateLiveSoon();
       return true;
     } catch (e) {
       console.error(`Failed to persist week ${key}`, e);
@@ -1143,16 +1199,64 @@ async function persistWeekByKey(key) {
   });
 }
 
+// Settings arrays are edited as a unit; plain-object preferences are diffed
+// by path so changing a theme never re-sends tasks, goals or another week's boss.
+function settingsChanges(before, after, prefix = "") {
+  const set = {};
+  for (const key of new Set([...Object.keys(before || {}), ...Object.keys(after || {})])) {
+    const old = before?.[key], value = after?.[key], path = prefix + key;
+    if (JSON.stringify(old) === JSON.stringify(value)) continue;
+    if (old && value && typeof old === "object" && typeof value === "object" && !Array.isArray(old) && !Array.isArray(value)) {
+      Object.assign(set, settingsChanges(old, value, path + "."));
+    } else set[path] = value === undefined ? null : value;
+  }
+  return set;
+}
+function applySettingsChanges(base, set) {
+  const result = structuredCloneSafe(base);
+  for (const [path, value] of Object.entries(set)) {
+    const parts = path.split(".");
+    let node = result;
+    for (const key of parts.slice(0, -1)) {
+      if (!node[key] || typeof node[key] !== "object") node[key] = {};
+      node = node[key];
+    }
+    if (value === null) delete node[parts.at(-1)];
+    else node[parts.at(-1)] = structuredCloneSafe(value);
+  }
+  return result;
+}
+function pendingSettingsSet(entry) {
+  return entry.format === 2 ? entry.set : entry;
+}
+function combineSettingsChanges(first, second) {
+  const set = structuredCloneSafe(first);
+  for (const [path, value] of Object.entries(second)) {
+    for (const prior of Object.keys(set)) if (prior.startsWith(path + ".")) delete set[prior];
+    const parent = Object.keys(set).find(prior => path.startsWith(prior + "."));
+    if (parent) set[parent] = applySettingsChanges(set[parent] || {}, { [path.slice(parent.length + 1)]: value });
+    else set[path] = value;
+  }
+  return set;
+}
 async function persistSettings() {
-  if (booting) return false;
-  const snapshot = structuredCloneSafe(settings);
-  localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
-  queueWrite("settings", snapshot);
+  if (booting || !savingEnabled) return false;
+  const changes = settingsChanges(capturedSettings, settings);
+  const prior = readPendingWrites().settings;
+  const set = combineSettingsChanges(prior ? pendingSettingsSet(prior) : {}, changes);
+  capturedSettings = structuredCloneSafe(settings);
+  if (Object.keys(set).length) queueWrite("settings", { format: 2, set });
+  cacheState();
+  return sendPendingSettings();
+}
+async function sendPendingSettings() {
   return serialWrite("settings", async () => {
+    const entry = readPendingWrites().settings;
+    if (!entry) return true;
     activeWrites++; setSaveState("saving");
     try {
-      await postJson("/api/settings", snapshot);
-      clearQueuedWrite("settings", snapshot);
+      await postJson("/api/settings", { set: pendingSettingsSet(entry) }, "PATCH");
+      clearQueuedWrite("settings", entry);
       return true;
     } catch (e) {
       console.error("Failed to persist settings to server", e);
@@ -1168,14 +1272,18 @@ async function persistSettings() {
 
 function applyPendingWrites() {
   const pending = readPendingWrites();
-  Object.entries(pending.weeks || {}).forEach(([key, week]) => { database.weeks[key] = week; });
-  if (pending.settings) settings = pending.settings;
+  Object.entries(pending.weeks || {}).forEach(([key, entry]) => {
+    database.weeks[key] = applyWeekChanges(database.weeks[key], pendingWeekPatch(entry));
+  });
+  capturedWeeks = structuredCloneSafe(database.weeks);
+  if (pending.settings) settings = applySettingsChanges(settings, pendingSettingsSet(pending.settings));
+  capturedSettings = structuredCloneSafe(settings);
 }
 async function flushPendingWrites() {
-  if (booting) return;
+  if (booting || !savingEnabled) return;
   const pending = readPendingWrites();
-  const jobs = Object.keys(pending.weeks || {}).map((key) => persistWeekByKey(key));
-  if (pending.settings) jobs.push(persistSettings());
+  const jobs = Object.keys(pending.weeks || {}).map((key) => sendPendingWeek(key));
+  if (pending.settings) jobs.push(sendPendingSettings());
   if (jobs.length) await Promise.all(jobs);
 }
 
@@ -1196,7 +1304,7 @@ function getDailyBlueprint() {
 const taskId = Forge.taskId;
 
 async function migrateLegacyIfNeeded() {
-  if (database.migratedFromV1) return;
+  if (!databaseLoaded || !settingsLoaded || database.migratedFromV1) return;
   const legacy = localStorage.getItem(LEGACY_KEY);
   const currentInLocalStorage = localStorage.getItem(APP_DB_KEY);
 
@@ -7590,8 +7698,12 @@ async function importBackup(e) {
       database = imported.database || { version: 2, weeks: {} };
       settings = imported.settings || { version: 3, dayTemplates: null };
       achievements = Array.isArray(imported.achievements) ? imported.achievements : [];
-      localStorage.setItem(APP_DB_KEY, JSON.stringify(database));
-      localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
+      capturedWeeks = structuredCloneSafe(database.weeks);
+      capturedSettings = structuredCloneSafe(settings);
+      savingEnabled = true;
+      writePendingWrites({ weeks: {}, settings: null });
+      cacheState();
+      try { localStorage.setItem(APP_ACHIEVEMENTS_KEY, JSON.stringify(achievements)); } catch (e) {}
       if (settings.theme) applyTheme(settings.theme);
       applyFinish(emberState().active);
       applyWeekToUI();
@@ -7634,9 +7746,10 @@ async function init() {
   // Offline writes are authoritative for the resources they touched. Reapply
   // them after server revalidation, then retry once boot has completed.
   applyPendingWrites();
+  savingEnabled = (databaseLoaded || !!cachedDb?.weeks) && (settingsLoaded || !!cachedSettings);
   await migrateLegacyIfNeeded();
   const beforeQuestMigration = { database: structuredCloneSafe(database), settings: structuredCloneSafe(settings), savedAt: new Date().toISOString() };
-  const questModelMigrated = migrateQuestModelIfNeeded();
+  const questModelMigrated = databaseLoaded && settingsLoaded && migrateQuestModelIfNeeded();
   booting = false;
   if (questModelMigrated) {
     // Keep one rollback snapshot locally, then commit settings + every touched
@@ -7652,13 +7765,16 @@ async function init() {
       setSaveState("failed", "Upgrade not saved");
     }
   }
-  cacheState();
+  capturedWeeks = structuredCloneSafe(database.weeks);
+  capturedSettings = structuredCloneSafe(settings);
+  if (savingEnabled) cacheState();
+  else setSaveState("failed", "Could not load your data · reload");
   if (settings.theme) applyTheme(settings.theme);
   applyFinish(emberState().active);
   renderStructure();
   applyWeekToUI();
   await flushPendingWrites();
-  maybeShowOnboarding();
+  if (databaseLoaded && settingsLoaded) maybeShowOnboarding();
 }
 
 init();

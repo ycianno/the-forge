@@ -276,6 +276,13 @@ function mergeWeek(existing, patch) {
   for (const [id, value] of Object.entries(patch.fields || {})) {
     if (value === null) delete next.fields[id]; else next.fields[id] = value;
   }
+  // Retiring a routine removes unused placeholders, never a completion that
+  // arrived from another device after this client last loaded the week.
+  for (const [group, removed] of [['checks', 'removeChecks'], ['fields', 'removeFields']]) {
+    for (const [id, expected] of Object.entries(patch[removed] || {})) {
+      if (next[group][id] === expected) delete next[group][id];
+    }
+  }
   if (!next.createdAt) next.createdAt = new Date().toISOString();
   next.schemaVersion = base.schemaVersion || 2;
   next.updatedAt = new Date().toISOString();
@@ -316,7 +323,9 @@ function validateWeekPatch(key, body) {
   if (!isValidDateKey(key)) return 'week key must be a valid YYYY-MM-DD date.';
   if (!isPlainObject(body)) return 'week patch must be an object.';
   if (!('checks' in body) && !('fields' in body)) return 'week patch must carry checks or fields.';
-  return validateWeekPayload(key, body);
+  const invalid = validateWeekPayload(key, body);
+  if (invalid) return invalid;
+  return validateWeekPayload(key, { checks: "removeChecks" in body ? body.removeChecks : {}, fields: "removeFields" in body ? body.removeFields : {} });
 }
 function validateSettingsPayload(body) {
   if (!isPlainObject(body)) return 'settings payload must be an object.';

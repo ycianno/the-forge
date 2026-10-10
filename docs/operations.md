@@ -239,3 +239,41 @@ quest versions have been saved, older clients do not understand their bounds.
 For a later rollback, retain the dated-history engine and editor changes; do
 not restore an older database over new user work. A startup rollback before
 any new task edits can use the predeploy image and unchanged live database.
+
+## 9. October 10 saving and recovery verification
+
+Browser week saves now PATCH only changed checks and fields. The durable local
+queue carries those changes across offline reloads, merges them over newer
+server data, and preserves edits made while an earlier save is in flight.
+Retiring an unused placeholder deletes it only if its stored value still
+matches; a newer completion survives. Settings use changed paths through the
+same durable queue, including failed preference writes. Cached settings and
+records remain available when requests fail, including HTTP error responses.
+Migrations and onboarding require successful database and settings loads.
+
+Different checkboxes, notes and preference paths merge. Explicit edits to the
+same field use the last received save. Settings arrays (including the task
+list) remain a single editable value; simultaneous structural edits to the
+same array are not conflict-resolved. Existing whole-week offline queues from
+older releases are accepted once with their original values, since they did
+not record which fields changed. Use the updated app on both devices.
+
+The scheduled October 10 SQLite snapshot was copied read-only from
+`automation-01`, imported through `/api/backup` into a disposable local app,
+then verified after restarting that app: **13 weeks, 20 tasks, 1 record**.
+All week data (including notes and check history), settings and records matched;
+weekly XP, scores and dated task statistics were identical. Both SQLite
+integrity checks passed and the source snapshot's hash stayed unchanged.
+This verifies the local daily snapshot; offsite retrieval remains unverified.
+
+Repeat against a downloaded daily snapshot with:
+
+```bash
+node test/restore-drill.js /path/to/db-YYYY-MM-DD.sqlite
+```
+
+The drill uses a temporary database and password, disables reminders, and
+removes its restored copy after verification. It does not connect to production.
+The automated saving regression covers offline reload, HTTP failures, stale
+clients, explicit unchecks, delayed acknowledgements, preference retries and
+conditional deletions. The suite now has 20 scripts plus this manual drill.

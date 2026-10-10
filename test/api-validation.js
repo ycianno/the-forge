@@ -170,6 +170,13 @@ async function expectStatus(res, status) {
     assert.strictEqual(merged.week.checks['quest-training-a'], true, 'existing check must survive a patch');
     assert.strictEqual(merged.week.checks['quest-protein-b'], true);
     assert.strictEqual(merged.week.fields.wins, 'from browser', 'existing field must survive a patch');
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/week/2026-06-28', { checks: {}, removeChecks: { bad: 'yes' } }), 400);
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/week/2026-06-28', { checks: {}, removeFields: { bad: {} } }), 400);
+    const retired = await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/week/2026-06-28', {
+      checks: {}, removeChecks: { 'quest-training-a': false }, removeFields: { wins: 'from browser' },
+    }), 200);
+    assert.equal(retired.week.checks['quest-training-a'], true, 'retiring a stale placeholder preserves the new completion');
+    assert.equal('wins' in retired.week.fields, false, 'matching field deletion persists');
     // and a whole-document POST still replaces, as before
     await expectStatus(await req(srv.base, cookie, 'POST', '/api/week/2026-06-28', { checks: { 'quest-training-a': false }, fields: {} }), 200);
     const replaced = await expectStatus(await req(srv.base, cookie, 'GET', '/api/database'), 200);
