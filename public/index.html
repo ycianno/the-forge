@@ -17,8 +17,8 @@
   <link rel="stylesheet" href="css/02-base.css?v=7" />
   <link rel="stylesheet" href="css/03-components.css?v=12" />
   <link rel="stylesheet" href="css/04-responsive.css?v=6" />
-  <link rel="stylesheet" href="css/05-screens.css?v=89" />
-  <link rel="stylesheet" href="css/06-mobile.css?v=14" />
+  <link rel="stylesheet" href="css/05-screens.css?v=92" />
+  <link rel="stylesheet" href="css/06-mobile.css?v=15" />
 </head>
 <body>
   <main class="shell">
@@ -348,21 +348,6 @@
         <button class="settings-tab" data-month-tab="year" role="tab" aria-selected="false" aria-controls="monthPaneYear" type="button">Year</button>
       </div>
       <div class="month-pane active" id="monthPaneCalendar" role="tabpanel" aria-labelledby="monthTabCalendar">
-        <!-- WHAT IS IN THE MONTH.
-             The grid says how each day went; this says what the days were made
-             of. Missed comes first because it is the only one you can still do
-             something about. Painted by renderMonthAgenda(). -->
-        <section class="month-agenda" id="monthAgenda">
-          <div class="ma-head">
-            <span class="ma-title">The month's work</span>
-            <div class="ma-tabs" role="group" aria-label="Which tasks">
-              <button class="ma-tab" data-agenda="missed" type="button">Missed</button>
-              <button class="ma-tab active" data-agenda="upcoming" type="button">Upcoming</button>
-              <button class="ma-tab" data-agenda="done" type="button">Completed</button>
-            </div>
-          </div>
-          <div class="ma-list" id="monthAgendaList"></div>
-        </section>
       </div>
       <div class="month-pane" id="monthPaneTrends" role="tabpanel"></div>
       <div class="month-pane" id="monthPaneSeason" role="tabpanel"></div>
@@ -771,17 +756,18 @@
         </div>
         <div class="form-grid">
           <div class="form-span"><label class="label" for="questTitle">Task</label><input id="questTitle" type="text" maxlength="160" placeholder="Watch module 1 and take notes"></div>
+          <p class="hint form-span" id="questHistoryHint" hidden></p>
           <div><label class="label" for="questScheduleType">Schedule</label><select id="questScheduleType"><option value="once">One-time</option><option value="weekly">Weekly routine</option></select></div>
           <div><label class="label" for="questSource">Pursuit</label><select id="questSource"></select></div>
           <div class="form-span" id="questOnceFields"><label class="label" for="questDate">Do on</label><input id="questDate" type="date"></div>
           <div class="form-span" id="questWeeklyFields" style="display:none;"><label class="label">Repeat on</label><div class="weekday-picker" id="questWeekdays"></div></div>
           <div><label class="label" for="questDueTime">Time</label><input id="questDueTime" type="time" placeholder="e.g. 06:00"></div>
           <div><label class="label" for="questEstMinutes">Takes about (min)</label><input id="questEstMinutes" type="number" min="0" max="600" step="5" placeholder="minutes"></div>
-          <p class="hint form-span" style="margin-top:-8px;">Both optional. A time places the task in your day and syncs to Apple Reminders; an estimate lets a day report how much is left in minutes, not just how many boxes.</p>
-          <div class="form-span"><label class="label" for="questAttr">Attribute</label><select id="questAttr"></select><p class="hint quest-attr-hint" id="questAttrHint">Tasks inside a pursuit automatically train that pursuit's attribute.</p></div>
+          <p class="hint form-span" style="margin-top:-8px;">Time and estimate are optional.</p>
+          <div class="form-span"><div id="questAttrControl"><label class="label" for="questAttr">Attribute</label><select id="questAttr"></select></div><p class="hint quest-attr-hint" id="questAttrHint">Tasks inside a pursuit train its attribute.</p></div>
         </div>
         <div class="modal-actions split-actions">
-          <button class="danger" id="deleteQuestBtn" type="button" style="display:none">Delete</button>
+          <button class="danger" id="deleteQuestBtn" type="button" style="display:none">Retire</button>
           <span class="action-spacer"></span>
           <button id="cancelQuestEditorBtn" type="button">Cancel</button>
           <button id="saveQuestEditorBtn" type="button" class="primary">Save task</button>
@@ -910,13 +896,13 @@
     <p class="footer-note">Data is saved on your server by week using a versioned SQLite database. Use Export Backup before major changes.</p>
   </main>
 
-  <script src="modules.js?v=26"></script>
+  <script src="modules.js?v=27"></script>
   <script src="game.js?v=41"></script>
   <script src="fx-stage.js?v=2"></script>
   <script src="forge-stage.js?v=21"></script>
   <script src="effigy.js?v=7"></script>
   <script src="fx.js?v=15"></script>
-  <script src="app.js?v=159"></script>
+  <script src="app.js?v=162"></script>
   <script src="extras.js?v=6"></script>
 </body>
 </html>

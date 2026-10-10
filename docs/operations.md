@@ -100,7 +100,8 @@ file without its WAL; use SQLite's online backup API.
 Restore the saved Compose file (or its previous immutable image reference) and
 run `docker compose up -d`. Keep the previous image locally until the release
 has been verified. An application rollback does **not** require restoring the
-database for this CSS/client-only release. Restoring an old database would erase
+database for a UI-only release. The dated-history refinement has an additional
+compatibility requirement documented in section 8. Restoring an old database would erase
 work saved since the snapshot; do that only for a separately diagnosed data issue.
 
 ### Scheduled backups
@@ -198,3 +199,43 @@ range left behind when the duplicate context bar was removed.
 `npm run check:syntax` and all 18 regression scripts passed. The engine fuzz
 check covered 12,000 randomized weeks; no legacy weeks existed in the local
 fixture. Production data was not used for interactive review.
+
+## 8. October 10 refinement pass
+
+Task changes now preserve earned history. `settings.quests` retains prior
+versions with `archived: true` and an exclusive `retiredOn` date; replacements
+have a fresh ID and an inclusive `startsOn` date. Legacy quests without these
+fields keep their existing schedule. `Forge.questActiveOn()` controls dated
+rows in the app, dashboard, and reminder consumers. Do not replace this with
+an unconditional archived filter in historical views.
+
+Editing a routine applies from today, or after its latest recorded session or
+note when work was already logged for today or a future date. Retirement only
+removes unused future check placeholders. Past checks, notes, category IDs and
+XP attribution remain intact. A recorded one-off can change its title, time
+and estimate; its date and pursuit remain fixed. New routines do not appear in
+past weeks. Month day details expose the saved notes, including retired tasks.
+
+The UI pass also folds the mobile forge by default when no preference exists,
+keeps explicit expanded/collapsed choices, enlarges mobile edit targets to
+44×44, and pins task-editor actions below scrolling fields. Planning reports
+estimated minutes and unestimated tasks, with bars based on time. Month uses
+selected-day details instead of a repeated agenda; future dates remain
+inspectable. Pursuit cards come before the lifetime tree.
+
+Validation: syntax checks and all 19 regression scripts passed, including
+actual editor-handler tests for weekday changes, retirement, linked goal
+removal, notes-only work, future logged work, custom pursuit attribute changes,
+and recorded one-offs. The engine regression covered 12,000 randomized weeks.
+A read-only copy of the October 10 production backup passed integrity_check;
+retiring its 20 tasks in memory left all 13 historical weeks unchanged, with
+identical XP, scores and scheduled/completed totals. Browser checks used
+fictional local data at desktop, 390×844 and 320×740, including saving a routine,
+retaining today's completion after a later edit, remembered forge expansion,
+future calendar details and reachable editor actions.
+
+Compatibility: refresh existing clients after deploying this pass. Once dated
+quest versions have been saved, older clients do not understand their bounds.
+For a later rollback, retain the dated-history engine and editor changes; do
+not restore an older database over new user work. A startup rollback before
+any new task edits can use the predeploy image and unchanged live database.

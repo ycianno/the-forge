@@ -109,20 +109,71 @@
     const y = date.getFullYear(), m = String(date.getMonth() + 1).padStart(2, "0"), d = String(date.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
+  // Retired versions still describe the dates they were active. Legacy archived
+  // tasks have no date boundary and retain their original hidden behaviour.
+  function questActiveOn(q, date) {
+    const key = date instanceof Date ? localIso(date) : date;
+    return !!q && (!q.archived || !!q.retiredOn) &&
+      (!q.startsOn || key >= q.startsOn) && (!q.retiredOn || key < q.retiredOn);
+  }
+  function questHasWork(q, weeks) {
+    const check = questCheckId(q), note = questNoteId(q);
+    return Object.values(weeks || {}).some((w) =>
+      Object.entries(w.checks || {}).some(([id, value]) => value && (id === check || id.startsWith(check + "-d"))) ||
+      Object.entries(w.fields || {}).some(([id, value]) => String(value == null ? "" : value).trim() && (id === note || id.startsWith(note + "-d"))));
+  }
+  // Changes may start today unless that would remove recorded work. Even work
+  // logged ahead of time stays attached to its original date and attribute.
+  function questChangeDate(q, weeks, today) {
+    let boundary = q.startsOn && q.startsOn > today ? q.startsOn : today;
+    Object.entries(weeks || {}).forEach(([key, w]) => {
+      const days = q.scheduleType === "weekly" ? (q.repeatDays || []) : [null];
+      days.forEach((day) => {
+        const note = (w.fields || {})[questNoteId(q, day)];
+        if (!(w.checks || {})[questCheckId(q, day)] && !String(note == null ? "" : note).trim()) return;
+        // A carried one-off can be checked in a later week than its due date.
+        const date = new Date((day == null ? (key > q.scheduledDate ? key : q.scheduledDate) : key) + "T00:00:00");
+        date.setDate(date.getDate() + (day == null ? 1 : day + 1));
+        const after = localIso(date);
+        if (after > boundary) boundary = after;
+      });
+    });
+    return boundary;
+  }
+  // Returns changed week keys. Only unused future placeholders are removed;
+  // past checks, completed checks and notes are never deleted by retirement.
+  function retireQuest(q, weeks, today) {
+    q.retiredOn = questChangeDate(q, weeks, today);
+    q.archived = true;
+    const touched = [];
+    Object.entries(weeks || {}).forEach(([key, w]) => {
+      let changed = false;
+      const days = q.scheduleType === "weekly" ? (q.repeatDays || []) : [null];
+      days.forEach((day) => {
+        const date = new Date((day == null ? q.scheduledDate : key) + "T00:00:00");
+        if (day != null) date.setDate(date.getDate() + day);
+        const id = questCheckId(q, day), noteId = questNoteId(q, day);
+        if (localIso(date) < q.retiredOn || (w.checks || {})[id] || String((w.fields || {})[noteId] || "").trim()) return;
+        if (Object.hasOwn(w.checks || {}, id)) { delete w.checks[id]; changed = true; }
+      });
+      if (changed) touched.push(key);
+    });
+    return touched;
+  }
   function questOccurrenceRows(quests, weekStart, areaId) {
     const start = weekStart instanceof Date ? new Date(weekStart) : new Date(String(weekStart) + "T00:00:00");
     start.setHours(0, 0, 0, 0);
-    return (quests || []).filter((q) => q && !q.archived && (!areaId || q.areaId === areaId)).flatMap((q) => {
+    return (quests || []).filter((q) => q && (!areaId || q.areaId === areaId)).flatMap((q) => {
       if (q.scheduleType === "weekly") {
         return (q.repeatDays || []).slice().sort((a, b) => a - b).map((dayIndex) => {
           const date = new Date(start); date.setDate(start.getDate() + dayIndex);
           return { q, date, dayIndex, id: questCheckId(q, dayIndex) };
-        });
+        }).filter((row) => questActiveOn(q, row.date));
       }
       if (!q.scheduledDate) return [];
       const date = new Date(q.scheduledDate + "T00:00:00");
       const ownStart = new Date(date); ownStart.setDate(date.getDate() - date.getDay()); ownStart.setHours(0, 0, 0, 0);
-      return localIso(ownStart) === localIso(start) ? [{ q, date, dayIndex: date.getDay(), id: questCheckId(q, date.getDay()) }] : [];
+      return questActiveOn(q, date) && localIso(ownStart) === localIso(start) ? [{ q, date, dayIndex: date.getDay(), id: questCheckId(q, date.getDay()) }] : [];
     });
   }
   function questWeekStats(week, quests, weekStart, areaId) {
@@ -232,7 +283,7 @@
       if (mins) day.minutes += mins; else day.unestimated++;
     });
     let heaviest = 0;
-    perDay.forEach((d, i) => { if (d.count > perDay[heaviest].count) heaviest = i; });
+    perDay.forEach((d, i) => { if (d.minutes > perDay[heaviest].minutes) heaviest = i; });
     return {
       total: rows.length,
       perDay,
@@ -386,7 +437,7 @@
     const checks = week.checks;
     let n = 0;
     (dm.quests || []).forEach((q) => {
-      if (!q || q.archived || q.areaId !== moduleId) return;
+      if (!q || (q.archived && !q.retiredOn) || q.areaId !== moduleId) return;
       if (q.scheduleType === "weekly") (q.repeatDays || []).forEach((d) => { if (checks[questCheckId(q, d)]) n++; });
       else if (q.scheduledDate && checks[questCheckId(q)]) n++;
     });
@@ -951,6 +1002,6 @@
     BOSSES, BOSS_ATTR, BOSSES_V1, bossKeyHash, bossForWeek, bossV1ForWeek, resolveBoss, bossDamage,
     DEFAULT_BLUEPRINT, DEFAULT_WORKOUTS, DEFAULT_DIET, DEFAULT_PROJECT_CHECKS, DEFAULT_STUDY_AREAS, DEFAULT_REVIEW,
     SEED_TIMES, SEED_MINUTES, seedDefaults, questMinutesOf, strikesFor, strikesForQuest, urgencyOf, strikesWithUrgency, hitValue, HIT_PERFECT, planLoad, parseQuickTask, DAY_WORDS,
-    slug, taskId, checklistId, questCheckId, questNoteId, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
+    slug, taskId, checklistId, questCheckId, questNoteId, questActiveOn, questHasWork, questChangeDate, retireQuest, questOccurrenceRows, questWeekStats, nutritionWeekStats, categoryFor, dailyAttr, dailyAttrKey, taskLinkOf, linkTargetId, linkTargets, linkModule, normLink, linkConsumesDaily, linkedCountDays, questSessionDays, moduleCountValue, migrateModules, buildBaseModules, applyOverlays, scoreIds, weekScore, weekXp,
   };
 });

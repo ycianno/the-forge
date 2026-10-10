@@ -275,7 +275,7 @@ async function sync() {
     // 3. Compute today's active quests
     const activeQuests = {};
     (settings.quests || []).forEach(q => {
-      if (q.archived) return;
+      if (!Forge.questActiveOn(q, todayStr)) return;
 
       // Check ids come from the engine (public/modules.js) — never rebuilt here.
       // A private copy of this format silently desyncs Reminders from The Forge.

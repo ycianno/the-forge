@@ -94,3 +94,17 @@ assert.equal(load.unestimated, 0, 'no starter occurrence should be uncosted');
 }
 
 console.log(`Plan budget: OK — ${load.total} occurrences, ${Math.round(load.total / 7 * 10) / 10}/day, ${Math.round(load.minutes / 7)} min/day`);
+
+// A single long task can take more time than several short ones.
+{
+  const tasks = [
+    { id: 'long', scheduleType: 'weekly', repeatDays: [2], estMinutes: 90 },
+    { id: 'short1', scheduleType: 'weekly', repeatDays: [1], estMinutes: 5 },
+    { id: 'short2', scheduleType: 'weekly', repeatDays: [1], estMinutes: 5 },
+    { id: 'unknown', scheduleType: 'weekly', repeatDays: [1] },
+  ];
+  const load = Forge.planLoad(tasks, '2026-10-04');
+  assert.equal(load.heaviest, 2, 'heaviest means estimated time, not number of tasks');
+  assert.equal(load.minutes, 100);
+  assert.equal(load.unestimated, 1);
+}

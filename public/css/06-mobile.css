@@ -461,3 +461,12 @@ html { scroll-padding-top: 84px; }
   .day-content { padding-left: 4px; padding-right: 4px; }
   .agenda-part { padding-left: 0; padding-right: 0; }
 }
+
+@media (max-width: 700px) {
+  /* Reserve the full touch target so editing never overlaps the checkbox. */
+  .linked-unified { grid-template-columns: 50px 22px 15px minmax(0, 1fr) 26px 44px; column-gap: 4px; }
+  .q-inline-edit { width: 44px; height: 44px; }
+  #questEditorModal .modal { max-height: 88dvh; }
+  #questEditorModal .modal::before { flex-shrink: 0; }
+  #questEditorModal .modal-actions button { padding-inline: 12px; }
+}

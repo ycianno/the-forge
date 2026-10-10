@@ -113,7 +113,7 @@ function seedCustomPlanTasks(m) {
     days = (kind === "count" && tgt < 7) ? all.slice(0, tgt) : all.slice();
   } else { titles = [m.name]; days = [0]; } // notes (and any other) → weekly reflection
   titles.forEach((title, order) => settings.quests.push(Object.assign({
-    id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "",
+    id: forgeId("q"), title, scheduleType: "weekly", scheduledDate: "", startsOn: iso(new Date()),
     repeatDays: days.slice(),
     areaId: m.id, goalId: "", attr, category, order,
     createdAt: new Date().toISOString(), migratedFrom: `${m.idPrefix || m.id}-${order}`
@@ -183,6 +183,8 @@ function applyModuleLayout() {
     // have silently stopped reordering from working at all.
     if (m.id !== "daily" && sec.parentNode && sec.parentNode.id === "view-pursuits") sec.parentNode.appendChild(sec);
   });
+  const tree = document.getElementById("forgeTree");
+  if (tree && tree.parentNode && tree.parentNode.id === "view-pursuits") tree.parentNode.appendChild(tree);
 }
 
 // ===== GENERIC CUSTOM-SECTION RENDERER =====
@@ -315,7 +317,7 @@ function setPursuitTarget(id, value) {
 // Completed vs scheduled tasks THIS week for a pursuit — connects the target to
 // the actual plan so the number no longer feels disconnected.
 function pursuitWeekProgress(m) {
-  const all = getUnifiedQuests().filter((q) => !q.archived && q.areaId === m.id);
+  const all = getUnifiedQuests().filter((q) => q.areaId === m.id);
   const wk = getWeekData();
   let done = 0, total = 0;
   all.forEach((q) => questOccurrencesInWeek(q).forEach((d) => { total++; if (wk.checks[questCheckId(q, d)]) done++; }));
@@ -342,17 +344,21 @@ function pursuitIdentityHtml(m) {
     ${colors}
   </div>`;
 }
-// ----- plan health ---------------------------------------------------------
-// A plan grows one reasonable task at a time until no day is winnable, and
-// nothing in the app used to say so. This is the one place that reports what
-// the week actually asks of you.
-const PLAN_BANDS = [
-  { max: 3,        id: "light",      label: "Light",      note: "Room for one more habit if you want it." },
-  { max: 6,        id: "balanced",   label: "Balanced",   note: "A day you can realistically clear." },
-  { max: 9,        id: "heavy",      label: "Heavy",      note: "Clearing every day will be hard to sustain." },
-  { max: Infinity, id: "overloaded", label: "Overloaded", note: "Most days will end unfinished. Consider cutting back." },
-];
-function planBandFor(average) { return PLAN_BANDS.find((b) => average <= b.max); }
+// ----- weekly plan estimates -----------------------------------------------
+function planTimeNote(load) {
+  const day = load.perDay[load.heaviest];
+  return day.minutes
+    ? `Most estimated time: ${dayNames()[load.heaviest]}, ${fmtDuration(day.minutes)}.${load.unestimated ? " Unestimated tasks add more time." : ""}`
+    : "Add time estimates to compare your days.";
+}
+function planBarsHtml(load) {
+  const max = Math.max(1, ...load.perDay.map((d) => d.minutes));
+  return weekOrder().map((i) => {
+    const d = load.perDay[i], h = Math.round(d.minutes / max * 100);
+    const label = `${dayNames()[i]}: ${d.count} tasks, ${fmtDuration(d.minutes)} estimated${d.unestimated ? `, ${d.unestimated} unestimated` : ""}`;
+    return `<span class="ph-bar" title="${escapeHtml(label)}"><i style="height:${h}%"></i><em>${DOW_INITIAL[i]}</em></span>`;
+  }).join("");
+}
 // Stricter than hasLoggedData(): saving a task writes `false` for each of its
 // occurrences, so merely editing a plan creates keys. What matters here is
 // whether anything was ever actually completed or written down.
@@ -366,43 +372,16 @@ function hasCompletedAnything() {
 }
 function planHealthHtml() {
   const load = Forge.planLoad(getUnifiedQuests(), selectedWeekStart);
-  if (!load.total) {
-    return `<div class="plan-health" data-band="light">
-      <div class="ph-head"><span class="ph-title">Plan health</span></div>
-      <p class="ph-empty">No scheduled tasks yet. Pick a preset below, or add tasks inside a pursuit.</p>
-    </div>`;
-  }
-  const avg = load.total / 7;
-  const band = planBandFor(avg);
-  const heaviest = load.perDay[load.heaviest];
-  const dayMins = load.minutes / 7;
-  const costLine = load.minutes
-    ? `about ${fmtDuration(Math.round(dayMins))} a day${load.unestimated ? "+" : ""}`
-    : "no time estimates yet";
-  // Starting over only makes sense while there is nothing to lose. Archiving or
-  // deleting tasks rewrites what past weeks were scored against, so once a
-  // single day is logged this button goes away rather than quietly rewriting
-  // your history.
-  const canReset = !hasCompletedAnything();
-  return `<div class="plan-health" data-band="${band.id}">
-    <div class="ph-head">
-      <span class="ph-title">Plan health</span>
-      <span class="ph-band">${band.label}</span>
-    </div>
+  return `<div class="plan-health">
+    <div class="ph-head"><span class="ph-title">This week's plan</span></div>
     <div class="ph-figures">
-      <span><b>${load.total}</b> scheduled this week</span>
-      <span><b>${Math.round(avg * 10) / 10}</b> a day</span>
-      <span>${escapeHtml(costLine)}</span>
+      <span><b>${load.total}</b> scheduled tasks</span>
+      <span><b>${escapeHtml(fmtDuration(load.minutes))}</b> estimated</span>
+      <span><b>${load.unestimated}</b> without estimates</span>
     </div>
-    <div class="ph-bars" role="img" aria-label="Tasks per day this week">
-      ${weekOrder().map((i) => {
-        const d = load.perDay[i];
-        const h = Math.max(4, Math.round(d.count / Math.max(1, heaviest.count) * 100));
-        return `<span class="ph-bar" title="${escapeHtml(dayNames()[i])}: ${d.count} task${d.count === 1 ? "" : "s"}"><i style="height:${h}%"></i><em>${DOW_INITIAL[i]}</em></span>`;
-      }).join("")}
-    </div>
-    <p class="ph-note">${escapeHtml(band.note)}${heaviest.count ? ` Heaviest day is ${escapeHtml(dayNames()[load.heaviest])}, with ${heaviest.count}.` : ""}</p>
-    ${canReset ? `<button type="button" class="ph-reset" id="planResetBtn">Start over with a fresh plan</button>` : ""}
+    <div class="ph-bars" role="img" aria-label="Estimated minutes per day this week">${planBarsHtml(load)}</div>
+    <p class="ph-note">${escapeHtml(planTimeNote(load))}</p>
+    ${!hasCompletedAnything() ? `<button type="button" class="ph-reset" id="planResetBtn">Start over with a fresh plan</button>` : ""}
   </div>`;
 }
 // Replace every scheduled task with the starter plan. Only offered while no day
@@ -624,25 +603,21 @@ function refreshPursuitEditor() {
   body.innerHTML = pursuitEditorBodyHtml(m);
   body.style.setProperty("--ac", pursuitColor(m));
 }
-// Moving a pursuit to another stat rewrites its tasks' check ids, so completion
-// already logged has to travel with them.
+// A new pursuit stat applies to future tasks; earned XP keeps its attribute.
 function reassignPursuitAttr(m, attr) {
-  const assigned = (settings.quests || []).filter((q) => q.areaId === m.id).map((q) => ({ q, oldBase: questCheckId(q) }));
+  const assigned = getUnifiedQuests().filter((q) => !q.archived && q.areaId === m.id);
   m.attr = attr;
   m.category = Forge.CAT_OF_ATTR[attr] || "discipline";
-  const touched = new Set();
-  assigned.forEach(({ q, oldBase }) => {
-    q.attr = attr; q.category = m.category;
-    const nextBase = questCheckId(q);
-    if (oldBase === nextBase) return;
-    Object.entries(database.weeks || {}).forEach(([key, week]) => {
-      Object.keys((week && week.checks) || {}).forEach((checkId) => {
-        if (checkId !== oldBase && checkId.indexOf(oldBase + "-d") !== 0) return;
-        week.checks[nextBase + checkId.slice(oldBase.length)] = week.checks[checkId];
-        delete week.checks[checkId];
-        touched.add(key);
-      });
-    });
+  const touched = new Set(), today = iso(new Date());
+  assigned.forEach((q) => {
+    if (q.scheduleType !== "weekly" && Forge.questHasWork(q, database.weeks)) return;
+    const startsOn = Forge.questChangeDate(q, database.weeks, today);
+    Forge.retireQuest(q, database.weeks, today).forEach((key) => touched.add(key));
+    settings.quests.push(Object.assign({}, q, {
+      id: forgeId("q"), attr, category: m.category, archived: false, retiredOn: undefined,
+      startsOn, scheduledDate: q.scheduleType !== "weekly" && q.scheduledDate < startsOn ? startsOn : q.scheduledDate,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }));
   });
   return touched;
 }
@@ -1793,13 +1768,13 @@ function calculateWeekScoreData(weekData) {
 }
 
 // ===== DAILY CONTRIBUTION HEATMAP =====
-function dayPctInfo(date) {
-  const wk = database.weeks[iso(getStartOfWeek(date))];
+function dayPctInfo(date, includePlanned = false) {
+  const wk = database.weeks[iso(getStartOfWeek(date))] || (includePlanned ? { checks: {} } : null);
   if (!wk || !wk.checks) return null;
   const di = date.getDay();
   const tasks = getDailyBlueprint()[Object.keys(getDailyBlueprint())[di]] || [];
   const items = tasks.map((t) => ({ title: t, done: !!wk.checks[taskId(di, t)] }));
-  questsForDate(date).forEach((q) => items.push({ title: q.title, done: !!wk.checks[questCheckId(q, date)] }));
+  questsForDate(date).forEach((q) => items.push({ title: q.title, done: !!wk.checks[questCheckId(q, date)], note: (wk.fields || {})[questNoteId(q, date)] || "" }));
   if (!items.length) return null;
   const done = items.filter((x) => x.done).length;
   return { pct: Math.round(done / items.length * 100), done, total: items.length, items, di, wk };
@@ -1820,6 +1795,8 @@ function openDayInsights(date, info) {
   const panel = document.getElementById("dayDetail");
   if (!panel) return;
   selectedDayIso = iso(date);
+  const future = iso(date) > iso(new Date());
+  if (future) info = dayPctInfo(date, true);
   const title = date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
   const lvl = info ? hmLevel(info.pct) : 0;
   let body;
@@ -1829,7 +1806,7 @@ function openDayInsights(date, info) {
     const items = info.items.map((it) => `
       <li class="dd-item${it.done ? " done" : ""}">
         <span class="dd-mark" aria-hidden="true"></span>
-        <span class="dd-name">${escapeHtml(it.title)}</span>
+        <span class="dd-name">${escapeHtml(it.title)}${it.note ? `<span class="dd-note">${escapeHtml(it.note)}</span>` : ""}</span>
       </li>`).join("");
     body = `<ul class="dd-list">${items}</ul>`;
   }
@@ -1838,7 +1815,7 @@ function openDayInsights(date, info) {
       <span class="dd-heat d${lvl}" aria-hidden="true"></span>
       <div class="dd-titles">
         <span class="dd-title">${escapeHtml(title)}</span>
-        <span class="dd-sub">${info ? `${info.pct}% · ${info.done} of ${info.total} done` : "No record"}</span>
+        <span class="dd-sub">${info ? future ? `${info.total} planned task${info.total === 1 ? "" : "s"}` : `${info.pct}% · ${info.done} of ${info.total} done` : future ? "No tasks planned" : "No record"}</span>
       </div>
       <button class="dd-goto" type="button" data-goto-week="${escapeHtml(iso(date))}">Open this week<svg viewBox="0 0 24 24" class="ic"><path d="M9 18l6-6-6-6"/></svg></button>
       <button class="dd-close" type="button" aria-label="Close day"><svg viewBox="0 0 24 24" class="ic"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
@@ -2098,40 +2075,14 @@ function renderPlanHead() {
     return;
   }
 
-  // Rituals and quests, counted the same way the board splits them, so the
-  // number here and the headings on Today can never disagree.
-  const rows = Forge.questOccurrenceRows(quests, selectedWeekStart);
-  const rituals = rows.filter((r) => r.q.scheduleType === "weekly").length;
-  const oneOffs = rows.length - rituals;
-
-  const avg = load.total / 7;
-  const band = planBandFor(avg);
-  const heaviest = load.perDay[load.heaviest];
-  const dayMins = load.minutes / 7;
-  const costLine = load.minutes
-    ? `about ${fmtDuration(Math.round(dayMins))} a day${load.unestimated ? "+" : ""}`
-    : "no time estimates yet";
-
   body.innerHTML = `
-    <div class="pl-state" data-band="${band.id}">
-      <span class="pl-band">${escapeHtml(band.label)}</span>
-      <span class="pl-note">${escapeHtml(band.note)}</span>
-    </div>
     <div class="pl-figures">
-      <div class="pl-fig"><b>${load.total}</b><span>scheduled this week</span></div>
-      <div class="pl-fig"><b>${Math.round(avg * 10) / 10}</b><span>a day</span></div>
-      <div class="pl-fig"><b>${escapeHtml(costLine.replace(/^about /, ""))}</b><span>a day, roughly</span></div>
-      <div class="pl-fig"><b>${rituals}</b><span>ritual${rituals === 1 ? "" : "s"}</span></div>
-      <div class="pl-fig"><b>${oneOffs}</b><span>one-off${oneOffs === 1 ? "" : "s"}</span></div>
+      <div class="pl-fig"><b>${load.total}</b><span>scheduled tasks</span></div>
+      <div class="pl-fig"><b>${escapeHtml(fmtDuration(load.minutes))}</b><span>estimated this week</span></div>
+      <div class="pl-fig"><b>${load.unestimated}</b><span>without estimates</span></div>
     </div>
-    <div class="ph-bars pl-bars" role="img" aria-label="Tasks per day this week">
-      ${weekOrder().map((i) => {
-        const d = load.perDay[i];
-        const h = Math.max(4, Math.round(d.count / Math.max(1, heaviest.count) * 100));
-        return `<span class="ph-bar" title="${escapeHtml(dayNames()[i])}: ${d.count} task${d.count === 1 ? "" : "s"}"><i style="height:${h}%"></i><em>${DOW_INITIAL[i]}</em></span>`;
-      }).join("")}
-    </div>
-    ${heaviest.count ? `<p class="pl-heaviest">Heaviest day is ${escapeHtml(dayNames()[load.heaviest])}, with ${heaviest.count}.</p>` : ""}`;
+    <div class="ph-bars pl-bars" role="img" aria-label="Estimated minutes per day this week">${planBarsHtml(load)}</div>
+    <p class="pl-heaviest">${escapeHtml(planTimeNote(load))}</p>`;
 }
 function initPlanHead() {
   const btn = document.getElementById("planEditBtn");
@@ -2200,7 +2151,9 @@ function initPursuitTree() {
 //
 // It can still be folded away — a day you only want to tick through should not
 // pay for a canvas — and that choice is remembered.
-function anvilCollapsed() { return !!(settings && settings.anvilCollapsed); }
+function anvilCollapsed() {
+  return typeof settings.anvilCollapsed === "boolean" ? settings.anvilCollapsed : window.matchMedia("(max-width: 700px)").matches;
+}
 
 // The day's work in the shape the stage wants. Every field is derived from the
 // same helpers the board uses, so the two can never disagree about what today
@@ -2328,6 +2281,11 @@ function syncAnvil(opts) {
   if (inToday) startAnvilClock(); else stopAnvilClock();
   const folded = anvilCollapsed();
   room.classList.toggle("is-folded", folded);
+  const collapse = document.getElementById("anvilCollapse");
+  if (collapse) {
+    collapse.setAttribute("aria-expanded", String(!folded));
+    collapse.title = folded ? "Show the forge" : "Hide the forge";
+  }
   // The HUD is the day's headline and stays even when the forge is folded away.
   const tasksNow = inToday ? anvilTasks() : [];
   if (inToday) { renderAnvilHud(tasksNow); renderAnvilDay(tasksNow); }
@@ -2385,9 +2343,8 @@ function renderAnvilDay(tasks) {
     : `${fmt(date)} · the day is cleared`;
 }
 
-function setAnvilCollapsed(folded) {
-  settings.anvilCollapsed = !!folded;
-  persistSettings();
+function setAnvilCollapsed(folded, remember = true) {
+  if (remember) { settings.anvilCollapsed = !!folded; persistSettings(); }
   const btn = document.getElementById("anvilCollapse");
   if (btn) {
     btn.setAttribute("aria-expanded", String(!folded));
@@ -2400,7 +2357,7 @@ function initTodayModes() {
   if (!btn || btn._wired) return;
   btn._wired = true;
   btn.addEventListener("click", () => setAnvilCollapsed(!anvilCollapsed()));
-  setAnvilCollapsed(anvilCollapsed());
+  setAnvilCollapsed(anvilCollapsed(), false);
 }
 
 // ===== THE CHARACTER SHEET =====
@@ -2832,7 +2789,7 @@ function initCharTabs() {
 // same as opening a report you did not ask for.
 let monthTab = "calendar";
 const MONTH_PANE_PAINT = {
-  calendar: () => { renderCalendarMonth(); initMonthAgenda(); renderMonthAgenda(); },
+  calendar: () => { renderCalendarMonth(); },
   // The year map lives here now, so it is painted with the year.
   trends:   () => renderTrends(),
   season:   () => renderSeason(),
@@ -3331,7 +3288,7 @@ function questsForDate(date) {
   const carried = (q) => isToday && q.scheduledDate && q.scheduledDate < key &&
     !completedCheckIds().has(questCheckId(q));
   return getUnifiedQuests()
-    .filter((q) => !q.archived && ((q.scheduleType === "weekly" && (q.repeatDays || []).includes(dayIndex)) || (q.scheduleType !== "weekly" && (q.scheduledDate === key || carried(q)))))
+    .filter((q) => Forge.questActiveOn(q, key) && ((q.scheduleType === "weekly" && (q.repeatDays || []).includes(dayIndex)) || (q.scheduleType !== "weekly" && (q.scheduledDate === key || carried(q)))))
     .sort((a, b) => {
       const ta = questMinutes(a), tb = questMinutes(b);
       if (ta !== tb) return ta == null ? 1 : tb == null ? -1 : ta - tb;
@@ -3346,10 +3303,7 @@ function questsForArea(areaId) {
   return getUnifiedQuests().filter((q) => !q.archived && q.areaId === areaId && !q.goalId).sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 function questOccurrencesInWeek(q, start) {
-  start = start || selectedWeekStart;
-  if (q.scheduleType === "weekly") return (q.repeatDays || []).slice().sort((a,b) => a-b).map((d) => addDays(start, d));
-  const d = questDate(q);
-  return d && iso(getStartOfWeek(d)) === iso(start) ? [d] : [];
+  return Forge.questOccurrenceRows([q], start || selectedWeekStart).map((row) => row.date);
 }
 function defaultQuestDate() {
   const today = iso(new Date()), end = iso(addDays(selectedWeekStart, 6));
@@ -3387,13 +3341,14 @@ function renderSourceQuest(q) {
   const occurrences = questOccurrencesInWeek(q);
   const wk = getWeekData();
   const checks = occurrences.map((d) => ({ d, id: questCheckId(q, d), checked: !!wk.checks[questCheckId(q, d)] }));
+  const starts = q.startsOn && q.startsOn > iso(new Date()) ? ` · from ${fmt(ymdToDate(q.startsOn))}` : "";
   const scheduleLabel = q.scheduleType === "weekly"
     ? (q.repeatDays || []).length === 7 ? "Daily" : `Every ${(q.repeatDays || []).map((d) => dayNames()[d].slice(0, 3)).join(" · ")}`
     : questDate(q) ? questDate(q).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Choose a date";
   const occurrenceHtml = checks.length ? `<div class="routine-occurrences">${checks.map((x) => `<label title="${dayNames()[x.d.getDay()]}"><input id="${x.id}" type="checkbox" data-mirror="true" data-save ${x.checked ? "checked" : ""}><span>${dayNames()[x.d.getDay()].slice(0,1)}</span></label>`).join("")}</div>` : "";
   const supportsSessionNotes = q.areaId === "workout" || (area && area.planOnly && area.type === "table");
   const noteHtml = supportsSessionNotes && checks.length ? `<details class="quest-session-notes-wrap"><summary>Session notes</summary><div class="quest-session-notes">${checks.map((x) => `<label><span>${dayNames()[x.d.getDay()].slice(0,3)}</span><input id="${questNoteId(q, x.d)}" type="text" data-save placeholder="What did you do?"></label>`).join("")}</div></details>` : "";
-  const schedule = q.scheduleType === "once" ? `<button class="quest-date-badge quest-jump" type="button" data-date="${escapeHtml(q.scheduledDate || "")}" title="Open this task's week">${escapeHtml(scheduleLabel)}</button>` : `<span class="quest-date-badge is-weekly"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>${escapeHtml(scheduleLabel)}</span>`;
+  const schedule = q.scheduleType === "once" ? `<button class="quest-date-badge quest-jump" type="button" data-date="${escapeHtml(q.scheduledDate || "")}" title="Open this task's week">${escapeHtml(scheduleLabel)}</button>` : `<span class="quest-date-badge is-weekly"><svg viewBox="0 0 24 24" class="ic"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>${escapeHtml(scheduleLabel + starts)}</span>`;
   return `<div class="quest-row${occurrences.length ? "" : " is-outside-week"}" data-quest-id="${escapeHtml(q.id)}" style="--ac:${questAccent(q, attr)}">
     <span class="q-text">${escapeHtml(q.title)}</span>
     ${occurrenceHtml}
@@ -3448,13 +3403,11 @@ function planVariantClass(m) {
 }
 function pursuitTaskPanelHtml(m) {
   const tasks = questsForArea(m.id);
-  const occurrences = tasks.flatMap((q) => questOccurrencesInWeek(q).map((d) => ({ q, d })));
-  const wk = getWeekData();
-  const done = occurrences.filter(({ q, d }) => !!wk.checks[questCheckId(q, d)]).length;
+  const stats = Forge.questWeekStats(getWeekData(), getUnifiedQuests().filter((q) => !q.goalId), selectedWeekStart, m.id);
   const kind = heroKindOf(m);
   const planLabel = kind === "track" ? "Weekly split" : kind === "vials" ? "Daily habits" : "Plan";
   return `<div class="pursuit-task-panel pursuit-plan ${planVariantClass(m)}" data-area-id="${escapeHtml(m.id)}">
-    <div class="goal-task-head pursuit-plan-head"><div><span class="goal-task-title">${planLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"}</span><p class="pursuit-plan-hint">The same tasks and completion appear in Daily Quests.</p></div><div class="pursuit-plan-actions"><span class="plan-progress" data-plan-progress="${escapeHtml(m.id)}">${done}/${occurrences.length} this week</span><button class="pursuit-task-add goal-task-add" type="button"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button></div></div>
+    <div class="goal-task-head pursuit-plan-head"><div><span class="goal-task-title">${planLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"}</span><p class="pursuit-plan-hint">The same tasks and completion appear in Daily Quests.</p></div><div class="pursuit-plan-actions"><span class="plan-progress" data-plan-progress="${escapeHtml(m.id)}">${stats.done}/${stats.total} this week</span><button class="pursuit-task-add goal-task-add" type="button"><svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>Add task</button></div></div>
     <div class="goal-task-list">${tasks.length ? tasks.map(renderSourceQuest).join("") : `<div class="quest-empty"><strong>No plan yet.</strong> Add the first task and choose when it should appear in Daily Quests.</div>`}</div>
   </div>`;
 }
@@ -3478,7 +3431,7 @@ function byWeekOrder(items, get) {
   return items.slice().sort((a, b) => rank[get(a)] - rank[get(b)]);
 }
 function sectionDayStates(areaId) {
-  const tasks = getUnifiedQuests().filter((q) => !q.archived && q.areaId === areaId);
+  const tasks = getUnifiedQuests().filter((q) => q.areaId === areaId);
   const wk = getWeekData();
   const states = Array.from({ length: 7 }, (_, d) => ({ dayIndex: d, planned: 0, done: 0 }));
   tasks.forEach((q) => questOccurrencesInWeek(q).forEach((date) => {
@@ -3708,19 +3661,9 @@ async function deleteGoalEditor() {
   const list = type === "study" ? getStudyGoals() : getProjectGoals();
   const goal = list.find((g) => g.id === id);
   const linked = questsForSource(type, id);
-  if (!confirm(`Delete "${goal ? goal.title : "this pursuit"}" and its ${linked.length} linked task${linked.length === 1 ? "" : "s"}?`)) return;
+  if (!confirm(`Delete "${goal ? goal.title : "this pursuit"}" and retire its ${linked.length} linked task${linked.length === 1 ? "" : "s"}? Past sessions, notes and XP stay saved.`)) return;
   const touched = new Set();
-  linked.forEach((q) => {
-    const base = questCheckId(q), noteBase = questNoteId(q);
-    Object.entries(database.weeks || {}).forEach(([key, week]) => {
-      let changed = false;
-      Object.keys((week && week.checks) || {}).forEach((checkId) => { if (checkId === base || checkId.indexOf(base + "-d") === 0) { delete week.checks[checkId]; changed = true; } });
-      Object.keys((week && week.fields) || {}).forEach((fieldId) => { if (fieldId === noteBase || fieldId.indexOf(noteBase + "-d") === 0) { delete week.fields[fieldId]; changed = true; } });
-      if (changed) touched.add(key);
-    });
-  });
-  const areaId = type === "study" ? "study" : "projects";
-  settings.quests = getUnifiedQuests().filter((q) => !(q.areaId === areaId && q.goalId === id));
+  linked.forEach((q) => Forge.retireQuest(q, database.weeks, iso(new Date())).forEach((key) => touched.add(key)));
   if (type === "study") settings.studyGoals = list.filter((g) => g.id !== id);
   else settings.projectGoals = list.filter((g) => g.id !== id);
   settings.studyAreas = getStudyGoals().map((g) => g.title);
@@ -3751,13 +3694,14 @@ function syncQuestAttrToSource() {
   const ctx = parseQuestContext(document.getElementById("questSource").value);
   const attr = document.getElementById("questAttr");
   const hint = document.getElementById("questAttrHint");
+  document.getElementById("questAttrControl").hidden = !!ctx.areaId;
   if (ctx.areaId) {
     attr.value = contextAttr(ctx.areaId); attr.disabled = true;
     const m = getModules().find((x) => x.id === ctx.areaId);
-    if (hint) hint.textContent = `${m ? m.name : "This pursuit"} automatically trains ${attrName(attr.value)}.`;
+    if (hint) hint.textContent = `${m ? m.name : "This pursuit"} trains ${attrName(attr.value)}.`;
   } else {
     attr.disabled = false;
-    if (hint) hint.textContent = "Daily-only tasks can train any attribute.";
+    if (hint) hint.textContent = "";
   }
 }
 function syncQuestScheduleFields() {
@@ -3788,9 +3732,25 @@ function openQuestEditor(opts) {
   renderQuestWeekdays(q ? q.repeatDays : (opts.days || []));
   document.getElementById("questDueTime").value = q ? (q.dueTime || "") : (opts.dueTime || "");
   document.getElementById("questEstMinutes").value = q ? (q.estMinutes || "") : (opts.estMinutes || "");
-  document.getElementById("deleteQuestBtn").style.display = q ? "" : "none";
+  const pastVersion = !!(q && q.archived);
+  const loggedOnce = q && q.scheduleType !== "weekly" && Forge.questHasWork(q, database.weeks);
+  document.getElementById("deleteQuestBtn").style.display = q && !pastVersion ? "" : "none";
+  document.getElementById("saveQuestEditorBtn").disabled = pastVersion;
+  ["questTitle", "questDueTime", "questEstMinutes"].forEach((id) => { document.getElementById(id).disabled = pastVersion; });
+  ["questScheduleType", "questDate", "questSource"].forEach((id) => { document.getElementById(id).disabled = pastVersion || !!loggedOnce; });
+  document.querySelectorAll("#questWeekdays input").forEach((el) => { el.disabled = pastVersion; });
+  const historyHint = document.getElementById("questHistoryHint");
+  historyHint.textContent = pastVersion ? "Saved past version. Edit your current routine in Pursuits."
+    : loggedOnce ? "Recorded work stays on its original date and pursuit. You can update the name, time and estimate."
+    : q ? `Changes apply from ${fmt(ymdToDate(Forge.questChangeDate(q, database.weeks, iso(new Date()))))}. Past sessions stay saved.` : "";
+  historyHint.hidden = !q;
   syncQuestScheduleFields();
   syncQuestAttrToSource();
+  if (pastVersion || loggedOnce) {
+    document.getElementById("questAttr").value = q.attr;
+    document.getElementById("questAttr").disabled = true;
+    document.getElementById("questAttrHint").textContent = `Recorded work trains ${attrName(q.attr)}.`;
+  }
   openModal("questEditorModal");
 }
 function weekForQuest(q) {
@@ -3824,39 +3784,37 @@ async function saveQuestEditor() {
   const ctx = parseQuestContext(document.getElementById("questSource").value);
   const attr = document.getElementById("questAttr").value;
   const current = questEditorState && questEditorState.id ? getUnifiedQuests().find((q) => q.id === questEditorState.id) : null;
-  const old = current ? Object.assign({}, current) : null;
-  const siblingCount = getUnifiedQuests().filter((q) => q.areaId === ctx.areaId && q.goalId === ctx.goalId).length;
-  const next = current || { id: forgeId("q"), createdAt: new Date().toISOString(), order: siblingCount };
-  Object.assign(next, { title, scheduleType, scheduledDate: scheduleType === "once" ? scheduledDate : "", repeatDays: scheduleType === "weekly" ? repeatDays : [], areaId: ctx.areaId, goalId: ctx.goalId, attr, category: attrCat(attr), dueTime, estMinutes, updatedAt: new Date().toISOString() });
-  if (!current) settings.quests.push(next);
-  const carried = new Map(), carriedNotes = new Map(), touched = new Set();
-  if (old) {
-    const oldBase = questCheckId(old), oldNoteBase = questNoteId(old);
-    Object.entries(database.weeks || {}).forEach(([key, week]) => {
-      Object.keys((week && week.checks) || {}).forEach((id) => {
-        if (id === oldBase || id.indexOf(oldBase + "-d") === 0) { carried.set(`${key}|${id.slice(oldBase.length)}`, !!week.checks[id]); delete week.checks[id]; touched.add(key); }
-      });
-      Object.keys((week && week.fields) || {}).forEach((id) => {
-        if (id === oldNoteBase || id.indexOf(oldNoteBase + "-d") === 0) { carriedNotes.set(`${key}|${id.slice(oldNoteBase.length)}`, week.fields[id]); delete week.fields[id]; touched.add(key); }
-      });
-    });
-  }
-  if (scheduleType === "once") {
-    const nextWeek = weekForQuest(next), key = questWeekKey(next);
-    const wasDone = [...carried.values()].some(Boolean);
-    nextWeek.checks[questCheckId(next)] = wasDone; touched.add(key);
-    const note = [...carriedNotes.values()].find((value) => String(value || "").trim());
-    if (note !== undefined) nextWeek.fields[questNoteId(next)] = note;
+  if (current && current.archived) return;
+  const today = iso(new Date());
+  const loggedOnce = current && current.scheduleType !== "weekly" && Forge.questHasWork(current, database.weeks);
+  const patch = { title, scheduleType, scheduledDate: scheduleType === "once" ? scheduledDate : "", repeatDays: scheduleType === "weekly" ? repeatDays : [], areaId: ctx.areaId, goalId: ctx.goalId, attr, category: attrCat(attr), dueTime, estMinutes };
+  const touched = new Set();
+  let next;
+  if (loggedOnce) {
+    // Its check id, date and XP attribution are already part of the record.
+    next = current;
+    Object.assign(next, { title, dueTime, estMinutes });
   } else {
-    if (!database.weeks[weekKey()]) getWeekData();
-    Object.entries(database.weeks || {}).forEach(([key, week]) => repeatDays.forEach((day) => {
-      const id = questCheckId(next, day);
-      week.checks[id] = carried.get(`${key}|-d${day}`) || false;
-      const note = carriedNotes.get(`${key}|-d${day}`);
-      if (note !== undefined) week.fields[questNoteId(next, day)] = note;
-      touched.add(key);
-    }));
+    const changed = !current || Object.keys(patch).some((key) => JSON.stringify(current[key]) !== JSON.stringify(patch[key]));
+    if (!changed) { closeEditorModal("questEditorModal"); return; }
+    const startsOn = current ? Forge.questChangeDate(current, database.weeks, today) : today;
+    if (current && scheduleType === "once" && scheduledDate < startsOn) {
+      alert(`Choose ${startsOn} or later. Earlier sessions stay in your history.`); return;
+    }
+    if (current) Forge.retireQuest(current, database.weeks, today).forEach((key) => touched.add(key));
+    next = Object.assign({ id: forgeId("q"), createdAt: new Date().toISOString(), order: current ? current.order : getUnifiedQuests().length }, patch, {
+      startsOn: scheduleType === "once" ? scheduledDate : startsOn,
+    });
+    settings.quests.push(next);
   }
+  next.updatedAt = new Date().toISOString();
+  if (next.scheduleType === "once" && !loggedOnce) {
+    const wk = weekForQuest(next);
+    if (wk.checks[questCheckId(next)] === undefined) wk.checks[questCheckId(next)] = false;
+    touched.add(questWeekKey(next));
+  }
+  ensureQuestOccurrencesForWeek();
+  touched.add(weekKey());
   await persistSettings();
   await Promise.all([...touched].filter(Boolean).map(persistWeekByKey));
   closeEditorModal("questEditorModal");
@@ -3864,15 +3822,8 @@ async function saveQuestEditor() {
 }
 async function deleteQuestEditor() {
   const q = questEditorState && questEditorState.id ? getUnifiedQuests().find((x) => x.id === questEditorState.id) : null;
-  if (!q || !confirm(`Delete "${q.title}"?`)) return;
-  const base = questCheckId(q), noteBase = questNoteId(q), touched = [];
-  Object.entries(database.weeks || {}).forEach(([key, week]) => {
-    let changed = false;
-    Object.keys((week && week.checks) || {}).forEach((id) => { if (id === base || id.indexOf(base + "-d") === 0) { delete week.checks[id]; changed = true; } });
-    Object.keys((week && week.fields) || {}).forEach((id) => { if (id === noteBase || id.indexOf(noteBase + "-d") === 0) { delete week.fields[id]; changed = true; } });
-    if (changed) touched.push(key);
-  });
-  settings.quests = getUnifiedQuests().filter((x) => x.id !== q.id);
+  if (!q || q.archived || !confirm(`Retire "${q.title}" from ${fmt(ymdToDate(Forge.questChangeDate(q, database.weeks, iso(new Date()))))}? Past sessions, notes and XP stay saved.`)) return;
+  const touched = Forge.retireQuest(q, database.weeks, iso(new Date()));
   await persistSettings(); await Promise.all(touched.map(persistWeekByKey));
   closeEditorModal("questEditorModal");
   renderStructure(); applyWeekToUI();
@@ -4481,11 +4432,8 @@ function updateProgress() {
   syncSessionNotes();
 
   document.querySelectorAll("[data-plan-progress]").forEach((el) => {
-    const tasks = questsForArea(el.dataset.planProgress);
-    const occurrences = tasks.flatMap((q) => questOccurrencesInWeek(q).map((d) => ({ q, d })));
-    const wk = getWeekData();
-    const completed = occurrences.filter(({ q, d }) => !!wk.checks[questCheckId(q, d)]).length;
-    el.textContent = `${completed}/${occurrences.length} this week`;
+    const stats = Forge.questWeekStats(getWeekData(), getUnifiedQuests().filter((q) => !q.goalId), selectedWeekStart, el.dataset.planProgress);
+    el.textContent = `${stats.done}/${stats.total} this week`;
   });
 
   renderXpChips();
@@ -4547,7 +4495,7 @@ function renderCalendarMonth() {
     if (info && info.done > 0) { activeDays++; questsDone += info.done; }
     if (info && info.total > 0) { sumPct += info.pct; ratedDays++; }
     const meta = (info && info.total) ? `<span class="cal-meta">${info.done}/${info.total}</span>` : "";
-    cells += `<button class="cal-cell d${lvl}${none}${isToday ? " today" : ""}${isFuture ? " future" : ""}" data-date="${iso(date)}"${isFuture ? ' tabindex="-1"' : ""}><span class="cal-num">${d}</span>${meta}</button>`;
+    cells += `<button class="cal-cell d${lvl}${none}${isToday ? " today" : ""}${isFuture ? " future" : ""}" data-date="${iso(date)}"><span class="cal-num">${d}</span>${meta}</button>`;
   }
   grid.innerHTML = cells;
   markSelectedDay();
@@ -4846,11 +4794,11 @@ function buildViewShell() {
   // so take what is in the document and let applyModuleLayout() order it once
   // the real module list exists.
   move("pursuits", document.getElementById("planHead"));
-  move("pursuits", document.getElementById("forgeTree"));
   shell.querySelectorAll("details.section-card").forEach((sec) => {
     if (sec.closest(".view")) return;
     move("pursuits", sec);
   });
+  move("pursuits", document.getElementById("forgeTree"));
   // Month: five modals were places, not dialogs — you went to them to *look* at
   // something, which is the definition of a room. Each one's body is unwrapped
   // into a pane of the record, keeping every id, so renderCalendarMonth(),
@@ -4874,7 +4822,7 @@ function buildViewShell() {
     detail.className = "day-detail";
     detail.id = "dayDetail";
     detail.hidden = true;
-    calPane.insertBefore(detail, document.getElementById("monthAgenda"));
+    calPane.appendChild(detail);
   }
   // The pane's tab already says Trends; a second heading saying Performance
   // Report is chrome the dialog needed and the room does not.
@@ -5609,6 +5557,7 @@ async function quickAddSubmit(literal) {
   const attr = "Discipline";
   const quest = {
     id: forgeId("q"), title: parsed.title,
+    startsOn: parsed.scheduleType === "weekly" ? iso(new Date()) : parsed.scheduledDate,
     scheduleType: parsed.scheduleType,
     scheduledDate: parsed.scheduleType === "once" ? parsed.scheduledDate : "",
     repeatDays: parsed.scheduleType === "weekly" ? parsed.repeatDays : [],
@@ -5627,8 +5576,9 @@ async function quickAddSubmit(literal) {
   await persistWeekByKey(weekKey());
   renderStructure(); applyWeekToUI();
   showUndo(`Added “${quest.title}”`, async () => {
-    settings.quests = getUnifiedQuests().filter((q) => q.id !== quest.id);
+    const touched = Forge.retireQuest(quest, database.weeks, iso(new Date()));
     await persistSettings();
+    await Promise.all(touched.map(persistWeekByKey));
     renderStructure(); applyWeekToUI();
   });
 }
@@ -6256,113 +6206,6 @@ function renderWeekPulse() {
     } else {
       sum.textContent = `${doneAll} of ${totalAll} done so far · a streak week needs ${grade}%.`;
     }
-  }
-}
-
-// ===== WHAT IS IN THE MONTH =====
-// The grid says how each day went. It could not say what the days were made
-// of — you had a wall of coloured squares and no way to ask "what did I keep
-// dropping?" without opening thirty of them one at a time.
-//
-// Three lists over the same month. Missed leads, because it is the only one you
-// can still do something about; a list of things you completed is a reward, and
-// a list of things coming is a plan, but a list of things you dropped is a
-// decision waiting to be made.
-let agendaTab = "upcoming";
-const AGENDA_CAP = 60;   // a busy month is 200 rows; nobody reads 200 rows
-
-function monthAgendaRows(monthStart) {
-  const year = monthStart.getFullYear(), month = monthStart.getMonth();
-  const days = new Date(year, month + 1, 0).getDate();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const out = { missed: [], upcoming: [], done: [] };
-
-  for (let d = 1; d <= days; d++) {
-    const date = new Date(year, month, d);
-    const wk = database.weeks[iso(getStartOfWeek(date))];
-    const checks = (wk && wk.checks) || {};
-    const past = date < today;
-    const isToday = date.getTime() === today.getTime();
-
-    questsForDate(date).forEach((q) => {
-      const attr = q.attr || contextAttr(q.areaId);
-      const row = {
-        date, day: d, title: q.title, attr,
-        color: attrColor(attr),
-        time: q.dueTime || "",
-        ritual: q.scheduleType === "weekly",
-      };
-      const done = !!checks[questCheckId(q, date)];
-      if (done) out.done.push(row);
-      else if (past) out.missed.push(row);
-      else if (isToday || date > today) out.upcoming.push(row);
-    });
-  }
-  // Missed and completed read backwards from now; upcoming reads forwards.
-  out.missed.reverse();
-  out.done.reverse();
-  return out;
-}
-
-function renderMonthAgenda() {
-  const list = document.getElementById("monthAgendaList");
-  if (!list) return;
-  const rows = monthAgendaRows(recordMonth());
-  const counts = { missed: rows.missed.length, upcoming: rows.upcoming.length, done: rows.done.length };
-
-  document.querySelectorAll("[data-agenda]").forEach((b) => {
-    const k = b.dataset.agenda;
-    const on = k === agendaTab;
-    b.classList.toggle("active", on);
-    b.setAttribute("aria-pressed", String(on));
-    // The count belongs on the tab: which of the three is worth opening is the
-    // question you arrive with.
-    let n = b.querySelector(".ma-n");
-    if (!n) { n = document.createElement("span"); n.className = "ma-n"; b.appendChild(n); }
-    n.textContent = counts[k];
-  });
-
-  const picked = rows[agendaTab] || [];
-  if (!picked.length) {
-    const empty = agendaTab === "missed" ? "Nothing dropped this month."
-                : agendaTab === "upcoming" ? "Nothing left scheduled this month."
-                : "Nothing completed yet this month.";
-    list.innerHTML = `<p class="ma-empty">${empty}</p>`;
-    return;
-  }
-  const shown = picked.slice(0, AGENDA_CAP);
-  list.innerHTML = shown.map((r) => `
-    <button class="ma-row" type="button" data-agenda-date="${escapeHtml(iso(r.date))}" style="--ac:${r.color}">
-      <span class="ma-day"><b>${r.day}</b><span>${escapeHtml(dayNames()[r.date.getDay()].slice(0, 3))}</span></span>
-      <span class="ma-dot" aria-hidden="true"></span>
-      <span class="ma-name">${escapeHtml(r.title)}</span>
-      ${r.time ? `<span class="ma-time">${escapeHtml(fmtTime12(r.time))}</span>` : ""}
-      <span class="ma-kind">${r.ritual ? "ritual" : "quest"}</span>
-    </button>`).join("")
-    + (picked.length > shown.length
-        ? `<p class="ma-more">+${picked.length - shown.length} more — open a day to see the rest.</p>` : "");
-}
-function initMonthAgenda() {
-  const head = document.querySelector(".ma-tabs");
-  if (head && !head._wired) {
-    head._wired = true;
-    head.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-agenda]");
-      if (!b) return;
-      agendaTab = b.dataset.agenda;
-      renderMonthAgenda();
-    });
-  }
-  const list = document.getElementById("monthAgendaList");
-  if (list && !list._wired) {
-    list._wired = true;
-    // A row is a door into its day, which is where you can actually act on it.
-    list.addEventListener("click", (e) => {
-      const row = e.target.closest("[data-agenda-date]");
-      if (!row) return;
-      const date = new Date(row.dataset.agendaDate + "T00:00:00");
-      openDayInsights(date, dayPctInfo(date));
-    });
   }
 }
 
@@ -7438,7 +7281,7 @@ function bindEvents() {
   const calGrid = document.getElementById("calGrid");
   if (calGrid) calGrid.addEventListener("click", (e) => {
     const cell = e.target.closest(".cal-cell[data-date]");
-    if (!cell || cell.classList.contains("future") || cell.classList.contains("empty")) return;
+    if (!cell || cell.classList.contains("empty")) return;
     const date = new Date(cell.dataset.date + "T00:00:00");
     if (selectedDayIso === cell.dataset.date) { closeDayInsights(); return; }
     openDayInsights(date, dayPctInfo(date));
