@@ -221,6 +221,19 @@ function client(cache = new Map()) {
   assert.ok(preferenceFlight.ctx.readPendingWrites().settings.conflict);
   assert.equal(state.settings.quests.find(q => q.id === 'left').title, 'Remote during request');
 
+  // A task mutation can precede its save while its editor awaits week writes.
+  // Revalidation must not make that unsent edit appear based on newer data.
+  const unsent = client(), releaseUnsent = unsent.pause();
+  state.settings.quests.find(q => q.id === 'left').title = 'Remote before unsent edit';
+  unsent.ctx.settings.theme = 'another theme';
+  const unsentSave = unsent.ctx.persistSettings();
+  await new Promise(resolve => setImmediate(resolve));
+  unsent.ctx.settings.quests.find(q => q.id === 'left').title = 'Unsent local edit';
+  releaseUnsent(); await unsentSave;
+  assert.ok(unsent.ctx.readPendingWrites().settings.conflict);
+  assert.equal(unsent.ctx.settings.quests.find(q => q.id === 'left').title, 'Unsent local edit');
+  assert.equal(state.settings.quests.find(q => q.id === 'left').title, 'Remote before unsent edit');
+
   // Concurrent replacements of a routine must not create two active successors.
   const baseRoutine = [{ id: 'ritual', title: 'Original' }];
   const retired = { ...baseRoutine[0], archived: true, retiredOn: '2026-10-10' };

@@ -1280,7 +1280,15 @@ async function sendPendingSettings() {
         else { remaining.quests = merged.quests; nextBase = body.settings.quests || []; }
       }
       const unsaved = settingsChanges(capturedSettings, settings);
-      if (unsaved.quests) unsaved.quests = TaskSync.overlay(capturedSettings.quests, unsaved.quests, remaining.quests || body.settings.quests);
+      if (unsaved.quests) {
+        const merged = TaskSync.merge(capturedSettings.quests, unsaved.quests, remaining.quests || body.settings.quests);
+        if (merged.conflict) {
+          remaining.quests = unsaved.quests;
+          nextBase = capturedSettings.quests || [];
+          conflict = { quests: body.settings.quests };
+          delete unsaved.quests;
+        } else unsaved.quests = merged.quests;
+      }
       pending.settings = Object.keys(remaining).length ? { format: 2, set: remaining } : null;
       if (pending.settings && remaining.quests) {
         if (nextBase) pending.settings.questBase = nextBase;
