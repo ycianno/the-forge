@@ -160,6 +160,45 @@ async function expectStatus(res, status) {
     const afterDelete = await expectStatus(await req(srv.base, cookie, 'GET', '/api/settings'), 200);
     assert.strictEqual('workout' in afterDelete.moduleColors, false, 'null must delete the key');
 
+    // Task lists merge by stable ID, reject overlapping edits atomically, and
+    // preserve task versions needed to interpret recorded work.
+    const originalTasks = patched.quests;
+    const desktopTasks = [...originalTasks, { id: 'desktop', title: 'Desktop task' }];
+    const phoneTasks = [...originalTasks, { id: 'phone', title: 'Phone task' }];
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: desktopTasks }, questBase: originalTasks }), 200);
+    const bothTasks = await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: phoneTasks }, questBase: originalTasks }), 200);
+    assert.deepEqual(bothTasks.settings.quests.map(q => q.id), ['q1', 'desktop', 'phone']);
+    const renameA = bothTasks.settings.quests.map(q => q.id === 'q1' ? { ...q, title: 'Desktop rename' } : q);
+    const renameB = bothTasks.settings.quests.map(q => q.id === 'q1' ? { ...q, title: 'Phone rename' } : q);
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: renameA }, questBase: bothTasks.settings.quests }), 200);
+    const conflict = await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: renameB, theme: 'must-not-land' }, questBase: bothTasks.settings.quests }), 409);
+    assert.equal(conflict.code, 'TASK_CONFLICT');
+    assert.equal(conflict.quests[0].title, 'Desktop rename');
+    assert.notEqual((await expectStatus(await req(srv.base, cookie, 'GET', '/api/settings'), 200)).theme, 'must-not-land');
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: renameB } }), 409);
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { 'quests.0.title': 'bypass' } }), 400);
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: [{ id: 'x' }, { id: 'x' }] }, questBase: [] }), 400);
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: [] }, questBase: {} }), 400);
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: renameA }, questBase: bothTasks.settings.quests }), 200); // lost-response retry
+    const logged = { id: 'logged', title: 'Logged routine', scheduleType: 'weekly', repeatDays: [1], areaId: 'study', attr: 'Mind', category: 'study', startsOn: '2026-06-01' };
+    const loggedList = [...renameA, logged];
+    await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: loggedList }, questBase: renameA }), 200);
+    const Forge = require('../public/modules');
+    await expectStatus(await req(srv.base, cookie, 'POST', '/api/week/2026-06-21', { checks: { [Forge.questCheckId(logged, 1)]: true }, fields: { [Forge.questNoteId(logged, 1)]: 'Keep this history' } }), 200);
+    const chosen = await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', { set: { quests: renameB }, questBase: loggedList }), 200);
+    const keptHistory = chosen.settings.quests.find(q => q.id === 'logged');
+    assert.equal(keptHistory.archived, true);
+    assert.equal(keptHistory.retiredOn, '2026-06-23');
+    assert.equal(Forge.questActiveOn(keptHistory, new Date('2026-06-22T12:00:00')), true);
+
+    const legacyArchived = { ...logged, archived: true };
+    const legacyList = [...renameB, legacyArchived];
+    await expectStatus(await req(srv.base, cookie, 'POST', '/api/settings', { version: 4, quests: legacyList }), 200);
+    const unchangedArchive = await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/settings', {
+      set: { quests: [...legacyList, { id: 'new-task', title: 'New task' }] }, questBase: legacyList,
+    }), 200);
+    assert.equal(unchangedArchive.settings.quests.find(q => q.id === 'logged').retiredOn, undefined, 'legacy archives must not become newly visible');
+
     // ---- PATCH /api/week/:key: merge, do not replace -------------------------
     await expectStatus(await req(srv.base, cookie, 'POST', '/api/week/2026-06-28', { checks: { 'quest-training-a': true }, fields: { wins: 'from browser' } }), 200);
     await expectStatus(await req(srv.base, cookie, 'PATCH', '/api/week/not-a-date', { checks: { x: true } }), 400);

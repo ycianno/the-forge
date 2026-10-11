@@ -277,3 +277,33 @@ removes its restored copy after verification. It does not connect to production.
 The automated saving regression covers offline reload, HTTP failures, stale
 clients, explicit unchecks, delayed acknowledgements, preference retries and
 conditional deletions. The suite now has 20 scripts plus this manual drill.
+
+## 10. October 11 task-edit conflicts
+
+Task-list saves now include the original list as `questBase`. The API compares
+stable task IDs and merges edits to different tasks. If both devices edit the
+same task, it rejects the complete settings patch with HTTP 409 and leaves
+server settings untouched. Routine replacement counts as an edit to its retired
+ID, preventing two concurrent replacements from creating two active successors.
+An already-applied complete edit can be retried after a lost response.
+
+The client retains a conflicting draft in its local queue across reloads and
+pauses automatic settings retries. “Review task changes” opens a comparison of
+only differing tasks, with both complete lists' active counts. The user can keep
+the device's list or use the saved list. A newer overlapping server edit requires
+another review. Versions needed for recorded checks or notes remain archived
+with a retirement boundary after their last recorded work; legacy archives keep
+their existing visibility. Week saves continue independently.
+
+Refresh both devices after release. Older clients without a task base cannot
+replace a changed task list through PATCH; their pending task drafts are offered
+for review when the updated client loads. Explicit backup imports and the legacy
+whole-settings POST remain replacement operations. Other settings arrays, such
+as pursuit definitions, still use the previous save behavior.
+
+The 20-script suite covers independent task edits, offline additions, overlapping
+edits, paused retries and reload, both resolution choices, edits during an
+in-flight request, concurrent routine replacements, atomic rejection, duplicate
+IDs, lost-response retry and preservation of recorded versions. Browser review
+at phone size verified comparison, reload, both choices and dialog focus when
+the review button disappears after saving.

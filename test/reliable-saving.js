@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require.resolve('../public/app.js'), 'utf8');
 const server = fs.readFileSync(require.resolve('../server.js'), 'utf8');
+const TaskSync = require('../public/task-sync');
+const Forge = require('../public/modules');
 const clone = value => JSON.parse(JSON.stringify(value));
 const key = '2026-10-04';
 const mergeContext = { isPlainObject: value => !!value && typeof value === 'object' && !Array.isArray(value) };
@@ -19,14 +21,14 @@ function client(cache = new Map()) {
   let online = true, status = 200, pause;
   const writes = [], badge = {};
   const ctx = {
-    APP_DB_KEY: 'db', APP_SETTINGS_KEY: 'settings', APP_PENDING_KEY: 'pending', APP_ACHIEVEMENTS_KEY: 'records',
+    TaskSync, Forge, renderStructure() {}, applyWeekToUI() {}, closeModal() {}, iso: () => '2026-10-11', APP_DB_KEY: 'db', APP_SETTINGS_KEY: 'settings', APP_PENDING_KEY: 'pending', APP_ACHIEVEMENTS_KEY: 'records',
     database: clone(state.database), settings: clone(state.settings), achievements: [],
     databaseLoaded: false, settingsLoaded: false, savingEnabled: true, booting: false,
     capturedWeeks: clone(state.database.weeks), capturedSettings: clone(state.settings),
     activeWrites: 0, pendingRetryTimer: null, writeChains: new Map(),
     localStorage: { getItem: key => cache.get(key) || null, setItem: (key, value) => cache.set(key, value), removeItem: key => cache.delete(key) },
     navigator: { get onLine() { return online; } }, document: { getElementById: () => badge },
-    console: { error() {} }, setTimeout() {}, clearTimeout() {},
+    console: { error() {}, warn() {} }, setTimeout() {}, clearTimeout() {},
     structuredCloneSafe: clone, invalidateBestiary() {}, invalidateOneOffDone() {}, weekKey: () => key, updateLiveSoon() {},
     fetch: async (url, opts = {}) => {
       if (!online) throw new Error('offline');
@@ -40,8 +42,14 @@ function client(cache = new Map()) {
         state.database.weeks[key] = mergeContext.mergeWeek(state.database.weeks[key], body);
         result = { week: clone(state.database.weeks[key]) };
       } else {
-        state.settings = ctx.applySettingsChanges(state.settings, body.set);
-        result = { success: true };
+        const set = { ...body.set };
+        if ('quests' in set) {
+          const merged = body.questBase ? TaskSync.merge(body.questBase, set.quests, state.settings.quests) : { conflict: true };
+          if (merged.conflict) return { ok: false, status: 409, json: async () => ({ code: 'TASK_CONFLICT', quests: clone(state.settings.quests) }) };
+          set.quests = merged.quests;
+        }
+        state.settings = ctx.applySettingsChanges(state.settings, set);
+        result = { success: true, settings: clone(state.settings) };
       }
       if (pause) { const wait = pause; pause = null; await wait; }
       return { ok: true, json: async () => result };
@@ -149,5 +157,75 @@ function client(cache = new Map()) {
   assert.equal(state.database.weeks[key].checks.remote, true);
   assert.equal(state.database.weeks[key].checks.legacy, true);
   assert.equal(state.settings.quests.length, 2);
+  // Independent task changes merge, including an offline add after reload.
+  const left = client(), right = client();
+  left.ctx.settings.quests.push({ id: 'left', title: 'Left task' });
+  await left.ctx.persistSettings();
+  right.online(false);
+  right.ctx.settings.quests.push({ id: 'right', title: 'Right task' });
+  await right.ctx.persistSettings();
+  const taskReload = client(right.cache);
+  await taskReload.ctx.loadSettings(); taskReload.ctx.applyPendingWrites();
+  await taskReload.ctx.flushPendingWrites();
+  assert.ok(state.settings.quests.some(q => q.id === 'left'));
+  assert.ok(state.settings.quests.some(q => q.id === 'right'));
+  assert.ok(taskReload.ctx.settings.quests.some(q => q.id === 'left'), 'merged server list becomes the new local base');
+
+  // Both devices edit the same task: keep the draft, do not retry blindly.
+  const conflictA = client(), conflictB = client();
+  conflictA.ctx.settings.quests.find(q => q.id === 'left').title = 'Desktop title';
+  await conflictA.ctx.persistSettings();
+  conflictB.ctx.settings.quests.find(q => q.id === 'left').title = 'Phone title';
+  assert.equal(await conflictB.ctx.persistSettings(), false);
+  assert.equal(state.settings.quests.find(q => q.id === 'left').title, 'Desktop title');
+  assert.equal(conflictB.ctx.settings.quests.find(q => q.id === 'left').title, 'Phone title');
+  assert.ok(conflictB.ctx.readPendingWrites().settings.conflict);
+  const attempts = conflictB.writes.length;
+  await conflictB.ctx.flushPendingWrites();
+  assert.equal(conflictB.writes.length, attempts, 'conflict stops automatic retries');
+  const conflictReload = client(conflictB.cache);
+  await conflictReload.ctx.loadSettings(); conflictReload.ctx.applyPendingWrites();
+  await conflictReload.ctx.flushPendingWrites();
+  assert.equal(conflictReload.ctx.settings.quests.find(q => q.id === 'left').title, 'Phone title');
+  assert.equal(conflictReload.writes.length, 0, 'reload preserves paused draft');
+  const localChoice = client(new Map(conflictB.cache));
+  localChoice.ctx.applyPendingWrites();
+  await conflictReload.ctx.resolveTaskConflict(false);
+  assert.equal(conflictReload.ctx.settings.quests.find(q => q.id === 'left').title, 'Desktop title');
+  assert.equal(conflictReload.cache.has('pending'), false);
+  await localChoice.ctx.resolveTaskConflict(true);
+  assert.equal(state.settings.quests.find(q => q.id === 'left').title, 'Phone title');
+  assert.equal(localChoice.cache.has('pending'), false);
+
+  // A settings acknowledgement must preserve a task edit made during the request.
+  const inFlight = client(), releaseSettings = inFlight.pause();
+  inFlight.ctx.settings.quests.push({ id: 'first-flight', title: 'First' });
+  const flight1 = inFlight.ctx.persistSettings();
+  await new Promise(resolve => setImmediate(resolve));
+  inFlight.ctx.settings.quests.push({ id: 'second-flight', title: 'Second' });
+  const flight2 = inFlight.ctx.persistSettings();
+  releaseSettings(); await Promise.all([flight1, flight2]);
+  assert.ok(state.settings.quests.some(q => q.id === 'first-flight'));
+  assert.ok(state.settings.quests.some(q => q.id === 'second-flight'));
+  assert.equal(inFlight.cache.has('pending'), false);
+
+  // A preference ack cannot silently rebase a queued conflicting task edit.
+  const preferenceFlight = client(), releasePreference = preferenceFlight.pause();
+  state.settings.quests.find(q => q.id === 'left').title = 'Remote during request';
+  preferenceFlight.ctx.settings.theme = 'new theme';
+  const preferenceSave = preferenceFlight.ctx.persistSettings();
+  await new Promise(resolve => setImmediate(resolve));
+  preferenceFlight.ctx.settings.quests.find(q => q.id === 'left').title = 'Local during request';
+  const taskSave = preferenceFlight.ctx.persistSettings();
+  releasePreference(); await Promise.all([preferenceSave, taskSave]);
+  assert.ok(preferenceFlight.ctx.readPendingWrites().settings.conflict);
+  assert.equal(state.settings.quests.find(q => q.id === 'left').title, 'Remote during request');
+
+  // Concurrent replacements of a routine must not create two active successors.
+  const baseRoutine = [{ id: 'ritual', title: 'Original' }];
+  const retired = { ...baseRoutine[0], archived: true, retiredOn: '2026-10-10' };
+  assert.equal(TaskSync.merge(baseRoutine, [retired, { id: 'local-version' }], [retired, { id: 'remote-version' }]).conflict, true);
+  const applied = [retired, { id: 'local-version' }];
+  assert.deepEqual(TaskSync.merge(baseRoutine, applied, applied).quests, applied, 'lost-response retry is idempotent');
   console.log('Reliable saving: offline reload, stale devices, retry, delayed ack, settings, retirement — OK');
 })().catch(err => { console.error(err); process.exitCode = 1; });

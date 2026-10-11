@@ -375,3 +375,9 @@ details.section-card.has-accent > summary:hover {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* A conflict has one compact action in place of the ordinary save badge. */
+#taskConflictBtn { font-size:var(--t-xs); padding:var(--s-2); color:var(--text); border-color:var(--accent-primary); }
+.task-conflict-list { padding-left:var(--s-5); margin:var(--s-3) 0 var(--s-6); }
+.task-conflict-list li { margin:var(--s-3) 0; overflow-wrap:anywhere; }
+.task-conflict-list .hint { display:block; margin-top:var(--s-1); }

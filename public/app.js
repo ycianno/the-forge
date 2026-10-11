@@ -1052,8 +1052,13 @@ function writePendingWrites(value) {
   } catch (e) {}
 }
 function setSaveState(state, message) {
+  const conflict = readPendingWrites().settings?.conflict;
+  const review = document.getElementById("taskConflictBtn");
+  if (review) review.hidden = !conflict;
+  if (conflict) { state = "failed"; message = "Task draft needs review"; }
   const el = document.getElementById("saveState");
   if (!el) return;
+  el.hidden = !!conflict;
   el.dataset.state = state;
   el.textContent = message || ({ saving: "Saving…", saved: "Saved", queued: "Saved offline", failed: "Save failed" }[state] || state);
 }
@@ -1062,14 +1067,6 @@ function queueWrite(resource, payload) {
   pending.weeks = pending.weeks || {};
   if (resource === "settings") pending.settings = payload;
   else pending.weeks[resource] = payload;
-  writePendingWrites(pending);
-}
-function clearQueuedWrite(resource, payload) {
-  const pending = readPendingWrites();
-  const queued = resource === "settings" ? pending.settings : (pending.weeks || {})[resource];
-  if (JSON.stringify(queued) !== JSON.stringify(payload)) return;
-  if (resource === "settings") pending.settings = null;
-  else delete pending.weeks[resource];
   writePendingWrites(pending);
 }
 function serialWrite(resource, operation) {
@@ -1090,7 +1087,9 @@ async function postJson(url, payload, method) {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || body.message || `Server returned ${res.status}`);
+    const error = new Error(body.error || body.message || `Server returned ${res.status}`);
+    error.status = res.status; error.body = body;
+    throw error;
   }
   return res;
 }
@@ -1199,7 +1198,7 @@ async function sendPendingWeek(key) {
   });
 }
 
-// Settings arrays are edited as a unit; plain-object preferences are diffed
+// Task lists carry their original version; plain-object preferences are diffed
 // by path so changing a theme never re-sends tasks, goals or another week's boss.
 function settingsChanges(before, after, prefix = "") {
   const set = {};
@@ -1244,8 +1243,15 @@ async function persistSettings() {
   const changes = settingsChanges(capturedSettings, settings);
   const prior = readPendingWrites().settings;
   const set = combineSettingsChanges(prior ? pendingSettingsSet(prior) : {}, changes);
+  const entry = { format: 2, set };
+  if ('quests' in set) {
+    if (prior && 'quests' in pendingSettingsSet(prior)) {
+      if ('questBase' in prior) entry.questBase = prior.questBase;
+    } else entry.questBase = structuredCloneSafe(capturedSettings.quests || []);
+  }
+  if (prior?.conflict) entry.conflict = prior.conflict;
   capturedSettings = structuredCloneSafe(settings);
-  if (Object.keys(set).length) queueWrite("settings", { format: 2, set });
+  if (Object.keys(set).length) queueWrite("settings", entry);
   cacheState();
   return sendPendingSettings();
 }
@@ -1253,12 +1259,47 @@ async function sendPendingSettings() {
   return serialWrite("settings", async () => {
     const entry = readPendingWrites().settings;
     if (!entry) return true;
+    if (entry.conflict) { setSaveState("failed"); return false; }
     activeWrites++; setSaveState("saving");
     try {
-      await postJson("/api/settings", { set: pendingSettingsSet(entry) }, "PATCH");
-      clearQueuedWrite("settings", entry);
+      const payload = { set: pendingSettingsSet(entry) };
+      if ('questBase' in entry) payload.questBase = entry.questBase;
+      const res = await postJson("/api/settings", payload, "PATCH");
+      const body = await res.json();
+      if (!body.settings || typeof body.settings !== "object") throw new Error("Invalid settings save response");
+      const pending = readPendingWrites();
+      const latest = pending.settings;
+      const remaining = structuredCloneSafe(latest ? pendingSettingsSet(latest) : {});
+      for (const [path, value] of Object.entries(payload.set)) {
+        if (JSON.stringify(remaining[path]) === JSON.stringify(value)) delete remaining[path];
+      }
+      let nextBase = latest?.questBase, conflict = latest?.conflict;
+      if (remaining.quests && payload.set.quests) {
+        const merged = TaskSync.merge(payload.set.quests, remaining.quests, body.settings.quests);
+        if (merged.conflict) { nextBase = payload.set.quests; conflict = { quests: body.settings.quests }; }
+        else { remaining.quests = merged.quests; nextBase = body.settings.quests || []; }
+      }
+      const unsaved = settingsChanges(capturedSettings, settings);
+      if (unsaved.quests) unsaved.quests = TaskSync.overlay(capturedSettings.quests, unsaved.quests, remaining.quests || body.settings.quests);
+      pending.settings = Object.keys(remaining).length ? { format: 2, set: remaining } : null;
+      if (pending.settings && remaining.quests) {
+        if (nextBase) pending.settings.questBase = nextBase;
+        if (conflict) pending.settings.conflict = conflict;
+      }
+      writePendingWrites(pending);
+      capturedSettings = applySettingsChanges(body.settings, remaining);
+      settings = applySettingsChanges(capturedSettings, unsaved);
+      cacheState();
+      if (pending.settings?.conflict) { setSaveState("failed"); return false; }
       return true;
     } catch (e) {
+      if (e.status === 409 && e.body?.code === "TASK_CONFLICT") {
+        const pending = readPendingWrites();
+        if (pending.settings) pending.settings.conflict = { quests: e.body.quests };
+        writePendingWrites(pending);
+        setSaveState("failed");
+        return false;
+      }
       console.error("Failed to persist settings to server", e);
       setSaveState(navigator.onLine ? "failed" : "queued", navigator.onLine ? "Save failed · retrying" : "Saved offline");
       schedulePendingRetry();
@@ -1285,6 +1326,78 @@ async function flushPendingWrites() {
   const jobs = Object.keys(pending.weeks || {}).map((key) => sendPendingWeek(key));
   if (pending.settings) jobs.push(sendPendingSettings());
   if (jobs.length) await Promise.all(jobs);
+}
+
+// Conflicts never open a dialog over an active editor. The persistent review
+// action lets the user compare both complete lists, or close and keep the draft.
+function openTaskConflict() {
+  const entry = readPendingWrites().settings;
+  if (!entry?.conflict) return;
+  const local = pendingSettingsSet(entry).quests || [], saved = entry.conflict.quests || [];
+  const ids = [...new Set([...local, ...saved].map(q => q.id))].filter(id =>
+    JSON.stringify(local.find(q => q.id === id)) !== JSON.stringify(saved.find(q => q.id === id)));
+  const modules = getModules();
+  const list = (title, quests, other) => `<h4>${title} · ${quests.filter(q => !q.archived).length} active</h4><ul class="task-conflict-list">${ids.map(id => {
+    const q = quests.find(q => q.id === id);
+    if (!q) return `<li><strong>${escapeHtml(other.find(q => q.id === id)?.title || "Task")}</strong><span class="hint">Not in this list</span></li>`;
+    const schedule = q.scheduleType === "weekly" ? (q.repeatDays || []).map(d => dayNames()[d]?.slice(0, 3)).join(", ") : q.scheduledDate;
+    const pursuit = modules.find(m => m.id === q.areaId);
+    const goal = pursuit ? pursuitGoals(pursuit).find(g => g.id === q.goalId) : null;
+    const detail = [q.archived ? "Past version" : schedule, q.startsOn ? "From " + q.startsOn : "", q.retiredOn ? "Until " + q.retiredOn : "", q.dueTime, q.estMinutes ? q.estMinutes + " min" : "", q.attr, pursuit?.name, goal?.title].filter(Boolean).join(" · ");
+    return `<li><strong>${escapeHtml(q.title)}</strong><span class="hint">${escapeHtml(detail)}</span></li>`;
+  }).join("") || "<li>No task differences</li>"}</ul>`;
+  document.getElementById("taskConflictLists").innerHTML = list("This device’s draft", local, saved) + list("Saved on the server", saved, local);
+  document.getElementById("taskConflictError").textContent = "";
+  openModal("taskConflictModal");
+}
+let resolvingTaskConflict = false;
+async function resolveTaskConflict(keepLocal) {
+  if (resolvingTaskConflict) return;
+  resolvingTaskConflict = true;
+  try {
+    const pending = readPendingWrites(), entry = pending.settings;
+    if (!entry?.conflict) return;
+    const original = JSON.stringify(entry);
+    const set = pendingSettingsSet(entry);
+    if (!keepLocal) {
+      try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) throw new Error('Could not load the saved list. Reconnect and try again.');
+        const latest = await res.json();
+        if (!Array.isArray(latest.quests)) throw new Error('Could not read the saved task list.');
+        if (JSON.stringify(readPendingWrites().settings) !== original) { openTaskConflict(); return; }
+        entry.conflict.quests = latest.quests;
+      } catch (e) {
+        document.getElementById("taskConflictError").textContent = e.message;
+        return;
+      }
+    }
+    entry.questBase = structuredCloneSafe(entry.conflict.quests);
+    if (!keepLocal) {
+      const saved = structuredCloneSafe(entry.conflict.quests);
+      const present = new Set(saved.map(q => q.id));
+      for (const q of set.quests || []) {
+        if (!present.has(q.id) && Forge.questHasWork(q, database.weeks)) {
+          saved.push({ ...q, archived: true, retiredOn: Forge.questChangeDate(q, database.weeks, iso(new Date())) });
+        }
+      }
+      set.quests = saved;
+      settings.quests = structuredCloneSafe(saved);
+      capturedSettings.quests = structuredCloneSafe(saved);
+    }
+    delete entry.conflict;
+    if (!Object.keys(set).length) pending.settings = null;
+    writePendingWrites(pending); cacheState();
+    const ok = await sendPendingSettings();
+    if (readPendingWrites().settings?.conflict) {
+      openTaskConflict();
+      document.getElementById("taskConflictError").textContent = "The saved list changed again. Review the updated comparison.";
+      return;
+    }
+    closeModal("taskConflictModal");
+    renderStructure(); applyWeekToUI();
+    if (ok) setSaveState(Object.keys(readPendingWrites().weeks || {}).length ? "queued" : "saved");
+  } finally { resolvingTaskConflict = false; }
 }
 
 function getWeekData() {
@@ -6036,6 +6149,9 @@ function closeModal(id) {
   if (md.contains(document.activeElement)) {
     const back = (preModalFocus && document.contains(preModalFocus)) ? preModalFocus : document.body;
     try { back.focus({ preventScroll: true }); } catch (e) { document.activeElement.blur(); }
+    // A save can hide the button that opened this dialog. focus() then does
+    // nothing, leaving focus inside an aria-hidden sheet unless we blur it.
+    if (md.contains(document.activeElement)) document.activeElement.blur();
   }
   md.classList.remove("active");
   md.setAttribute("aria-hidden", "true");
@@ -7473,6 +7589,10 @@ function bindEvents() {
   document.getElementById("closeQuestEditorBtn").onclick = () => closeEditorModal("questEditorModal");
   document.getElementById("cancelQuestEditorBtn").onclick = () => closeEditorModal("questEditorModal");
   document.getElementById("saveQuestEditorBtn").onclick = saveQuestEditor;
+  document.getElementById("taskConflictBtn").onclick = openTaskConflict;
+  document.getElementById("closeTaskConflictBtn").onclick = () => closeModal("taskConflictModal");
+  document.getElementById("keepLocalTasksBtn").onclick = () => resolveTaskConflict(true);
+  document.getElementById("keepSavedTasksBtn").onclick = () => resolveTaskConflict(false);
   document.getElementById("deleteQuestBtn").onclick = deleteQuestEditor;
   document.getElementById("questSource").addEventListener("change", syncQuestAttrToSource);
   document.getElementById("questScheduleType").addEventListener("change", syncQuestScheduleFields);

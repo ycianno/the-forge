@@ -1,3 +1,5 @@
+const TaskSync = require('./public/task-sync');
+const Forge = require('./public/modules');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const Database = require('better-sqlite3');
@@ -307,6 +309,14 @@ function setByPath(target, path, value) {
 function validateSettingsPatch(body) {
   if (!isPlainObject(body)) return 'patch payload must be an object.';
   if (!isPlainObject(body.set)) return 'patch must carry a set object.';
+  if ('questBase' in body) {
+    for (const list of [body.questBase, body.set.quests]) {
+      if (!Array.isArray(list) || list.some(q => !isPlainObject(q) || typeof q.id !== 'string' || !q.id || hasUnsafeKeys(q))) return 'task edits require lists with task ids.';
+      if (new Set(list.map(q => q.id)).size !== list.length) return 'task ids must be unique.';
+      if (jsonByteLength(list) > MAX_SETTINGS_BYTES) return 'task list is too large.';
+    }
+  }
+  if (Object.keys(body.set).some(path => path.startsWith('quests.'))) return 'edit tasks through the task list.';
   const entries = Object.entries(body.set);
   if (!entries.length) return 'patch must set at least one path.';
   if (entries.length > 200) return 'patch sets too many paths at once.';
@@ -733,15 +743,37 @@ app.patch('/api/settings', (req, res) => {
   const invalid = validateSettingsPatch(req.body);
   if (invalid) return validationError(res, invalid);
   const settings = getAppSettings();
+  const changes = { ...req.body.set };
+  if ('quests' in changes) {
+    const current = settings.quests || [];
+    const merged = 'questBase' in req.body
+      ? TaskSync.merge(req.body.questBase, changes.quests, current)
+      : JSON.stringify(changes.quests) === JSON.stringify(current) ? { quests: current } : { conflict: true };
+    if (merged.conflict) return res.status(409).json({ code: 'TASK_CONFLICT', error: 'Tasks changed on another device. Review both task lists before saving.', quests: current });
+    changes.quests = merged.quests;
+    // Choosing a list can retire a version, but cannot orphan recorded work.
+    const weeks = readWeeksSnapshot().weeks;
+    const present = new Set(changes.quests.map(q => q.id));
+    for (const q of current) {
+      if (!present.has(q.id) && Forge.questHasWork(q, weeks)) changes.quests.push({ ...q, archived: true });
+    }
+    for (const q of changes.quests) {
+      const prior = current.find(task => task.id === q.id);
+      if (q.archived && (q.retiredOn || !prior?.archived) && Forge.questHasWork(q, weeks)) {
+        const afterWork = Forge.questChangeDate(q, weeks, '1970-01-01');
+        if (!q.retiredOn || q.retiredOn < afterWork) q.retiredOn = afterWork;
+      }
+    }
+  }
   const applied = [];
-  for (const [path, value] of Object.entries(req.body.set)) {
+  for (const [path, value] of Object.entries(changes)) {
     if (!setByPath(settings, path, value)) return validationError(res, `patch path is not allowed: ${path}`);
     applied.push(path);
   }
   const stored = validateSettingsPayload(settings);
   if (stored) return validationError(res, stored);
   db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('app_settings', JSON.stringify(settings));
-  res.json({ success: true, applied });
+  res.json({ success: true, applied, settings });
 });
 
 app.post('/api/settings', (req, res) => {
